@@ -1,0 +1,27 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-07-29T10:59:24.452Z",
+  "phase": "01",
+  "phase_name": "project-skeleton",
+  "phase_dir": ".planning/phases/01-project-skeleton",
+  "plan": 1,
+  "task": 3,
+  "total_tasks": 3,
+  "status": "phase_complete",
+  "completed_tasks": [
+    {"id": 1, "name": "uv 專案初始化與目錄骨架", "status": "done", "commit": "d9db5a4"},
+    {"id": 2, "name": "Config 載入機制與 llama.cpp 連線設定", "status": "done", "commit": "dc867ab"},
+    {"id": 3, "name": "Config 載入測試骨架", "status": "done", "commit": "9bab385"}
+  ],
+  "remaining_tasks": [],
+  "blockers": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {"decision": "ROADMAP.md remapped from progress.md's M1-M8 (sub-milestones inside one 'Phase 1') to 9 separate GSD phases (Phase 1-8 = M1-M8, Phase 9 = HIS integration placeholder)", "rationale": "gsd-sdk's phase parser only recognizes GSD's ### Phase N: Name format with Goal/Depends on/Requirements/Success Criteria — the original two-tier M-milestone-inside-one-Phase structure returned phase_found=false", "phase": "01"},
+    {"decision": "Skipped CONTEXT.md (discuss-phase) and RESEARCH.md for Phase 1", "rationale": "Project was bootstrapped via /gsd-ingest-docs from pre-existing locked ADR decisions (progress.md D1-D12), not discuss-phase; Phase 1 is well-understood scaffolding work, user explicitly chose to skip research", "phase": "01"},
+    {"decision": "pytest declared via [dependency-groups] dev = [\"pytest>=8.0\"] rather than a plain dependency", "rationale": "pytest is test-only; plan-checker (2nd revision iteration) confirmed PEP 735 dependency-groups is the current correct uv-native convention over the deprecated [tool.uv.dev-dependencies]", "phase": "01"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Run /gsd-plan-phase 2 to plan GSD Phase 2 (規則庫建置 / Rule Repository: CSV→SQLite payment_rules/drug_rules, 審查注意事項→PageIndex, rule_mapping precompiled cache)",
+  "context_notes": "Phase 1 is fully done — planned, verified (2 rounds via gsd-plan-checker, 0 blockers/warnings on final pass), executed via gsd-executor in a worktree, merged clean to main, post-merge build+test gate green (4/4 pytest passing), ROADMAP.md and STATE.md tracking updated and committed. There is no in-progress work to resume within Phase 1 — this handoff exists purely to record the project's position (start of Phase 2, unplanned) for a future session. Phase 2 depends only on Phase 1 (already satisfied); Phase 3 and Phase 4 also only depend on Phase 1 and could be planned in any order or in parallel once Phase 2 is done, per ROADMAP.md's dependency notes."
+}
