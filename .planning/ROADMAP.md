@@ -151,7 +151,7 @@ Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. 專案骨架 | 0/1 | Planned | - |
+| 1. 專案骨架 | 0/1 | Planned & Verified | - |
 | 2. 規則庫建置 | 0/TBD | Not started | - |
 | 3. 解析器 | 0/TBD | Not started | - |
 | 4. 病歷彙整器 | 0/TBD | Not started | - |

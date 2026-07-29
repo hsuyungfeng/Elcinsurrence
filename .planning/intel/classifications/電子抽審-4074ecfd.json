@@ -1,0 +1,36 @@
+{
+  "source_path": "/home/hsu/Desktop/Elcinsurrence/電子抽審.md",
+  "type": "DOC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "雲端 HIS 系統整合健保電子抽審與電子申覆技術與實務實作指南",
+  "summary": "台灣健保署電子抽審／電子申覆技術規範、紙本轉電子流程分析與雲端 HIS + Local Agent 系統設計研究文件。",
+  "scope": [
+    "健保署電子抽審",
+    "電子申覆",
+    "NHI_EIIAPI.DLL",
+    "SAM 卡讀卡機",
+    "健保 VPN",
+    "Local Agent",
+    "雲端 HIS",
+    "DICOM/PDF/XML 檔案打包",
+    "申覆 XML 欄位 (p3-p9, t38/t39)",
+    "sTypeCode 上傳作業種類",
+    "紙本病歷替代方案申請流程",
+    "FHIR/HL7 與健保 XML 對照",
+    "Use Case / Activity / Sequence Diagram",
+    "資料庫 ER Model",
+    "doctor-toolbox / DrtoolboxLocalServer 生態系",
+    "申報 XML tdata/ddata/pdata 欄位格式"
+  ],
+  "cross_refs": [
+    "progress.md",
+    "docs/plans/2026-07-29-elc-audit-engine-design.md",
+    "https://www.nhi.gov.tw/ch/dl-12680-ba056813d06b4df2aa084b36e08a8277-1.pdf",
+    "https://www.nhi.gov.tw/ch/cp-3797-5fcae-3303-1.html",
+    "https://www.jah.org.tw/ufiles/e/附件二-中央健康保險署專業審查作業紙本病歷替代方案[1](1).pdf"
+  ],
+  "locked": false,
+  "precedence": 2,
+  "notes": "Manifest-declared type (DOC) and precedence (2) treated as authoritative per workflow; heuristic/content classification skipped. Content signals independently support DOC: prose-heavy research/survey document with architecture diagrams, As-Is/To-Be process analysis, and technical reference tables, but no explicit ADR decision/consequences structure or PRD user-story/acceptance-criteria structure. Contains SPEC-like technical detail (XML field tables, API sTypeCode values, ER model) embedded within an overall exploratory/context document — flagged for synthesizer awareness since some sections (XML field definitions, API parameters) could be mined as technical constraints despite the document-level DOC classification."
+}

@@ -1,0 +1,37 @@
+{
+  "source_path": "/home/hsu/Desktop/Elcinsurrence/progress.md",
+  "type": "ADR",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "電子抽審自動化 — 開發進度記錄",
+  "summary": "Decision log for elc-audit-engine (electronic insurance-audit automation for a medical clinic) with 12 confirmed architectural decisions, system architecture, rule-repository layering, and a phased roadmap.",
+  "scope": [
+    "elc-audit-engine",
+    "電子抽審自動化",
+    "病歷補強",
+    "申復自動化",
+    "llama.cpp server",
+    "Ornith-1.0-9B",
+    "doctor-toolbox HIS 模組",
+    "DrtoolboxLocalServer",
+    "PageIndex",
+    "rule_mapping 預編譯快取",
+    "ChromaDB",
+    "SQLite payment_rules/drug_rules",
+    "三方比對器 (醫令/規則/病歷)",
+    "候選補強敘述",
+    "醫師逐條審核流程",
+    "申復生成結構 (p8/p9)",
+    "錯誤處理與測試策略",
+    "自我學習與 LoRA",
+    "Phase 1 開發路線圖 (M1-M8)",
+    "Phase 2 HIS 整合"
+  ],
+  "cross_refs": [
+    "電子抽審.md",
+    "docs/plans/2026-07-29-elc-audit-engine-design.md"
+  ],
+  "locked": true,
+  "precedence": 0,
+  "notes": ""
+}

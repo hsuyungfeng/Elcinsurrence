@@ -1,0 +1,33 @@
+{
+  "source_path": "/home/hsu/Desktop/Elcinsurrence/docs/plans/2026-07-29-elc-audit-engine-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "elc-audit-engine 設計文件",
+  "summary": "Finalized technical design for elc-audit-engine, a two-stage local pipeline for pre-submission medical record reinforcement and post-denial appeal generation via a shared comparison engine.",
+  "scope": [
+    "elc-audit-engine",
+    "病歷補強 (medical record reinforcement)",
+    "申復生成 (appeal generation, p8/p9)",
+    "三方比對器 (三方比對 comparison engine: order/rule/record)",
+    "規則庫 (rule base: SQLite payment_rules, drug_rules, PageIndex rule_mapping, ChromaDB)",
+    "病歷彙整器 (medical record aggregator / Provider interface)",
+    "llama.cpp server (Ornith-1.0-9B)",
+    "醫師審核流程 (physician review workflow, checkbox state machine)",
+    "申報 XML / 核減清單 parsers",
+    "doctor-toolbox HIS integration (Phase 2)",
+    "錯誤處理與硬性檢查 (error handling and hard validation rules)",
+    "開發里程碑 (M1-M8 development milestones)"
+  ],
+  "cross_refs": [
+    "../../電子抽審.md",
+    "../../progress.md",
+    "config/llama_config.json",
+    "~/Desktop/DrtoolboxLocalServer",
+    "his_connection.py",
+    "cloud_sync_service.py"
+  ],
+  "locked": false,
+  "precedence": 1,
+  "notes": ""
+}

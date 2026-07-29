@@ -1,0 +1,10 @@
+docs:
+  - path: progress.md
+    type: ADR
+    precedence: 0
+  - path: docs/plans/2026-07-29-elc-audit-engine-design.md
+    type: SPEC
+    precedence: 1
+  - path: 電子抽審.md
+    type: DOC
+    precedence: 2
