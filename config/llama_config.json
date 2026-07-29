@@ -1,0 +1,16 @@
+{
+  "model": {
+    "path": "/home/hsu/llama.cpp/models/Ornith-1.0-9B-UD-Q6_K_XL.gguf",
+    "name": "Ornith-1.0-9B",
+    "quantization": "Q6_K_XL"
+  },
+  "inference": {
+    "n_ctx": 32768,
+    "max_tokens": 1024,
+    "temperature": 0.7
+  },
+  "server": {
+    "host": "localhost",
+    "port": 8080
+  }
+}
