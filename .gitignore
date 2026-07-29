@@ -12,3 +12,17 @@ Thumbs.db
 
 # LibreOffice / MS Office 暫存鎖定檔
 ~$*
+
+# Python / uv
+__pycache__/
+*.pyc
+.venv/
+.env
+*.egg-info/
+
+# 執行期資料（可重新產生）
+data/db/*
+!data/db/.gitkeep
+data/rag/*
+!data/rag/.gitkeep
+logs/
