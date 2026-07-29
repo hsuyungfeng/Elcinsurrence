@@ -6,23 +6,20 @@ Net-new project bootstrap from document ingest (`gsd-ingest-docs` → `gsd-doc-s
 
 ## Current Phase
 
-**Phase 1 — 獨立引擎 (Standalone Engine)**
+ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (originally sub-milestones inside one "Phase 1 — 獨立引擎") are now GSD Phase 1-8, one GSD phase each. progress.md's "Phase 2" (HIS integration) is now GSD Phase 9 (placeholder).
 
-## Current Milestone
-
-**M1 — 專案骨架** (uv init, config, directory structure) — NOT STARTED
-
-M1 is the next actionable milestone. It has no prerequisites and unblocks all subsequent Phase 1 milestones (M2 規則庫建置 and M3 解析器 both depend on the project skeleton being in place).
+**GSD Phase 1 — 專案骨架 (Project Skeleton) — COMPLETE (2026-07-29)**
+**Next: GSD Phase 2 — 規則庫建置 (Rule Repository)** — not yet planned.
 
 ## Completed Work
 
 - Design phase complete (progress.md §3, §4; docs/plans/2026-07-29-elc-audit-engine-design.md full design doc) — 12 locked architectural decisions, system architecture diagram, rule-repository layering, Phase 1/Phase 2 roadmap all finalized prior to this ingest.
 - Document ingest + synthesis complete: 3 source docs (1 ADR, 1 SPEC, 1 DOC) classified and merged into `.planning/intel/`.
+- **GSD Phase 1 (專案骨架) planned, verified (2 rounds, 0 blockers/warnings on final pass), executed, and merged to main.** Delivered: uv-managed Python 3.12 project (`pyproject.toml`, `uv.lock`), `config/settings.py` env-var-overridable settings module mirroring DrtoolboxLocalServer conventions, `config/llama_config.json` with D2-locked values (Ornith-1.0-9B, n_ctx 32768, localhost:8080), `src/elc_audit_engine/` package with 5 empty subsystem stub sub-packages (`parsers`, `rule_repository`, `record_aggregator`, `comparator`, `generators` — one per future GSD phase), `data/{db,rag,output}/` directory structure, and a 4-test config test suite (all passing). See `.planning/phases/01-project-skeleton/01-01-SUMMARY.md`.
 
 ## Not Yet Started
 
-- All Phase 1 implementation milestones (M1-M8)
-- Phase 2 scoping/milestone breakdown
+- GSD Phase 2 (規則庫建置) through Phase 9 (HIS 整合佔位) — see ROADMAP.md for full breakdown
 
 ## Blockers
 

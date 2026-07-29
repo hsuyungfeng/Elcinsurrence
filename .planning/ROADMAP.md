@@ -12,7 +12,7 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 - Integer phases (1-9): Planned milestone work, 對應 progress.md M1-M8 + Phase 2 佔位
 - Decimal phases (x.1, x.2): Urgent insertions (marked with INSERTED) — 目前無
 
-- [ ] **Phase 1: 專案骨架** - uv 專案初始化、config、目錄結構
+- [x] **Phase 1: 專案骨架** - uv 專案初始化、config、目錄結構
 - [ ] **Phase 2: 規則庫建置** - CSV→SQLite、審查注意事項→PageIndex、rule_mapping 預編譯
 - [ ] **Phase 3: 解析器** - 申報XML（tdata/ddata/pdata）、核減清單、SOAP文字
 - [ ] **Phase 4: 病歷彙整器** - Provider介面＋本地檔案Provider、半年病史時間軸
@@ -35,7 +35,7 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 **Plans**: 1 plan
 
 Plans:
-- [ ] 01-01-PLAN.md — uv 專案骨架、config 載入機制（llama.cpp 連線設定）、src/elc_audit_engine 套件結構、config 測試骨架
+- [x] 01-01-PLAN.md — uv 專案骨架、config 載入機制（llama.cpp 連線設定）、src/elc_audit_engine 套件結構、config 測試骨架
 
 ### Phase 2: 規則庫建置
 **Goal**: SQLite 結構化規則層（payment_rules/drug_rules）與 PageIndex 條文層＋rule_mapping 預編譯快取皆就緒，可離線查詢零 LLM 呼叫
@@ -151,7 +151,7 @@ Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. 專案骨架 | 0/1 | Planned & Verified | - |
+| 1. 專案骨架 | 1/1 | Complete | 2026-07-29 |
 | 2. 規則庫建置 | 0/TBD | Not started | - |
 | 3. 解析器 | 0/TBD | Not started | - |
 | 4. 病歷彙整器 | 0/TBD | Not started | - |
