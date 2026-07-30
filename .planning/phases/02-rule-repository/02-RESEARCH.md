@@ -384,7 +384,9 @@ done
 | A3 | The double-space filename (`藥品項查詢項目檔260605 AI  摘要支付價大於0.csv`) is stable and not a filesystem quirk that will change if the file is ever re-copied/re-exported | Code Examples | If the filename is later "cleaned" to single-space, hardcoded path references would break; recommend the loader resolve the file via `glob` pattern matching (`藥品項查詢項目檔*.csv`) rather than an exact hardcoded filename |
 | A4 | LibreOffice's `.doc`→`.docx` conversion will preserve enough structural fidelity (styles, tables) for the regex-based hierarchy parser to work on converted files the same way it does on native `.docx` files | Common Pitfalls #6 | If conversion degrades structure significantly (e.g., flattens all styles to Normal, or garbles Traditional Chinese text), the tree quality for those 11 files could be worse than for native .docx — recommend spot-checking at least 2-3 converted files' extracted text against the original before trusting the full batch |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All 4 items below were resolved during planning (see plan-checker verification, 2026-07-30): 01015C replaced with a verified-present code, llama.cpp smoke test added as first task of the rule_mapping build (02-04), CSV `支付規定` text treated as a valid rule_mapping source alongside docx tree nodes, and .doc-originated documents are covered by tree-building without requiring forced spot-check representation.
 
 1. **What should replace `01015C` in the 20-code acceptance list?**
    - What we know: `01015C` does not exist in the payment CSV (verified). `64140C` does exist and has rich markdown-style 條文全文 already embedded in `支付規定`. CONTEXT.md's draft candidates (06012C, 06013C, 05316C) were all verified present.
