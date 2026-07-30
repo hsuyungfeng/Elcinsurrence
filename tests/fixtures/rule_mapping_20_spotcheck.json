@@ -1,0 +1,182 @@
+[
+  {
+    "code": "64140C",
+    "source": "payment",
+    "name": "甲床與手指重建術",
+    "category_hint": "手術",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "06012C",
+    "source": "payment",
+    "name": "尿一般檢查（包括蛋白、糖、尿膽元、膽紅素、尿沈渣、比重、顏色、混濁度、白血球酯脢、潛血、酸鹼度及酮體）",
+    "category_hint": "檢查",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "06013C",
+    "source": "payment",
+    "name": "尿生化檢查（包括蛋白、糖、尿膽元、膽紅素、比重、顏色、混濁度、酸鹼度、白血球酯脢及酮體）",
+    "category_hint": "檢查",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "05316C",
+    "source": "payment",
+    "name": "病患自控式止痛處置及材料費(Patient- Controlled Anagesia, PCA)",
+    "category_hint": "處置",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "05401C",
+    "source": "payment",
+    "name": "精神復健機構(日間型機構)之復健治療（天）",
+    "category_hint": "治療",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "05402C",
+    "source": "payment",
+    "name": "精神復健機構(住宿型機構)全日之復健治療（天）",
+    "category_hint": "治療",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "05404C",
+    "source": "payment",
+    "name": "居家治療醫師診治費（次）",
+    "category_hint": "治療",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "05406C",
+    "source": "payment",
+    "name": "居家治療其他專業人員處置費（次）",
+    "category_hint": "治療",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "14033C",
+    "source": "payment",
+    "name": "Ｂ型肝炎表面抗體",
+    "category_hint": "檢查",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "15001C",
+    "source": "payment",
+    "name": "體液細胞檢查",
+    "category_hint": "檢查",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "16002C",
+    "source": "payment",
+    "name": "腹水分析",
+    "category_hint": "檢查",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "19001C",
+    "source": "payment",
+    "name": "腹部超音波（包括肝liver, 膽囊gall bladder, 胰pancreas,脾spleen, 下腔靜脈inferior vena cava, 腹主動脈abdominal aorta, 腎kidney及其他腹部超音波abdominal others在內）",
+    "category_hint": "檢查",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "24009C",
+    "source": "payment",
+    "name": "口服葡萄糖耐量試驗 (五次血糖測定)",
+    "category_hint": "檢查",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "29001C",
+    "source": "payment",
+    "name": "硬腦膜下穿刺",
+    "category_hint": "處置",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "31",
+    "source": "payment",
+    "name": "子宮頸抹片採樣/骨盆腔檢查（醫療院所）",
+    "category_hint": "預防保健",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "32001C",
+    "source": "payment",
+    "name": "胸腔檢查（包括各種角度部位之胸腔檢查）",
+    "category_hint": "檢查",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "33",
+    "source": "payment",
+    "name": "子宮頸細胞病理檢驗",
+    "category_hint": "預防保健",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "AC10398100",
+    "source": "drug",
+    "name": "\"華琳\"敏利靜糖衣錠50毫克",
+    "category_hint": "藥品",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "A046933100",
+    "source": "drug",
+    "name": "富必靜 膜衣錠 50 公絲",
+    "category_hint": "藥品",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  },
+  {
+    "code": "AB49742100",
+    "source": "drug",
+    "name": "清樂果膜衣錠 200 毫克",
+    "category_hint": "藥品",
+    "article_location": null,
+    "article_full_text": null,
+    "verified": false
+  }
+]
