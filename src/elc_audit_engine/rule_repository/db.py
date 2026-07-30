@@ -28,7 +28,24 @@ SCHEMA_DRUG = (
     ")"
 )
 
+# rule_mapping：D-04/D-05 的一次性 LLM 輔助建置預編譯快取表。
+# 查詢階段（Phase 3-5）只對這張表做查表，絕不在查詢路徑呼叫 LLM。
+SCHEMA_RULE_MAPPING = (
+    "CREATE TABLE IF NOT EXISTS rule_mapping ("
+    "code TEXT PRIMARY KEY, "
+    "article_location TEXT, "
+    "article_full_text TEXT, "
+    "article_source TEXT"
+    ")"
+)
+
 _ALLOWED_TABLES = {"payment_rules", "drug_rules"}
+
+# 靜態、非動態組裝的查詢語句表 —— table 名稱固定寫死於此，供 `query_by_code` 使用。
+_SELECT_BY_CODE_QUERIES = {
+    "payment_rules": "SELECT * FROM payment_rules WHERE code = ?",
+    "drug_rules": "SELECT * FROM drug_rules WHERE code = ?",
+}
 
 
 def get_connection(db_path: str) -> sqlite3.Connection:
@@ -49,9 +66,10 @@ def get_connection(db_path: str) -> sqlite3.Connection:
 
 
 def init_schema(conn: sqlite3.Connection) -> None:
-    """在給定連線上建立 `payment_rules`/`drug_rules` 兩張表（若不存在）。"""
+    """在給定連線上建立 `payment_rules`/`drug_rules`/`rule_mapping` 三張表（若不存在）。"""
     conn.execute(SCHEMA_PAYMENT)
     conn.execute(SCHEMA_DRUG)
+    conn.execute(SCHEMA_RULE_MAPPING)
     conn.commit()
 
 
@@ -71,8 +89,38 @@ def query_by_code(conn: sqlite3.Connection, table: str, code: str) -> sqlite3.Ro
     """
     if table not in _ALLOWED_TABLES:
         raise ValueError(
-            f"query_by_code: table {table!r} is not in the allowed set {_ALLOWED_TABLES}"
+            "query_by_code: table " + repr(table) + " is not in the allowed set " + repr(_ALLOWED_TABLES)
         )
-    # table 已通過白名單檢查，才允許進入 f-string；code 一律走 ? 參數化查詢。
-    cursor = conn.execute(f"SELECT * FROM {table} WHERE code = ?", (code,))
+    # 靜態、非動態組裝的查詢語句表 —— table 名稱固定寫死於此（已通過白名單檢查）；
+    # code 一律走 ? 參數化查詢，絕不字串內插。
+    query = _SELECT_BY_CODE_QUERIES[table]
+    cursor = conn.execute(query, (code,))
     return cursor.fetchone()
+
+
+def upsert_rule_mapping(
+    conn: sqlite3.Connection,
+    code: str,
+    article_location: str | None,
+    article_full_text: str | None,
+    article_source: str | None,
+) -> None:
+    """寫入（或覆寫）一筆 `rule_mapping` 快取列。
+
+    一律透過 `?` 佔位符參數化查詢，絕不字串內插（T-02-08 mitigation）。
+
+    Args:
+        conn: 既有的 SQLite 連線。
+        code: 醫令代碼／藥品代號（主鍵）。
+        article_location: 條文位置（CSV 來源用 `CSV:{table}.payment_text`
+            標記；docx 來源用 tree node 的 `path`）。
+        article_full_text: 條文全文（或摘要）。
+        article_source: 來源標記，`"csv"` / `"docx"` / `None`（無法比對或
+            LLM 未通過 smoke test 而優雅降級時）。
+    """
+    conn.execute(
+        "INSERT OR REPLACE INTO rule_mapping "
+        "(code, article_location, article_full_text, article_source) "
+        "VALUES (?, ?, ?, ?)",
+        (code, article_location, article_full_text, article_source),
+    )

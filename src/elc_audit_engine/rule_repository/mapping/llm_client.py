@@ -9,6 +9,18 @@ JSON-mode 的 ad-hoc 測試，回傳看起來像是 OpenAPI schema 樣板
 因此本模組刻意使用「純 chat completion」（不帶 JSON-mode / response_format
 限制）作為較安全的第一種嘗試方式，並要求呼叫端在批次邏輯依賴此模組前，
 先執行 `smoke_test()` 確認伺服器回傳的是真實生成文字。
+
+執行期間額外發現（Task 2 批次建置階段）：目前載入的模型
+（Ornith-1.0-9B）預設會輸出完整的 reasoning/thinking trace
+（`message.reasoning_content`），單次呼叫耗時約 25-35 秒，且在
+`max_tokens` 較小時思考過程可能耗盡整個 token 預算，導致
+`message.content` 為空字串（`finish_reason=length`）。這會讓
+~13,942 筆代碼的批次建置在時間上不可行，也會提高空回應機率。
+llama.cpp 的 OpenAI 相容端點支援 `chat_template_kwargs.enable_thinking`
+（chat template 層級參數，非 hack）用來關閉思考過程，實測回應時間
+從 ~30 秒降至 ~0.6 秒，且 `content` 直接產出實際答案。因此
+`chat_completion` 預設在請求中帶入 `"chat_template_kwargs":
+{"enable_thinking": false}`。
 """
 
 import requests
@@ -47,6 +59,9 @@ def chat_completion(
         ],
         "max_tokens": max_tokens if max_tokens is not None else inference_cfg["max_tokens"],
         "temperature": temperature if temperature is not None else inference_cfg["temperature"],
+        # 關閉 reasoning/thinking trace：大幅縮短單次呼叫時間（~30s -> ~0.6s
+        # 實測），並避免思考過程耗盡 max_tokens 導致 content 為空字串。
+        "chat_template_kwargs": {"enable_thinking": False},
     }
 
     response = requests.post(
