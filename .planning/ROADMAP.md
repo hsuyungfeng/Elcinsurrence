@@ -49,7 +49,7 @@ Plans:
 
 Plans:
 - [x] 02-01-PLAN.md — Wave 0：RuleResult 契約定義、20 碼驗收清單定案、失敗中測試骨架（SQLite/docx樹/rule_mapping/介面）
-- [ ] 02-02-PLAN.md — Wave 1：SQLite payment_rules/drug_rules 載入（民國/西元日期解析、參數化查詢）
+- [x] 02-02-PLAN.md — Wave 1：SQLite payment_rules/drug_rules 載入（民國/西元日期解析、參數化查詢）
 - [ ] 02-03-PLAN.md — Wave 1：LibreOffice .doc 轉檔＋自建 docx 樹狀條文索引（正則階層解析，取代 pageindex 雲端套件）
 - [ ] 02-04-PLAN.md — Wave 2：llama.cpp 輔助 rule_mapping 批次建置（含 CSV 支付規定重用快速路徑）
 - [ ] 02-05-PLAN.md — Wave 3：get_rule() 單一查詢介面 + 20 碼人工核對 checkpoint
@@ -157,7 +157,7 @@ Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. 專案骨架 | 1/1 | Complete | 2026-07-29 |
-| 2. 規則庫建置 | 1/6 | In progress | - |
+| 2. 規則庫建置 | 2/6 | In progress | - |
 | 3. 解析器 | 0/TBD | Not started | - |
 | 4. 病歷彙整器 | 0/TBD | Not started | - |
 | 5. 三方比對器 | 0/TBD | Not started | - |

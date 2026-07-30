@@ -22,9 +22,9 @@ No dedicated PRD was present in this ingest set (ADR + SPEC + DOC only). Require
 - **Source:** progress.md §四 M2; docs/plans/2026-07-29-elc-audit-engine-design.md §9 M2
 - **Description:** 規則庫建置：CSV→SQLite（payment_rules/drug_rules）、審查注意事項→PageIndex、rule_mapping 預編譯
 - **Acceptance criteria:**
-  - SQLite payment_rules/drug_rules 可查詢
-  - PageIndex 樹狀索引涵蓋 officialdocument/審查注意事項/ 全部文件
-  - rule_mapping 預編譯快取命中率可驗收（抽20個常見醫令如01015C、64140C人工核對，見 constraints.md C6）
+  - [x] SQLite payment_rules/drug_rules 可查詢 — 完成於 02-02-PLAN.md（2,669 payment_rules + 11,273 drug_rules 列，`data/db/rules.sqlite3`）
+  - [ ] PageIndex 樹狀索引涵蓋 officialdocument/審查注意事項/ 全部文件
+  - [ ] rule_mapping 預編譯快取命中率可驗收（抽20個常見醫令如01015C、64140C人工核對，見 constraints.md C6）
 - **Scope:** Phase 1
 
 ## REQ-parsers
