@@ -38,17 +38,22 @@ Plans:
 - [x] 01-01-PLAN.md — uv 專案骨架、config 載入機制（llama.cpp 連線設定）、src/elc_audit_engine 套件結構、config 測試骨架
 
 ### Phase 2: 規則庫建置
-**Goal**: SQLite 結構化規則層（payment_rules/drug_rules）與 PageIndex 條文層＋rule_mapping 預編譯快取皆就緒，可離線查詢零 LLM 呼叫
+**Goal**: SQLite 結構化規則層（payment_rules/drug_rules）與自建 docx 樹狀條文索引（取代不可離線使用的 pageindex 雲端套件）＋rule_mapping 預編譯快取皆就緒，可離線查詢零 LLM 呼叫
 **Depends on**: Phase 1
 **Requirements**: REQ-rule-repository
 **Success Criteria** (what must be TRUE):
   1. SQLite `payment_rules`／`drug_rules` 可由醫令代碼／藥品代碼查詢
-  2. PageIndex 樹狀索引涵蓋 `officialdocument/審查注意事項/` 全部 .doc/.docx 文件
-  3. `rule_mapping` 預編譯快取（醫令代碼,科別,文件版本→條文位置/全文）建置完成，抽 20 個常見醫令（如 01015C、64140C）人工核對命中率可驗收
-**Plans**: TBD
+  2. 自建樹狀條文索引涵蓋 `officialdocument/審查注意事項/` 全部 .doc/.docx 文件（含 11 份舊版 .doc 經 LibreOffice 轉檔）
+  3. `rule_mapping` 預編譯快取（醫令代碼→條文位置/全文）建置完成，抽 20 個常見醫令（如 64140C、06012C；01015C 經查證不存在於任一 CSV，已於規劃階段替換）人工核對命中率可驗收
+**Plans**: 6 plans
 
 Plans:
-- [ ] 02-01: TBD
+- [ ] 02-01-PLAN.md — Wave 0：RuleResult 契約定義、20 碼驗收清單定案、失敗中測試骨架（SQLite/docx樹/rule_mapping/介面）
+- [ ] 02-02-PLAN.md — Wave 1：SQLite payment_rules/drug_rules 載入（民國/西元日期解析、參數化查詢）
+- [ ] 02-03-PLAN.md — Wave 1：LibreOffice .doc 轉檔＋自建 docx 樹狀條文索引（正則階層解析，取代 pageindex 雲端套件）
+- [ ] 02-04-PLAN.md — Wave 2：llama.cpp 輔助 rule_mapping 批次建置（含 CSV 支付規定重用快速路徑）
+- [ ] 02-05-PLAN.md — Wave 3：get_rule() 單一查詢介面 + 20 碼人工核對 checkpoint
+- [ ] 02-06-PLAN.md — Wave 2：ChromaDB embedding 基礎架構（D-09，非阻塞附加任務）
 
 ### Phase 3: 解析器
 **Goal**: 可解析申報XML（tdata/ddata/pdata）、核減清單、SOAP病歷文字
