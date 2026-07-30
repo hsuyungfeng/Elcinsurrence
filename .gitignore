@@ -25,4 +25,5 @@ data/db/*
 !data/db/.gitkeep
 data/rag/*
 !data/rag/.gitkeep
+data/converted_docx/
 logs/
