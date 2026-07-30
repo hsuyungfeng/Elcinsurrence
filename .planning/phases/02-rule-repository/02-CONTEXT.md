@@ -113,6 +113,7 @@ ChromaDB 輔助層（自由文字/類似案例查詢）基礎架構也在本階�
 
 - ChromaDB 完整運用（自由文字/類似案例查詢的實際使用場景）延後至 Phase 5（三方比對器）— Phase 2 只建立基礎架構（D-09），不實作查詢邏輯。
 - 手術章節式文件（2-2-7...docx）與科別條列式文件的解析策略差異，若規劃階段發現複雜度顯著提高，可考慮是否值得拆分成更細的任務，但仍屬 Phase 2 範圍內。
+- **候補工具評估：[OfficeCLI](https://github.com/iOfficeAI/OfficeCLI)**（iOfficeAI，Apache 2.0）— 離線、免安裝 Office、支援 .docx 結構化讀取（輸出 JSON/HTML），理論上可替代/輔助 python-docx 做 Phase 2 的 docx 文字擷取。**不在本階段引入**：(1) 與 D4 鎖定技術棧（Python+uv+python-docx+pageindex）重疊，額外引入一個 .NET runtime 打包的獨立 binary/MCP server 增加執行環境複雜度；(2) Phase 2 真正瓶頸是 PageIndex 條文樹索引與 rule_mapping 建置，不是 docx 文字擷取本身；(3) 對 CSV 規則資料（pandas 已鎖定）沒有幫助。**待評估時機：** 若研究員報告或執行階段實際發現 python-docx 在解析「附表.docx」（表格/樣式層級還原）或章節式手術規定檔案時遇到具體格式還原困難，可將 OfficeCLI 當作局部替換方案重新評估，而非現在整包導入。
 
 None — 討論全程未出現超出本階段範圍（新能力）的提議。
 
