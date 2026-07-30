@@ -23,9 +23,10 @@ No dedicated PRD was present in this ingest set (ADR + SPEC + DOC only). Require
 - **Description:** 規則庫建置：CSV→SQLite（payment_rules/drug_rules）、審查注意事項→PageIndex、rule_mapping 預編譯
 - **Acceptance criteria:**
   - [x] SQLite payment_rules/drug_rules 可查詢 — 完成於 02-02-PLAN.md（2,669 payment_rules + 11,273 drug_rules 列，`data/db/rules.sqlite3`）
-  - [ ] PageIndex 樹狀索引涵蓋 officialdocument/審查注意事項/ 全部文件
+  - [x] PageIndex 樹狀索引涵蓋 officialdocument/審查注意事項/ 全部文件 — 完成於 Plan 02-03（自建 python-docx+regex+JSON 索引，非 pageindex 雲端套件；32 檔案、1633 節點）
   - [ ] rule_mapping 預編譯快取命中率可驗收（抽20個常見醫令如01015C、64140C人工核對，見 constraints.md C6）
 - **Scope:** Phase 1
+- **Status:** IN PROGRESS — 2 of 3 acceptance criteria complete (Plans 02-02, 02-03)
 
 ## REQ-parsers
 

@@ -31,15 +31,23 @@ def test_all_source_files_converted_and_processed(tmp_path):
 
 def test_flat_structure_doc_produces_nested_tree(tmp_path):
     target = "2-2-7第二部第二章第七節手術-113.12.01.docx"
-    source_path = os.path.join(RULE_SOURCE_DIR, target)
     staging_dir = str(tmp_path / "staging")
     trees = tree_builder.build_all_trees(RULE_SOURCE_DIR, staging_dir)
 
-    tree = next(
-        (t for t in trees if os.path.basename(getattr(t, "source_path", "")) == target
-         or getattr(t, "source_file", None) == target),
-        None,
-    )
+    # build_all_trees returns dict[str, dict] keyed by original source filename
+    # (see 02-03-PLAN.md interfaces/key_links). Look up directly by key, with a
+    # fallback scan for dict-shaped values in case keys are stored without
+    # extension or in another normalized form.
+    tree = trees.get(target)
+    if tree is None:
+        tree = next(
+            (
+                v
+                for k, v in trees.items()
+                if os.path.basename(k) == target or k == os.path.splitext(target)[0]
+            ),
+            None,
+        )
     assert tree is not None, f"tree for {target} not found in build_all_trees output"
 
     def max_depth(node, current=1):
