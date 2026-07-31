@@ -39,12 +39,13 @@ SCHEMA_RULE_MAPPING = (
     ")"
 )
 
-_ALLOWED_TABLES = {"payment_rules", "drug_rules"}
+_ALLOWED_TABLES = {"payment_rules", "drug_rules", "rule_mapping"}
 
 # 靜態、非動態組裝的查詢語句表 —— table 名稱固定寫死於此，供 `query_by_code` 使用。
 _SELECT_BY_CODE_QUERIES = {
     "payment_rules": "SELECT * FROM payment_rules WHERE code = ?",
     "drug_rules": "SELECT * FROM drug_rules WHERE code = ?",
+    "rule_mapping": "SELECT * FROM rule_mapping WHERE code = ?",
 }
 
 
@@ -78,7 +79,8 @@ def query_by_code(conn: sqlite3.Connection, table: str, code: str) -> sqlite3.Ro
 
     Args:
         conn: 既有的 SQLite 連線。
-        table: 目標表名，必須是 `payment_rules` 或 `drug_rules`（白名單檢查）。
+        table: 目標表名，必須是 `payment_rules`／`drug_rules`／`rule_mapping`
+            其中之一（白名單檢查）。
         code: 醫令代碼／藥品代號，一律透過 `?` 佔位符傳遞，絕不字串內插。
 
     Returns:
