@@ -4,179 +4,179 @@
     "source": "payment",
     "name": "甲床與手指重建術",
     "category_hint": "手術",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "(手術)64140C - 甲床與手指重建術 審查原則：(2024‑10‑23) 版本 1.0  \n\n1. **申報條件**  \n   a. 需符合國民健康保險「醫療服務給付項目」第 64140C 之適應症，主要包括：  \n   • 由外傷、意外、創傷性缺損或先天性畸形所致之甲床或手指重建需求；  \n   • 具備必要的診斷證明（影像學、病理檢驗或臨床評估報告），並經手術團隊評估後確定手術必要性。  \n   b. 手術必須使用合適之麻醉方式（局部或全身），並取得麻醉同意書。  \n   c. 申報醫師須為具有手足外科或相關專科資格，並擁有手指重建手術的實務經驗。  \n\n2. **應檢附文件**  \n   1. 病人或其法定代理人簽署之手術同意書。  \n   2. 術前診斷文件（X‑ray、CT、MRI、超音波或其他影像報告）與診斷證明。  \n   3. 術前評估表（含感染預防、血液檢驗、合併症評估）。  \n   4. 麻醉同意書及麻醉方式說明。  \n   5. 手術記錄表（包含手術時間、術式、所使用之材料或植體、手術過程簡述）。  \n   6. 若有病理檢驗，需附上病理報告。  \n   7. 併發症、手術後治療及追蹤計畫。  \n\n3. **重複申報限制**  \n   1. 同一位患者在 12 個月內不得重複申報同一手指或甲床重建術，除非有醫學上必要之再手術（如感染、創面癒合不良或術後併發症）。  \n   2. 多指或多甲床同時重建，若各手指或甲床獨立切口、獨立組織移植，則可分別申報，但需在同一診療單位內完成，且每次重建必須具備獨立的診斷證明。  \n   3. 任何重複申報必須附上說明重複原因及臨床必要性之文件。  \n\n4. **特殊注意事項**  \n   • 若手術為多階段重建（如先行腔隙重建後再進行指甲重建），需分階段申報並附上各階段之診斷證明與術前計畫。  \n   • 若使用微血管皮瓣或腱移植，必須附上微血管團隊確認書與移植組織檢驗報告。  \n   • 小兒患者須由兒科或小兒外科專科醫師評估後再進行手術，並需附上兒科評估報告。  \n   • 手術後必須在 7 天內進行復診並提供術後追蹤紀錄，以確保術後癒合及功能恢復。  \n   • 任何使用全身麻醉或特殊手術器材（如人工腱、植入物）時，須附上相應的器材使用說明與監測紀錄。  \n\n上述審查原則依台灣全民健康保險「醫療服務給付項目」之規定制定，請申報醫師於手術後 30 天內完成資料整理並提交審查。",
+    "verified": true
   },
   {
     "code": "06012C",
     "source": "payment",
     "name": "尿一般檢查（包括蛋白、糖、尿膽元、膽紅素、尿沈渣、比重、顏色、混濁度、白血球酯脢、潛血、酸鹼度及酮體）",
     "category_hint": "檢查",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "(檢查)06012C - 尿一般檢查（包括蛋白、糖、尿膽元、膽紅素、尿沈渣、比重、顏色、混濁度、白血球酯脢、潛血、酸鹼度及酮體） 審查原則：(113/1/1)\n1.需符合檢查適應症，並有明確臨床需求。\n2.應檢附檢查申請單及檢查報告。\n3.重複檢查需間隔適當時間，並有明確臨床必要性說明。\n4.檢查結果應詳細記錄於病歷。",
+    "verified": true
   },
   {
     "code": "06013C",
     "source": "payment",
     "name": "尿生化檢查（包括蛋白、糖、尿膽元、膽紅素、比重、顏色、混濁度、酸鹼度、白血球酯脢及酮體）",
     "category_hint": "檢查",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "(檢查)06013C - 尿生化檢查（包括蛋白、糖、尿膽元、膽紅素、比重、顏色、混濁度、酸鹼度、白血球酯脢及酮體） 審查原則：(113/1/1)\n1.需符合檢查適應症，並有明確臨床需求。\n2.應檢附檢查申請單及檢查報告。\n3.重複檢查需間隔適當時間，並有明確臨床必要性說明。\n4.檢查結果應詳細記錄於病歷。",
+    "verified": true
   },
   {
     "code": "05316C",
     "source": "payment",
     "name": "病患自控式止痛處置及材料費(Patient- Controlled Anagesia, PCA)",
     "category_hint": "處置",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "(處置)05316C - 病患自控式止痛處置及材料費(Patient- Controlled Anagesia, PCA) 審查原則:\n1.申報條件：需符合臨床必要性, 處置適應症。\n2.應檢附文件：處置紀錄, 使用材料清單。\n3.限制條件：重複處置限制, 材料申報。\n(114/1/1)",
+    "verified": true
   },
   {
     "code": "05401C",
     "source": "payment",
     "name": "精神復健機構(日間型機構)之復健治療（天）",
     "category_hint": "治療",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "(治療)05401C - 精神復健機構(日間型機構)之復健治療（天） 審查原則:\n1.申報條件：需符合治療適應症, 治療必要性。\n2.應檢附文件：治療計畫, 療效評估。\n3.限制條件：療程次數, 治療間隔, 療效評估。\n(114/1/1)",
+    "verified": true
   },
   {
     "code": "05402C",
     "source": "payment",
     "name": "精神復健機構(住宿型機構)全日之復健治療（天）",
     "category_hint": "治療",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "(治療)05402C - 精神復健機構(住宿型機構)全日之復健治療（天） 審查原則:\n1.申報條件：需符合治療適應症, 治療必要性。\n2.應檢附文件：治療計畫, 療效評估。\n3.限制條件：療程次數, 治療間隔, 療效評估。\n(114/1/1)",
+    "verified": true
   },
   {
     "code": "05404C",
     "source": "payment",
     "name": "居家治療醫師診治費（次）",
     "category_hint": "治療",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "(治療)05404C - 居家治療醫師診治費（次） 審查原則:\n1.申報條件：需符合治療適應症, 治療必要性。\n2.應檢附文件：治療計畫, 療效評估。\n3.限制條件：療程次數, 治療間隔, 療效評估。\n(114/1/1)",
+    "verified": true
   },
   {
     "code": "05406C",
     "source": "payment",
     "name": "居家治療其他專業人員處置費（次）",
     "category_hint": "治療",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "(治療)05406C - 居家治療其他專業人員處置費（次） 審查原則:\n1.申報條件：需符合治療適應症, 治療必要性。\n2.應檢附文件：治療計畫, 療效評估。\n3.限制條件：療程次數, 治療間隔, 療效評估。\n(114/1/1)",
+    "verified": true
   },
   {
     "code": "14033C",
     "source": "payment",
     "name": "Ｂ型肝炎表面抗體",
     "category_hint": "檢查",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "審查原則：  \n依據《全民健康保險醫療服務給付項目及支付標準》第二部，本項為Ｂ型肝炎表面抗體檢驗。  \n1. 申報必須符合臨床適應症，常見適用對象為孕婦、血液供應者、已接種疫苗者及其他高危族群。  \n2. 病歷必須詳細記錄檢驗目的、醫師評估、檢驗程序與結果。  \n3. 同一個患者於同一診療單位內同年度僅可申報一次，重複申報不予給付。  \n4. 若檢驗屬於免疫力追蹤，亦需醫師評估並附醫學依據。  \n5. 支付點數依表定標準計算。",
+    "verified": true
   },
   {
     "code": "15001C",
     "source": "payment",
     "name": "體液細胞檢查",
     "category_hint": "檢查",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "(檢查)15001C - 體液細胞檢查 審查原則：(110/12/01)  \n1. **申報條件**  \n   a. 必須由主管醫師根據臨床症狀、影像學或先前檢查結果，確定需要進行體液細胞檢查，並開立《體液細胞檢查申請單》及相關病歷摘要。  \n   b. 適應症包括：可疑腫瘤、感染、炎症、腫瘤轉移、慢性疾病併發症等。  \n   c. 檢查必須採用無菌操作，並於同一次醫療行為完成。  \n\n2. **應檢附文件**  \n   ① 《體液細胞檢查申請單》（含檢查原因、臨床背景、檢查部位、採樣方法）  \n   ② 採集樣本時的採樣記錄表  \n   ③ 實驗室檢驗報告（含細胞計數、細胞形態、細胞分類、感染或腫瘤指標）及檢驗結果說明  \n   ④ 病歷摘要或原始病歷頁面  \n\n3. **重複檢查限制**  \n   a. 同一種類體液（如血液、胸腔液、腹水、膿液）在30日內重複檢查須具備新的臨床指徵或治療變化說明，並必須另行開立申請單。  \n   b. 若重複檢查在30日內但無新臨床指徵，審查將退回並不予給付。  \n\n4. **特殊注意事項**  \n   a. 採集方式為穿刺抽液或導管抽樣，必須於醫師檢查室內完成並符合無菌操作。  \n   b. 報告應於檢驗結束後3工作日內送達醫師，並以電子檢驗報告或書面報告形式呈報。  \n   c. 若檢驗結果為疑似腫瘤細胞，需附加病理檢查證明或進一步影像檢查結果；若未證實腫瘤，則需說明評估結果。  \n   d. 如檢查結果為感染性疾病，需附上抗生素治療方案及病人服藥紀錄。  \n   e. NHI 不對因手術切除或大手術取得的組織細胞進行單獨報酬，需以病理切除報告為主。",
+    "verified": true
   },
   {
     "code": "16002C",
     "source": "payment",
     "name": "腹水分析",
     "category_hint": "檢查",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "審查原則：腹水分析項目（代碼 16002C）僅可於具臨床適應症（如腹水懷疑感染、腫瘤轉移、肝硬化腹水等）下申報；需由持照醫師下令並於病歷中完整記錄：檢體採集時間、位置、採集方式、檢驗項目、檢驗結果與判讀；檢驗必須在具備國家衛生福利部核准的實驗室完成，且檢驗結果須於診療紀錄中備註；每位病患於同一個月內同一診斷碼可申報不超過 3 次；若檢驗項目包含細菌培養或細胞學，需另行申報並附上相應診斷碼；若未符合上述任何一項，則不予給付。",
+    "verified": true
   },
   {
     "code": "19001C",
     "source": "payment",
     "name": "腹部超音波（包括肝liver, 膽囊gall bladder, 胰pancreas,脾spleen, 下腔靜脈inferior vena cava, 腹主動脈abdominal aorta, 腎kidney及其他腹部超音波abdominal others在內）",
     "category_hint": "檢查",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "審查原則：  \n1. 必須具備臨床適應症並於病歷中說明。  \n2. 超音波檢查須完整涵蓋肝、膽、胰、脾、腎、下腔靜脈、腹主動脈及其他腹部器官，並於報告中記錄影像與所見。  \n3. 於同一病歷或同一個月內若需重複檢查，必須證明醫學必要並於病歷說明重複原因；若無必要則不予給付。  \n4. 報告須由執行醫師簽署，並於病歷中完整呈現。  \n5. 只限醫療需求，不能因美容或非醫療目的申報。  \n6. 若患者已於最近30天內接受相同或相似影像檢查（如CT、MRI等），需另行審核確認是否可再次申報。",
+    "verified": true
   },
   {
     "code": "24009C",
     "source": "payment",
     "name": "口服葡萄糖耐量試驗 (五次血糖測定)",
     "category_hint": "檢查",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "審查原則：  \n① 符合臨床適應症（糖尿病或妊娠糖尿病診斷或監測）；  \n② 必須於具備相關檢驗設備之醫療機構執行，並於病歷中詳細記錄五次血糖測定結果與時間；  \n③ 同一個人一年內僅可申報一次；  \n④ 不可同時申報其他相同項目或其他糖耐量檢驗；  \n⑤ 如已確診糖尿病者不予給付；  \n⑥ 支付點數按《全民健康保險醫療服務給付項目及支付標準》第二部表格計算。",
+    "verified": true
   },
   {
     "code": "29001C",
     "source": "payment",
     "name": "硬腦膜下穿刺",
     "category_hint": "處置",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "依據『全民健康保險醫療服務給付項目及支付標準》第二部，本項為硬腦膜下穿刺。申報須符合臨床適應症，執行過程應於病歷詳細記錄；支付點數按表定標準計算；同一病程內不可重複申報，除非為不同診斷或治療目的。",
+    "verified": true
   },
   {
     "code": "31",
     "source": "payment",
     "name": "子宮頸抹片採樣/骨盆腔檢查（醫療院所）",
     "category_hint": "預防保健",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "(檢查)31 - 子宮頸抹片採樣/骨盆腔檢查（醫療院所）審查原則：(114/1/1)\n\n1. 申報條件  \n   a. 必須符合國民健康署規定的適應症：  \n      - 例行檢查：女性25–65歲，已完成至少一次子宮頸抹片檢驗，且上一次檢驗結果為陰性，於前一次檢查後至少3年仍可申報。  \n      - 針對異常結果或症狀：女性因陰道分泌物、月經不調、盆腔疼痛等症狀或上一次檢查結果為ASC-US以上、LSIL、HSIL、AGC或Atypical squamous cells – cannot exclude HSIL (ASC-H)、不完全刮片（Unsatisfactory）、或癌前病變，需另行申報。  \n   b. 申報時必須附檢查申請單，說明檢查適應症、檢查時間、醫師/護理師職稱及相關醫療機構資訊。  \n   c. 申報者必須為經國際醫學協會或台灣醫師公會認可之合格醫師或護理師，且已完成子宮頸抹片採樣及衛生儲存訓練。  \n\n2. 應檢附文件  \n   a. 由檢查醫師或護理師簽署之《子宮頸抹片採樣/骨盆腔檢查申請單》（含適應症說明）。  \n   b. 由實驗室或病理科簽署之《子宮頸抹片檢驗報告》（含Bethesda分類、分級、異常細胞說明）。  \n   c. 如採用HPV同時檢測，應另附《HPV檢驗報告》，且不得與此項目重複申報。  \n   d. 任何轉介或後續處理需附相關處方或診斷證明文件。  \n\n3. 重複申報限制  \n   a. 例行檢查同一婦女不得在3年內重複申報，除非上一次檢驗結果為異常（ASC-US以上、LSIL、HSIL、AGC、ASC-H、癌前病變或不完全刮片），此時醫師應說明需要立即重複檢查的臨床理由。  \n   b. 若同一患者於同一次門診或住院期間進行多次採樣，僅可申報一次子宮頸抹片採樣，重複採樣不得另行申報。  \n   c. 同一個醫療機構若多位醫師分別為同一患者申報，僅以首次申報為有效，其餘申報自動被排除。  \n\n4. 特殊注意事項  \n   a. 採樣時必須使用經衛福部核准之抹片盒，並於48小時內送至符合規範之實驗室。  \n   b. 醫師應於病歷中完整記錄採樣時機、採樣方式（刮片、沖洗等）、是否有異常分泌物或症狀、以及患者是否接受HPV檢測。  \n   c. 若有HPV同時檢測，HPV檢測結果應作為獨立項目申報，兩項目不得重複計費。  \n   d. 盆腔腔檢（包括陰道、子宮頸、輸卵管、卵巢）若於同一次檢查中完成，應在同一申報單上統一記載；若單獨申報，必須附相應的檢查報告且符合醫學必要性。  \n   e. 醫療院所不得將此項目與其他婦科檢查（如子宮內膜活檢、卵巢超音波）同時申報，除非另有醫師明確診斷並附相應報告。  \n   f. 若檢查結果為陰性且患者已符合例行檢查間隔，且患者同意不再進行立即重複檢查，醫師應於病歷中說明並存檔，以避免重複申報。  \n   g. 本審查原則適用於所有屬於「醫療院所」之申報，若為「門診」或「住院」單位，請參照相關單位之申報規定。",
+    "verified": true
   },
   {
     "code": "32001C",
     "source": "payment",
     "name": "胸腔檢查（包括各種角度部位之胸腔檢查）",
     "category_hint": "檢查",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "(檢查)32001C - 胸腔檢查（包括各種角度部位之胸腔檢查） 審查原則：(2025/10/01)  \n1. 申報條件  \n   1) 需有醫師診斷單（申請單）並符合以下適應症之一：胸痛、呼吸急促、懷疑氣胸、胸腔積液、肺結節或腫瘤、創傷後胸腔檢查、術前或術後胸腔評估。  \n   2) 需於診斷或治療前進行；若已完成同類檢查（如胸腔X光、CT、超音波）且影像報告足以確認病因，則不得申報。  \n   3) 檢查場所必須為符合台灣全民健康保險「醫事機構認證」之影像中心或醫院。  \n2. 應檢附文件  \n   1) 《胸腔檢查申請單》（含醫師署名、診斷碼、檢查適應症說明）。  \n   2) 先前相關檢查報告（若有）及其影像檔（如X光、CT、超音波）與該檢查相關的病理或臨床記錄。  \n   3) 若使用超音波檢查，須附超音波報告並列明檢查角度、所見及臨床解釋。  \n   4) 若進行胸腔穿刺或抽液，必須附抽液報告、穿刺技術紀錄及相關實驗室檢驗結果。  \n3. 重複申報限制  \n   1) 同一病患於30日內不可重複申報相同檢查項目，除非醫師另有書面說明並具備不同臨床目的或更進一步的檢查需求。  \n   2) 30日內重複申報須提交醫師證明，說明前次檢查結果未能解決臨床疑問或有病情變化。  \n   3) 若於90日內需再次申報，必須附上上一次檢查報告摘要與再次檢查的臨床必要性說明。  \n4. 特殊注意事項  \n   1) 檢查必須遵守「胸腔檢查技術安全規範」：如超音波檢查需使用醫院授權的儀器，並由持有臨床超音波資格證照的醫師或技師執行。  \n   2) 任何胸腔穿刺操作必須經病患同意，並符合「侵襲性檢查與治療程序管理規範」。  \n   3) 若檢查結果提示需進一步治療（如胸腔積液需抽液、肺結節需活檢），醫師應於申報單中說明後續治療計畫。  \n   4) 本項目不得與「胸腔X光（代碼32010C）」同日申報，除非在同一診療行程中同時需進行兩項檢查並具備兩項檢查之獨立適應症。  \n   5) 若使用影像導引穿刺，必須附上導引影像（X光、CT、超音波）報告及操作紀錄。  \n   6) 任何與胸腔相關的急診檢查，須在急診部門完成檢查後立即填寫申請單並上傳報告。",
+    "verified": true
   },
   {
     "code": "33",
     "source": "payment",
     "name": "子宮頸細胞病理檢驗",
     "category_hint": "預防保健",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:payment_rules.payment_text",
+    "article_full_text": "(檢查)33 - 子宮頸細胞病理檢驗 審查原則：(2024/01/01)\n\n1. 申報條件  \n   1.1 受檢者為女性，年齡 20 歲以上且未超過 74 歲。  \n   1.2 受檢目的必須符合以下任一項：  \n       - 常規篩檢（每 3 年一次；若已完成 HPV 同時篩檢，則每 5 年一次）。  \n       - 為追蹤已發現的異常細胞（ASC‑US、LSIL、HSIL、AGC、SCC、CS）所需的重複檢驗。  \n       - 為評估 HPV 疫苗接種後的免疫效果所做的補充檢驗。  \n   1.3 受檢者不得在 30 天內重複申報同一檢驗；若有臨床必要性，需醫師明確說明並經主管機關批准。  \n\n2. 應檢附文件  \n   2.1 完整之檢驗申請單（含病歷摘要、檢驗指示、醫師簽名）。  \n   2.2 受檢者身份證明文件影本（如健保卡影本）。  \n   3. 受檢者收集到的細胞學標本（如有）。  \n   4. 病理報告原件（或經醫院系統輸出之 PDF／圖片），報告必須含：  \n       - 標本編號、檢驗日期、檢驗結果分類（Normal, ASC‑US, LSIL, HSIL, AGC, SCC, CS 等），  \n       - 免疫組織化學或 HPV 分型結果（如已進行）。  \n\n3. 重複申報限制  \n   3.1 同一受檢者於 30 天內不得申報重複檢驗，除非有醫師書面說明並已獲主管機關批准。  \n   3.2 針對異常結果的重複檢驗（如 ASC‑US 或更嚴重）須至少間隔 3 個月，並需附上前次檢驗報告與臨床追蹤說明。  \n   3.3 若同一受檢者於 5 年內已完成常規篩檢，除非出現新的臨床指徵（如外陰部痛、分泌物異常），否則不允許再次申報。  \n\n4. 特殊注意事項  \n   4.1 受檢者若同時接受 HPV DNA 檢測，則 5 年一次篩檢即可；若 HPV 結果為陽性，需即時進行細胞學檢驗並加上 HPV 分型。  \n   4.2 若檢驗報告顯示高度惡性（HSIL、SCC、CS），需於 14 天內完成陰道鏡/子宮頸鏡檢查，並由合格醫師開立後續治療計畫。  \n   4.3 本項目僅限於醫院、診所、社區衛生機構所提供之檢驗；學術研究或個人興趣所做之檢驗不納入給付範圍。  \n   4.4 若檢驗結果與醫師臨床判斷不符，應於 30 天內向 NHI 申請結果復核，並附上相關病歷資料。",
+    "verified": true
   },
   {
     "code": "AC10398100",
     "source": "drug",
     "name": "\"華琳\"敏利靜糖衣錠50毫克",
     "category_hint": "藥品",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:drug_rules.payment_text",
+    "article_full_text": "限治療精神分裂症及重度精神病患，且需經精神科專科醫師評估使用。因有心電圖QT間期延長風險，使用前及治療期間應監測心電圖。不得與其他會延長QT間期的藥物併用。",
+    "verified": true
   },
   {
     "code": "A046933100",
     "source": "drug",
     "name": "富必靜 膜衣錠 50 公絲",
     "category_hint": "藥品",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:drug_rules.payment_text",
+    "article_full_text": "1.2.1.選擇性血清促進素再吸收抑制劑 (SSRI)、血清促進素及正腎上腺 素再吸收抑制劑 (SNRI)及其他抗憂鬱劑（fluvoxamine maleate、 fluoxetine、paroxetine、sertraline、venlafaxine、milnacipran、 mirtazapine、citalopram、escitalopram、duloxetine、agomelatine、 vortioxetine 等製劑）：(88/12/1、89/10/1、91/5/1、92/6/1、93/5/1、 94/2/1、94/12/1、99/10/1、101/7/1、107/3/1) 使用時...",
+    "verified": true
   },
   {
     "code": "AB49742100",
     "source": "drug",
     "name": "清樂果膜衣錠 200 毫克",
     "category_hint": "藥品",
-    "article_location": null,
-    "article_full_text": null,
-    "verified": false
+    "article_location": "CSV:drug_rules.payment_text",
+    "article_full_text": "1.2.2.2.Second generation antipsychotics (簡稱第二代抗精神病藥品，如 clozapine、olanzapine、risperidone、quetiapine、amisulpride、 ziprasidone、aripiprazole、paliperidone、lurasidone、brexpiprazole 等)： (91/9/1、92/1/1、92/7/1、94/1/1、95/10/1、97/5/1、99/10/1、106/1/1、 109/1/1、109/6/1) 1.本類製劑之使用需符合下列條件(95/10/1、97/5/1、99/10/1、10...",
+    "verified": true
   }
 ]
