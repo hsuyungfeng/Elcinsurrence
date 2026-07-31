@@ -13,7 +13,7 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 - Decimal phases (x.1, x.2): Urgent insertions (marked with INSERTED) — 目前無
 
 - [x] **Phase 1: 專案骨架** - uv 專案初始化、config、目錄結構
-- [ ] **Phase 2: 規則庫建置** - CSV→SQLite、審查注意事項→PageIndex、rule_mapping 預編譯
+- [x] **Phase 2: 規則庫建置** - CSV→SQLite、審查注意事項→PageIndex、rule_mapping 預編譯
 - [ ] **Phase 3: 解析器** - 申報XML（tdata/ddata/pdata）、核減清單、SOAP文字
 - [ ] **Phase 4: 病歷彙整器** - Provider介面＋本地檔案Provider、半年病史時間軸
 - [ ] **Phase 5: 三方比對器** - 醫令↔規則↔病歷 支持度判定＋候選補強生成
@@ -42,17 +42,17 @@ Plans:
 **Depends on**: Phase 1
 **Requirements**: REQ-rule-repository
 **Success Criteria** (what must be TRUE):
-  1. SQLite `payment_rules`／`drug_rules` 可由醫令代碼／藥品代碼查詢
+  1. [x] SQLite `payment_rules`／`drug_rules` 可由醫令代碼／藥品代碼查詢 — 02-02 完成：2,669 payment_rules + 11,273 drug_rules 列
   2. [x] 自建樹狀條文索引涵蓋 `officialdocument/審查注意事項/` 全部 .doc/.docx 文件（含 11 份舊版 .doc 經 LibreOffice 轉檔）— 02-03 完成：32 份來源檔案（11 .doc + 21 .docx）全數處理，`data/db/docx_trees.json`（1633 節點）
-  3. [x] `rule_mapping` 預編譯快取（醫令代碼→條文位置/全文）建置完成 — 02-04 完成：13,942/13,942 碼全數處理（6,802 CSV 重用快速路徑＋558 LLM 輔助比對＋6,582 誠實無匹配，非幻覺捏造）；20 碼人工核對清單（01015C 經查證不存在於任一 CSV，已於規劃階段替換）全數走 CSV 快速路徑，皆有真實條文全文，**人工核對簽核待 02-05**
-**Plans**: 6 plans
+  3. [x] `rule_mapping` 預編譯快取（醫令代碼→條文位置/全文）建置完成 — 02-04 完成批次建置（13,942/13,942 碼全數處理：6,802 CSV 重用快速路徑＋558 LLM 輔助比對＋6,582 誠實無匹配，非幻覺捏造）；20 碼人工核對清單（01015C 經查證不存在於任一 CSV，已於規劃階段替換）於 02-05 完成人工簽核，使用者確認 20/20 全數正確
+**Plans**: 6 plans — **Phase COMPLETE (2026-07-31)**
 
 Plans:
 - [x] 02-01-PLAN.md — Wave 0：RuleResult 契約定義、20 碼驗收清單定案、失敗中測試骨架（SQLite/docx樹/rule_mapping/介面）
 - [x] 02-02-PLAN.md — Wave 1：SQLite payment_rules/drug_rules 載入（民國/西元日期解析、參數化查詢）
 - [x] 02-03-PLAN.md — Wave 1：LibreOffice .doc 轉檔＋自建 docx 樹狀條文索引（正則階層解析，取代 pageindex 雲端套件）
 - [x] 02-04-PLAN.md — Wave 2：llama.cpp 輔助 rule_mapping 批次建置（含 CSV 支付規定重用快速路徑）
-- [ ] 02-05-PLAN.md — Wave 3：get_rule() 單一查詢介面 + 20 碼人工核對 checkpoint
+- [x] 02-05-PLAN.md — Wave 3：get_rule() 單一查詢介面 + 20 碼人工核對 checkpoint（使用者確認 20/20 正確）
 - [x] 02-06-PLAN.md — Wave 2：ChromaDB embedding 基礎架構（D-09，非阻塞附加任務）
 
 ### Phase 3: 解析器

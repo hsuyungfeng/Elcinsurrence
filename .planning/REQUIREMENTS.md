@@ -24,9 +24,9 @@ No dedicated PRD was present in this ingest set (ADR + SPEC + DOC only). Require
 - **Acceptance criteria:**
   - [x] SQLite payment_rules/drug_rules 可查詢 — 完成於 02-02-PLAN.md（2,669 payment_rules + 11,273 drug_rules 列，`data/db/rules.sqlite3`）
   - [x] PageIndex 樹狀索引涵蓋 officialdocument/審查注意事項/ 全部文件 — 完成於 Plan 02-03（自建 python-docx+regex+JSON 索引，非 pageindex 雲端套件；32 檔案、1633 節點）
-  - [ ] rule_mapping 預編譯快取命中率可驗收（抽20個常見醫令如01015C、64140C人工核對，見 constraints.md C6）— 建置完成於 02-04-PLAN.md（13,942/13,942 碼全數處理：6,802 CSV 重用＋558 LLM 比對＋6,582 誠實無匹配；20 碼人工核對清單全數走 CSV 快速路徑，已有真實條文全文），**人工核對簽核待 02-05-PLAN.md checkpoint**
+  - [x] rule_mapping 預編譯快取命中率可驗收（抽20個常見醫令如01015C、64140C人工核對，見 constraints.md C6）— 建置完成於 02-04-PLAN.md（13,942/13,942 碼全數處理：6,802 CSV 重用＋558 LLM 比對＋6,582 誠實無匹配）；20 碼人工核對於 02-05-PLAN.md 完成，使用者確認全數 20/20 正確
 - **Scope:** Phase 1
-- **Status:** IN PROGRESS — 2 of 3 acceptance criteria fully complete (02-02, 02-03); 3rd criterion's build is done (02-04), awaiting human sign-off (02-05)
+- **Status:** COMPLETE — 3 of 3 acceptance criteria complete (02-02, 02-03, 02-04/02-05)
 
 ## REQ-parsers
 
