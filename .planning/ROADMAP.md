@@ -44,16 +44,16 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. SQLite `payment_rules`／`drug_rules` 可由醫令代碼／藥品代碼查詢
   2. [x] 自建樹狀條文索引涵蓋 `officialdocument/審查注意事項/` 全部 .doc/.docx 文件（含 11 份舊版 .doc 經 LibreOffice 轉檔）— 02-03 完成：32 份來源檔案（11 .doc + 21 .docx）全數處理，`data/db/docx_trees.json`（1633 節點）
-  3. `rule_mapping` 預編譯快取（醫令代碼→條文位置/全文）建置完成，抽 20 個常見醫令（如 64140C、06012C；01015C 經查證不存在於任一 CSV，已於規劃階段替換）人工核對命中率可驗收
+  3. [x] `rule_mapping` 預編譯快取（醫令代碼→條文位置/全文）建置完成 — 02-04 完成：13,942/13,942 碼全數處理（6,802 CSV 重用快速路徑＋558 LLM 輔助比對＋6,582 誠實無匹配，非幻覺捏造）；20 碼人工核對清單（01015C 經查證不存在於任一 CSV，已於規劃階段替換）全數走 CSV 快速路徑，皆有真實條文全文，**人工核對簽核待 02-05**
 **Plans**: 6 plans
 
 Plans:
 - [x] 02-01-PLAN.md — Wave 0：RuleResult 契約定義、20 碼驗收清單定案、失敗中測試骨架（SQLite/docx樹/rule_mapping/介面）
 - [x] 02-02-PLAN.md — Wave 1：SQLite payment_rules/drug_rules 載入（民國/西元日期解析、參數化查詢）
 - [x] 02-03-PLAN.md — Wave 1：LibreOffice .doc 轉檔＋自建 docx 樹狀條文索引（正則階層解析，取代 pageindex 雲端套件）
-- [ ] 02-04-PLAN.md — Wave 2：llama.cpp 輔助 rule_mapping 批次建置（含 CSV 支付規定重用快速路徑）
+- [x] 02-04-PLAN.md — Wave 2：llama.cpp 輔助 rule_mapping 批次建置（含 CSV 支付規定重用快速路徑）
 - [ ] 02-05-PLAN.md — Wave 3：get_rule() 單一查詢介面 + 20 碼人工核對 checkpoint
-- [ ] 02-06-PLAN.md — Wave 2：ChromaDB embedding 基礎架構（D-09，非阻塞附加任務）
+- [x] 02-06-PLAN.md — Wave 2：ChromaDB embedding 基礎架構（D-09，非阻塞附加任務）
 
 ### Phase 3: 解析器
 **Goal**: 可解析申報XML（tdata/ddata/pdata）、核減清單、SOAP病歷文字
