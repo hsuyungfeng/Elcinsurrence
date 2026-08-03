@@ -59,7 +59,7 @@ def test_csv_reuse_fast_path_avoids_llm_call(tmp_path):
          patch.object(build_mapping.llm_client, "chat_completion") as mock_chat:
         # 06012C 的 payment_text 為 None，會走 LLM path；為了單獨驗證 64140C
         # 不觸發 LLM 呼叫，這裡讓 mock_chat 回傳一個可解析的回應供 06012C 使用。
-        mock_chat.return_value = "條文位置：測試路徑\n條文摘要：測試內容"
+        mock_chat.return_value = "條文位置：測試路徑\n條文摘要：本條文規範尿液一般檢查之審查原則與給付規定，適用於門診及住院申報案件。"
         result = build_mapping.build_rule_mapping(db_path, trees_path)
 
     conn = db.get_connection(db_path)
@@ -92,7 +92,7 @@ def test_llm_path_triggered_for_short_payment_text(tmp_path):
          patch.object(
              build_mapping.llm_client,
              "chat_completion",
-             return_value="條文位置：測試路徑\n條文摘要：測試內容",
+             return_value="條文位置：測試路徑\n條文摘要：本條文規範尿液一般檢查之審查原則與給付規定，適用於門診及住院申報案件。",
          ):
         build_mapping.build_rule_mapping(db_path, trees_path)
 
@@ -105,7 +105,7 @@ def test_llm_path_triggered_for_short_payment_text(tmp_path):
 
     assert row is not None
     assert row["article_location"] == "測試路徑"
-    assert row["article_full_text"] == "測試內容"
+    assert row["article_full_text"] == "本條文規範尿液一般檢查之審查原則與給付規定，適用於門診及住院申報案件。"
     assert row["article_source"] == "docx"
 
 

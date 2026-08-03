@@ -1,4 +1,4 @@
-"""rule_mapping 一次性批次建置腳本（D-04/D-05）。
+"""rule_mapping 批次建置腳本（D-04/D-05，P1-4 增量）。
 
 對 `payment_rules` UNION `drug_rules` 中每一個代碼，決定
 `(article_location, article_full_text)`：
@@ -20,13 +20,17 @@ import json
 import logging
 
 from elc_audit_engine.rule_repository import db
-from elc_audit_engine.rule_repository.mapping import llm_client, prompts
+from elc_audit_engine.rule_repository.mapping import llm_client, prompts, versions
 
 logger = logging.getLogger(__name__)
 
 _CSV_SUBSTANTIVE_THRESHOLD = 60
 _MAX_LLM_CANDIDATES = 5
-
+# 候選節點 full_text 至少要有這個長度，才視為「有實質內容」。
+# 文件標題節點的 full_text 往往等於標題本身（如「西醫基層醫療費用審查
+# 注意事項-婦產科」），對比對無價值且會誤導 LLM 選出無效條文（品質抽看
+# ③ 的成因）。小於此長度直接排除。
+_MIN_SUBSTANTIVE_FULL_TEXT = 20
 _SOURCE_TABLES = ("payment_rules", "drug_rules")
 
 # 靜態、非動態組裝的查詢語句表 —— table 名稱固定寫死於此，
@@ -88,15 +92,51 @@ def _score_candidate(node: dict, name: str) -> int:
 def _select_top_candidates(all_nodes: list[dict], name: str, limit: int = _MAX_LLM_CANDIDATES) -> list[dict]:
     """從攤平後的節點列表中，依關鍵字重疊分數挑出前 `limit` 個候選節點。
 
-    只挑有實質全文內容的節點（避免把純結構性、無內容的節點也送進 prompt）。
+    只挑「有實質全文內容」的節點：
+    - `full_text` 非空且長度 >= `_MIN_SUBSTANTIVE_FULL_TEXT`
+    - `full_text` 不等於節點標題（標題-only 節點對比對無價值）
+
+    這兩個條件擋掉「文件標題節點」這類無效候選（品質抽看 ③ 的成因），
+    避免把純結構性節點送進 prompt 誤導 LLM。
     """
     scored = [
         (_score_candidate(node, name), node)
         for node in all_nodes
         if (node.get("full_text") or "").strip()
+        and len(node["full_text"].strip()) >= _MIN_SUBSTANTIVE_FULL_TEXT
+        and node["full_text"].strip() != (node.get("title") or "").strip()
     ]
     scored.sort(key=lambda pair: pair[0], reverse=True)
     return [node for score, node in scored[:limit] if score > 0]
+
+
+
+
+def _is_low_value_article(location: str | None, full_text: str | None) -> bool:
+    """判斷配對結果是否為「低價值條文」（標題/無實質內容）。
+
+    當 LLM 回報的條文全文只是章節標題本身（例如位置只有一層、全文就是
+    標題），對下游 Phase 5 的「引用原文佐證」沒有價值。此類結果不應寫成
+    正式 docx 匹配，應降級為無匹配（待日後改進語料/候選後重試）。
+
+    Args:
+        location: LLM 回報的條文位置。
+        full_text: LLM 回報的條文摘要/全文。
+
+    Returns:
+        `True` 表示低價值（應降級）。
+    """
+    if not full_text or not full_text.strip():
+        return True
+    text = full_text.strip()
+    if len(text) < _MIN_SUBSTANTIVE_FULL_TEXT:
+        return True
+    # 全文與位置的最後一層標題相同（如 location 只有一層且等於全文）
+    if location:
+        last_title = location.split(" > ")[-1].strip()
+        if text == last_title:
+            return True
+    return False
 
 
 def _parse_llm_response(response_text: str) -> tuple[str | None, str | None]:
@@ -123,17 +163,46 @@ def _parse_llm_response(response_text: str) -> tuple[str | None, str | None]:
     return location, summary
 
 
-def build_rule_mapping(db_path: str, docx_trees_path: str) -> dict:
-    """建置 `rule_mapping` 快取表：CSV 重用快速路徑 + LLM 輔助 docx-tree 比對路徑。
+def build_rule_mapping(
+    db_path: str,
+    docx_trees_path: str,
+    source_version: str | None = None,
+    payment_csv_path: str | None = None,
+    drug_csv_path: str | None = None,
+    incremental: bool = False,
+) -> dict:
+    """建置（或增量更新）`rule_mapping` 快取表：CSV 重用快速路徑 + LLM 輔助 docx-tree 比對路徑。
 
     Args:
         db_path: `rules.sqlite3` 路徑（含 `payment_rules`/`drug_rules`，
             此函式會確保 `rule_mapping` schema 存在）。
         docx_trees_path: Plan 03 產生的 `docx_trees.json` 路徑。
+        source_version: 本次建置的來源語料版本；不提供時由
+            `payment_csv_path`/`drug_csv_path`/`docx_trees_path` 自動推導，
+            兩者皆無則為 `None`（不寫版本）。
+        payment_csv_path: 給付項目 CSV 路徑（用於推導 `source_version`）。
+        drug_csv_path: 藥品項目 CSV 路徑（用於推導 `source_version`）。
+        incremental: 若為 `True`，只處理「mapping 缺列」或「既有
+            `source_version` 與本次版本不符」的碼，其餘沿用快取
+            （來源未換版時 LLM 零呼叫、速度大幅提升）。預設 `False`
+            維持原本的全量重建語意。
 
     Returns:
-        建置結果摘要：`{"csv_reuse_count": int, "llm_matched_count": int, "no_match_count": int}`。
+        建置結果摘要：
+        `{"csv_reuse_count": int, "llm_matched_count": int,
+          "no_match_count": int, "degraded_count": int,
+          "processed_count": int, "skipped_count": int,
+          "source_version": str | None}`。
+
+        降級語意（P1-4）：當 smoke test 失敗或單一碼 LLM 呼叫失敗時，
+        該碼會寫入 `source_version=None`，代表「本次因故障未完成、待重試」
+        —— 避免增量模式把降級結果鎖死成永久 no-match。
     """
+    if source_version is None and payment_csv_path and drug_csv_path:
+        source_version = versions.build_source_version(
+            payment_csv_path, drug_csv_path, docx_trees_path
+        )
+
     conn = db.get_connection(db_path)
     db.init_schema(conn)
 
@@ -157,7 +226,9 @@ def build_rule_mapping(db_path: str, docx_trees_path: str) -> dict:
     csv_reuse_count = 0
     llm_matched_count = 0
     no_match_count = 0
+    degraded_count = 0
     processed_count = 0
+    skipped_count = 0
 
     for table_name in _SOURCE_TABLES:
         cursor = conn.execute(_SELECT_ALL_CODES_QUERIES[table_name])
@@ -165,6 +236,16 @@ def build_rule_mapping(db_path: str, docx_trees_path: str) -> dict:
             code = row["code"]
             name = row["name"]
             payment_text = row["payment_text"]
+
+            if incremental:
+                existing = conn.execute(
+                    "SELECT source_version FROM rule_mapping WHERE code = ?",
+                    (code,),
+                ).fetchone()
+                if existing is not None and existing["source_version"] == source_version:
+                    skipped_count += 1
+                    continue
+
             processed_count += 1
 
             if payment_text and len(payment_text.strip()) > _CSV_SUBSTANTIVE_THRESHOLD:
@@ -174,19 +255,24 @@ def build_rule_mapping(db_path: str, docx_trees_path: str) -> dict:
                     article_location=f"CSV:{table_name}.payment_text",
                     article_full_text=payment_text,
                     article_source="csv",
+                    source_version=source_version,
                 )
                 csv_reuse_count += 1
                 continue
 
             if not llm_available:
+                # 降級：不寫版本（source_version=None），下次增量會重試，
+                # 避免把「server 故障」鎖死成永久 no-match（P1-4）。
                 db.upsert_rule_mapping(
                     conn,
                     code=code,
                     article_location=None,
                     article_full_text=None,
                     article_source=None,
+                    source_version=None,
                 )
                 no_match_count += 1
+                degraded_count += 1
                 continue
 
             candidates = _select_top_candidates(all_nodes, name)
@@ -196,22 +282,29 @@ def build_rule_mapping(db_path: str, docx_trees_path: str) -> dict:
                 category_hint=table_name,
                 candidate_nodes=candidates,
             )
+            llm_failed = False
             try:
                 response_text = llm_client.chat_completion(system_prompt, user_prompt)
             except Exception as exc:  # noqa: BLE001 - LLM 呼叫失敗，優雅降級為單一代碼的 no-match
                 logger.warning("LLM call failed for code %s: %s", code, exc)
                 response_text = ""
+                llm_failed = True
 
             location, summary = _parse_llm_response(response_text)
-            if location is None and summary is None:
+            if location is None and summary is None or _is_low_value_article(location, summary):
+                # 單一碼故障（llm_failed）不寫版本，下次增量重試；
+                # 真正「查無相關條文」或「低價值條文（僅標題）」才寫版本鎖定（P1-4）。
                 db.upsert_rule_mapping(
                     conn,
                     code=code,
                     article_location=None,
                     article_full_text=None,
                     article_source=None,
+                    source_version=None if llm_failed else source_version,
                 )
                 no_match_count += 1
+                if llm_failed:
+                    degraded_count += 1
             else:
                 db.upsert_rule_mapping(
                     conn,
@@ -219,6 +312,7 @@ def build_rule_mapping(db_path: str, docx_trees_path: str) -> dict:
                     article_location=location,
                     article_full_text=summary,
                     article_source="docx",
+                    source_version=source_version,
                 )
                 llm_matched_count += 1
 
@@ -228,11 +322,13 @@ def build_rule_mapping(db_path: str, docx_trees_path: str) -> dict:
             if processed_count % 100 == 0:
                 conn.commit()
                 logger.info(
-                    "progress: processed=%d csv_reuse=%d llm_matched=%d no_match=%d",
+                    "progress: processed=%d csv_reuse=%d llm_matched=%d no_match=%d degraded=%d skipped=%d",
                     processed_count,
                     csv_reuse_count,
                     llm_matched_count,
                     no_match_count,
+                    degraded_count,
+                    skipped_count,
                 )
 
     conn.commit()
@@ -242,12 +338,31 @@ def build_rule_mapping(db_path: str, docx_trees_path: str) -> dict:
         "csv_reuse_count": csv_reuse_count,
         "llm_matched_count": llm_matched_count,
         "no_match_count": no_match_count,
+        "degraded_count": degraded_count,
+        "processed_count": processed_count,
+        "skipped_count": skipped_count,
+        "source_version": source_version,
     }
-
 
 if __name__ == "__main__":
     import sys
 
+    from config.settings import DB_DIR, RULE_SOURCE_DIR
+    from elc_audit_engine.rule_repository.scripts.build_sqlite import (
+        _resolve_drug_csv_path,
+        _resolve_payment_csv_path,
+    )
+
     logging.basicConfig(level=logging.INFO)
-    result = build_rule_mapping("data/db/rules.sqlite3", "data/db/docx_trees.json")
+    db_path = f"{DB_DIR}/rules.sqlite3"
+    docx_trees_path = f"{DB_DIR}/docx_trees.json"
+    payment_csv = _resolve_payment_csv_path()
+    drug_csv = _resolve_drug_csv_path()
+    result = build_rule_mapping(
+        db_path,
+        docx_trees_path,
+        payment_csv_path=payment_csv,
+        drug_csv_path=drug_csv,
+        incremental=True,
+    )
     print(result, file=sys.stderr)

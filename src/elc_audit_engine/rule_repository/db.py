@@ -30,12 +30,16 @@ SCHEMA_DRUG = (
 
 # rule_mapping：D-04/D-05 的一次性 LLM 輔助建置預編譯快取表。
 # 查詢階段（Phase 3-5）只對這張表做查表，絕不在查詢路徑呼叫 LLM。
+# `source_version`：來源語料版本（來源 CSV 檔名 + docx 語料 hash），供
+# 增量建置判斷「規則來源是否更新」——來源換版時該碼的 mapping 必須重算
+# （P1-4）。既有資料庫升版時由 `init_schema` 補欄位（NULL 視為舊版待重建）。
 SCHEMA_RULE_MAPPING = (
     "CREATE TABLE IF NOT EXISTS rule_mapping ("
     "code TEXT PRIMARY KEY, "
     "article_location TEXT, "
     "article_full_text TEXT, "
-    "article_source TEXT"
+    "article_source TEXT, "
+    "source_version TEXT"
     ")"
 )
 
@@ -67,11 +71,24 @@ def get_connection(db_path: str) -> sqlite3.Connection:
 
 
 def init_schema(conn: sqlite3.Connection) -> None:
-    """在給定連線上建立 `payment_rules`/`drug_rules`/`rule_mapping` 三張表（若不存在）。"""
+    """在給定連線上建立 `payment_rules`/`drug_rules`/`rule_mapping` 三張表（若不存在）。
+
+    既有資料庫（schema 建於 P1-4 之前）的 `rule_mapping` 沒有
+    `source_version` 欄位，這裡以 `ALTER TABLE` 補欄位（新列預設 NULL，
+    代表「舊版、待增量重建」），避免升版需要整庫重建。
+    """
     conn.execute(SCHEMA_PAYMENT)
     conn.execute(SCHEMA_DRUG)
     conn.execute(SCHEMA_RULE_MAPPING)
+    _migrate_rule_mapping_source_version(conn)
     conn.commit()
+
+
+def _migrate_rule_mapping_source_version(conn: sqlite3.Connection) -> None:
+    """為舊版 `rule_mapping` 表補上 `source_version` 欄位（若缺）。"""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(rule_mapping)").fetchall()}
+    if "source_version" not in columns:
+        conn.execute("ALTER TABLE rule_mapping ADD COLUMN source_version TEXT")
 
 
 def query_by_code(conn: sqlite3.Connection, table: str, code: str) -> sqlite3.Row | None:
@@ -106,6 +123,7 @@ def upsert_rule_mapping(
     article_location: str | None,
     article_full_text: str | None,
     article_source: str | None,
+    source_version: str | None = None,
 ) -> None:
     """寫入（或覆寫）一筆 `rule_mapping` 快取列。
 
@@ -119,10 +137,13 @@ def upsert_rule_mapping(
         article_full_text: 條文全文（或摘要）。
         article_source: 來源標記，`"csv"` / `"docx"` / `None`（無法比對或
             LLM 未通過 smoke test 而優雅降級時）。
+        source_version: 建置此筆 mapping 時的來源語料版本
+            （`{CSV版本}:{docx語料hash}`）。供增量建置判斷該碼是否
+            需要因來源換版而重算；`None` 表示舊版/無版本（P1-4）。
     """
     conn.execute(
         "INSERT OR REPLACE INTO rule_mapping "
-        "(code, article_location, article_full_text, article_source) "
-        "VALUES (?, ?, ?, ?)",
-        (code, article_location, article_full_text, article_source),
+        "(code, article_location, article_full_text, article_source, source_version) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (code, article_location, article_full_text, article_source, source_version),
     )
