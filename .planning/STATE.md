@@ -28,6 +28,7 @@ ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (origi
 **GSD Phase 4 — 病歷彙整器 (Record Aggregator) — COMPLETE (2026-08-03)** — 04-01 單輪交付：RecordProvider ABC（雲端/本地可互換）＋LocalFileProvider（records.json 契約）＋build_timeline（半年時間窗過濾＋排序＋excluded 統計）；病歷缺席降級（C5）、JSON 損毀拋 RecordProviderError（P0-2 教訓）。14 新測試全綠。
 **GSD Phase 5 — 三方比對器 (Three-way Comparator) — COMPLETE (2026-08-03)** — 05-01 單輪交付：檢核項＝規則全文＋出處；證據組裝 SOAP＋半年病史（含截斷）；LLMJudger（JSON 強制＋重試一次＋失敗降級待人工）；classify_support 三級純函式；LLMNarrativeGenerator（C2：1~3 條附出處、prompt_only 提示型）；RuleRepositoryError 穿透、found=False 標未知醫令；病歷缺席 records_degraded。29 新測試全綠。
 **GSD Phase 6 — 輸出一（病歷補強報告）— COMPLETE (2026-08-03)** — 06-01 單輪交付：render_report（Markdown checkbox 逐條審：標題/警告區/支持度徽章/候選補強/半年病史摘要）＋render_tracking（審核軌跡 JSON：D9 四狀態＋原文＋編輯後文＋時間）＋write_report（.md＋.json 薄包裝）。13 新測試全綠，全套件 152 passed / 5 skipped。
+**GSD Phase 7 — 輸出二（申復理由草稿）— COMPLETE (2026-08-03)** — 07-01 單輪交付：build_appeal_draft（D10 四段組裝：①案情摘要/②醫療必要性/③規則依據/④病歷佐證；每筆核減醫令獨立生成）＋字數控制器（官方問答集 Q15：每欄 1000／合計 2000、裁剪優先 ④→②、①③骨架不動）＋P6 不申覆強制填 0 硬檢查（C3/Q13）＋D-15 核減上界檢查（申復點數≤不予核銷金額）＋adopted_narratives_from_tracking（審核軌跡消費，D-08）＋render_appeal_markdown/render_appeal_json/write_appeal（C7：申復草稿_{流水號}.md＋appeal_{流水號}.json，含 p1-p9 醫令段欄位）。24 新測試全綠，全套件 176 passed / 5 skipped。
 **Next: Phase 7 — 輸出二（申復理由草稿）— 依賴 Phase 5（已完成）。**
 
 **Phase 3 context highlights (see `.planning/phases/03-parsers/03-CONTEXT.md`):** 使用者提供真實申報 XML `TOTFA.xml`（633 案 / 2,624 醫令 / Big5 / 348 位病患，已 gitignore）。實測推翻三項文件假設：(1) C11 欄位表為精選子集，真實檔多出 18 個 dbody 欄位，其中 `d20`-`d26` 為次診斷代碼（Phase 5 判斷醫療必要性的關鍵）；(2) C8 的 p8/p9 字數上限描述有誤，官方問答集 Q15 確認為**每欄 1000 中文字／合計 2000**——影響 Phase 7 字數控制器；(3) **`電子申復格式及填表說明門診.doc` 是申復「輸出」規格，不是核減「輸入」格式**（原 D-14 據此建模輸入檔屬誤判，已由 D-14a 修正）。
@@ -56,12 +57,14 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-08-03（Phase 6 執行完成）
-Stopped at: **Phase 6 COMPLETE** — 06-01-PLAN 產出並執行（病歷補強報告生成器＋13 測試），全套件 152 passed / 5 skipped。Phase 6 的三項成功條件全部達成並自動化驗證（見 ROADMAP.md）。
-Next action: `/gsd-plan-phase 7`（輸出二：申復理由草稿；依賴 Phase 5 已完成）
+Last session: 2026-08-03（Phase 7 執行完成）
+Stopped at: **Phase 7 COMPLETE** — 07-01-PLAN 產出並執行（申復理由草稿組裝器＋24 測試），全套件 176 passed / 5 skipped。Phase 7 的五項成功條件全部達成並自動化驗證（見 ROADMAP.md）。
+Next action: `/gsd-plan-phase 8`（端到端測試：規格造測試資料→待真實樣本進來替換驗證；依賴 Phase 6/7 已完成）
 Resume file: `.planning/phases/06-output-reinforcement-report/06-01-SUMMARY.md`（交付摘要）＋ `.planning/HANDOFF.json`（結構化）
 
 **Carry into planning:**
+- **Phase 7 字數上限已定案**：以官方問答集 Q15 為準（p8/p9 各 1000 中文字、合計放寬至 2000），取代 C8 舊「2000/欄」；A001 虛擬醫令綜整（官方註 5）屬申復 XML 上傳層（Phase 2）選項，Phase 7 未實作。
+- **appeal JSON 為 Phase 2 轉 XML 的契約**：`appeal_{流水號}.json` 含 p1-p9 醫令段欄位（p3 改支序號/p4 成數/p5 數量 目前為 null，待真實改支檔與院所填報）；t38/t39 總計、A001 綜整、XML 序列化 → Phase 2。
 - **核減解析器已納入 Phase 3 範圍**（D-14b-rev）——欄位表見 D-14d。⚠️ **不要**採用已作廢的 D-14／D-14b（保留刪除線供追溯）。
 - **核減欄位只認 D-14d**：`officialdocument/電子申復文件格式/` 底下所有規格書都是申復**輸出**格式（Phase 7），不得用來建模輸入檔。
 - **reader 層須參數化**（分隔符／表頭／編碼），實體檔到手只調參數、不動欄位映射。

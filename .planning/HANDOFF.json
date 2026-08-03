@@ -1,10 +1,10 @@
 {
   "version": "1.0",
-  "timestamp": "2026-08-03T18:10:00.000Z",
-  "phase": "6",
-  "phase_name": "輸出一（病歷補強報告）",
-  "phase_dir": ".planning/phases/06-output-reinforcement-report",
-  "plan": null,
+  "timestamp": "2026-08-03T20:10:00.000Z",
+  "phase": "7",
+  "phase_name": "輸出二（申復理由草稿）",
+  "phase_dir": ".planning/phases/07-output-appeal-draft",
+  "plan": "01",
   "task": null,
   "total_tasks": null,
   "status": "complete",
@@ -12,19 +12,19 @@
   "completed_tasks": [
     {
       "id": 1,
-      "name": "Phase 5（三方比對器）交付＋commit/push",
+      "name": "/gsd-plan-phase 7 — 產出 07-CONTEXT.md＋07-01-PLAN.md",
       "status": "done",
-      "commit": "81e5d8d"
+      "commit": null
     },
     {
       "id": 2,
-      "name": "/gsd-plan-phase 6 — 產出 06-CONTEXT.md＋06-01-PLAN.md",
+      "name": "執行 Phase 7：generators/appeal.py（四段組裝/字數控制器/P6 硬檢查/輸出）＋24 測試",
       "status": "done",
       "commit": null
     },
     {
       "id": 3,
-      "name": "執行 Phase 6：generators（reinforcement_report/tracking）",
+      "name": "文件同步（progress/ROADMAP/STATE/HANDOFF/continue-here/SUMMARY）＋索引重建",
       "status": "done",
       "commit": null
     }
@@ -44,33 +44,30 @@
     },
     {
       "action": "決定是否安裝 ruff",
-      "context": "專案記憶標示 lint=ruff check，但 `uv run ruff check .` 失敗（binary 不存在）。本次 6 個 commit 僅有 pytest 驗證、無 lint 驗證。",
+      "context": "專案記憶標示 lint=ruff check，但 `uv run ruff check .` 失敗（binary 不存在）。本次 commit 僅有 pytest 驗證、無 lint 驗證。",
       "blocking": false
     }
   ],
   "decisions": [
     {
-      "decision": "D-14a：核減『輸入』與申復『輸出』是兩回事；電子申復格式及填表說明門診.doc 屬輸出規格",
-      "rationale": "原 D-14 擬照該規格書建模核減輸入檔，但它定義的是院所上傳的申復 XML。照輸出規格寫輸入解析器會寫死錯誤 schema。",
-      "phase": "3"
+      "decision": "D-10a：申復字數上限以官方問答集 Q15 為準（p8/p9 各 1000 中文字、合計放寬至 2000）",
+      "rationale": "官方問答集 Q15 明示『可以是每醫令或每案，各1000個中文字，總長度已經放寬至2000字』；C8 舊『支援最多2,000個中文字』為欄位長度上限的保守記載，以 Q15 為準（每欄 1000／合計 2000）。",
+      "phase": "7"
     },
     {
-      "decision": "D-14d：登錄申復明細資料檔 18 欄官方欄位表",
-      "rationale": "本專案首次取得核減／申復明細的實際欄位定義。日期為西元非民國；金額有零填補與純數字兩種格式並存；身分證號健保署已遮罩但出生日期未遮罩；第 17 欄為『代碼-說明』複合欄；欄 5/6/10/11 為與申報 XML 的完整 join key。",
-      "phase": "3"
+      "decision": "D-10b：A001 虛擬醫令綜整延後至 Phase 2（申復 XML 上傳層）",
+      "rationale": "官方註 5／Q15-4 允許以虛擬醫令 A001 做整體申復理由綜整陳述，但 Phase 7 依 D10 只做『每筆核減醫令獨立生成』；A001 屬多筆醫令合併的 XML 組裝選項。",
+      "phase": "7"
     },
     {
-      "decision": "D-14b-rev：核減解析器納入 Phase 3 實作範圍（取代 D-14b 的延後決策）",
-      "rationale": "欄位順序確定後『猜欄序』的風險消失，不必再走造假資料 adapter。ROADMAP Phase 3 的 Goal 與三項成功條件因此維持原樣、不需修改。",
-      "phase": "3"
-    },
-    {
-      "decision": "P0-2：get_rule() 基礎設施故障改拋 RuleRepositoryError（breaking change）",
-      "rationale": "原本 DB 故障被降級成 not_found()，Phase 5 會把基礎設施故障誤讀成『此醫令查無規則依據』，等於對醫師謊報臨床結論。",
-      "phase": "2"
+      "decision": "D-10c：P6 硬檢查為 pure function（resolve_p6_points），申覆點數≤核減上界（D-15）驗證進 validation_errors 不靜默修正",
+      "rationale": "C3 要求硬檢查不走 LLM；P6=0 可直接強制，但『申復點數超過核減上界』屬院所訴求事實，自動修正會竄改申復意圖，故記錄錯誤留醫師確認。",
+      "phase": "7"
     }
   ],
-  "uncommitted_files": [],
-  "next_action": "/gsd-plan-phase 7（輸出二：申復理由草稿，依賴 Phase 5 已完成）",
-  "context_notes": "Phase 6（輸出一：病歷補強報告）COMPLETE（2026-08-03）。06-01 單輪交付：(1) render_report(comparison, timeline=None) — Markdown checkbox 逐條審報告：標題/病歷號、警告區（records_degraded⚠本報告未含病史佐證、未知醫令、待人工）、逐醫令支持度徽章（✅充分/⚠️薄弱/❌裸奔/❓查無規則）、判定＋引用原文、候選補強「- [ ] 敘述〔提示型〕（出處）」、半年病史摘要區；(2) render_tracking(comparison, decisions, reviewed_at) — 審核軌跡 JSON：D9 四狀態（採用/編輯後採用/略過/標記不符事實）＋原文＋編輯後文＋時間（ISO UTC 可注入）；(3) write_report 薄包裝寫「病歷補強報告_{病歷號}.md」＋「審核軌跡_{病歷號}.json」。純渲染層無 LLM。真實 TOTFA 首案渲染：11 醫令區塊＋警告區。全套件 152 passed / 5 skipped。未提交：本 session 全部變更（Phase 6 交付＋文件）留待使用者指示 commit。"
+  "next_phase": {
+    "phase": "8",
+    "name": "端到端測試",
+    "note": "五層測試策略全數涵蓋並可執行：單元（已齊）／規則庫驗收（已齊）／LLM 判定金標準 30 組／端到端 3 案例（規格造：充分/薄弱/裸奔各一）／真實樣本回放。appeal 組裝器與補強報告生成器可作為端到端輸出端。"
+  }
 }
