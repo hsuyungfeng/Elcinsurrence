@@ -1,88 +1,41 @@
 {
   "version": "1.0",
-  "timestamp": "2026-08-03T22:15:00.000Z",
-  "phase": "8",
-  "phase_name": "端到端測試",
-  "phase_dir": ".planning/phases/08-e2e-testing",
-  "plan": "01",
+  "timestamp": "2026-08-03T11:24:25.833Z",
+  "phase": "9",
+  "phase_name": "doctor-toolbox-his-integration (placeholder — not started)",
+  "phase_dir": ".planning/phases/09-doctor-toolbox-his-integration",
+  "plan": null,
   "task": null,
   "total_tasks": null,
   "status": "paused",
-  "phase_stage": "complete",
   "completed_tasks": [
-    {
-      "id": 1,
-      "name": "/gsd-plan-phase 8 — 產出 08-CONTEXT.md＋08-01-PLAN.md",
-      "status": "done",
-      "commit": null
-    },
-    {
-      "id": 2,
-      "name": "執行 Phase 8：金標準 30 組＋harness＋回放 CLI＋端到端管線＋3 案例＋E2E-01 修正（21 測試）",
-      "status": "done",
-      "commit": "64a323a"
-    },
-    {
-      "id": 3,
-      "name": "文件同步＋索引重建＋commit/push",
-      "status": "done",
-      "commit": "3969c08"
-    },
-    {
-      "id": 4,
-      "name": "gsd-pause-work：暫停交接（本檔＋.continue-here.md）",
-      "status": "done",
-      "commit": null
-    }
+    {"id": 1, "name": "GSD Phase 1 — 專案骨架", "status": "done", "commit": "see 01-01-SUMMARY.md"},
+    {"id": 2, "name": "GSD Phase 2 — 規則庫建置 (6 plans)", "status": "done", "commit": "see 02-01..02-06-SUMMARY.md"},
+    {"id": 3, "name": "GSD Phase 3 — 解析器", "status": "done", "commit": "see 03-01-SUMMARY.md"},
+    {"id": 4, "name": "GSD Phase 4 — 病歷彙整器", "status": "done", "commit": "see 04-01-SUMMARY.md"},
+    {"id": 5, "name": "GSD Phase 5 — 三方比對器", "status": "done", "commit": "see 05-01-SUMMARY.md"},
+    {"id": 6, "name": "GSD Phase 6 — 病歷補強報告", "status": "done", "commit": "see 06-01-SUMMARY.md"},
+    {"id": 7, "name": "GSD Phase 7 — 申復理由草稿", "status": "done", "commit": "see 07-01-SUMMARY.md"},
+    {"id": 8, "name": "GSD Phase 8 — 端到端測試", "status": "done", "commit": "see 08-01-SUMMARY.md"}
   ],
-  "remaining_tasks": [],
+  "remaining_tasks": [
+    {"id": 9, "name": "GSD Phase 9 — doctor-toolbox HIS 整合佔位", "status": "not_started"},
+    {"id": 10, "name": "本次 session 未定：使用者選擇『修 bug（有具體線索）』，線索尚未提供", "status": "not_started"}
+  ],
   "blockers": [
-    {
-      "description": "Phase 9（HIS 整合）需外部系統：DrtoolboxLocalServer 無 cloud_sync/his_connection 介面、llama.cpp server 未啟動（/health 無回應）、核減明細實體檔/抽樣 CSV 未取得",
-      "type": "external",
-      "workaround": "先做 Phase 9 前置調查（只讀 DrtoolboxLocalServer/src 定義整合點＋09-CONTEXT 規劃），執行待環境就緒"
-    }
+    {"description": "使用者已選『修 bug』但尚未貼上錯誤訊息／重現步驟／模組——無線索無從定位", "type": "human_action", "workaround": "resume 後先向使用者索取 bug 線索，再寫重現測試"}
   ],
   "human_actions_pending": [
-    {
-      "action": "決定是否啟動 llama.cpp server（localhost:8080，Ornith-1.0-9B Q6_K_XL）",
-      "context": "金標準真實回放（scripts/replay_gold_standard.py）與任何 LLM 路徑需要；health check 目前 000",
-      "blocking": false
-    },
-    {
-      "action": "取得申復明細資料檔『實體檔案』＋門診抽樣樣本檔（CSV）",
-      "context": "C6-5 真實樣本回放輸入；18 欄欄位順序已知（D-14d），reader 參數待實體檔鎖定",
-      "blocking": false
-    },
-    {
-      "action": "Phase 9 規劃前決策 HIS 整合範圍（DrtoolboxLocalServer 無 cloud_sync/his_connection 目錄）",
-      "context": "需要使用者提供 HIS 環境方向與憑證/存取方式",
-      "blocking": false
-    },
-    {
-      "action": "決定是否安裝 ruff",
-      "context": "專案記憶標示 lint=ruff check，但 binary 不存在；目前僅 pytest 驗證",
-      "blocking": false
-    }
+    {"action": "貼上 bug 的錯誤訊息／traceback／重現步驟／出問題的模組", "context": "本 session 已確認測試全綠（201 passed, 1 skipped），無現成失敗可循，必須靠使用者線索定位", "blocking": true}
   ],
   "decisions": [
-    {
-      "decision": "暫停點：Phase 8 COMPLETE（核心引擎閉環＋C6 五層測試全數涵蓋），Phase 9 未開始",
-      "rationale": "使用者指示『停在 Phase 8』；外部前提未就緒（HIS 介面/實體檔/llama server），執行 Phase 9 無法驗證。",
-      "phase": "8"
-    },
-    {
-      "decision": "E2E-01：classify_support 任一『部分支持』→ 薄弱",
-      "rationale": "單檢核項流程下『薄弱』原不可達（D7 三級缺一角）；部分支持＝有記載但有缺口。",
-      "phase": "8"
-    },
-    {
-      "decision": "run_case_pipeline 為 Phase 9/真實樣本回放（C6-5）接入點；appeal_{流水號}.json 為轉申復 XML 契約",
-      "rationale": "Phase 8 交付的單一入口與 JSON 契約，Phase 9 直接消費。",
-      "phase": "8"
-    }
+    {"decision": "本 session 未做任何技術決策——僅執行測試套件確認狀態（201 passed, 1 skipped）並詢問任務方向", "rationale": "使用者要求先指定模組或貼錯誤訊息再動手，避免盲改", "phase": "9"}
   ],
-  "uncommitted_files": [],
-  "next_action": "resume：Phase 9 前置調查（讀 DrtoolboxLocalServer/src 找真正整合點）＋09-CONTEXT 規劃；或待核減實體檔/抽樣 CSV 到位後以 run_case_pipeline 跑 C6-5 真實樣本回放；llama server 起來後跑 scripts/replay_gold_standard.py",
-  "context_notes": "使用者在 Phase 8 完成後選擇停在此里程碑。引擎閉環：解析→病歷→規則→比對→補強報告＋申復草稿；197 passed / 5 skipped；HEAD 3969c08 已 push、工作區乾淨。Phase 9 的執行依賴外部決策，規劃可先行。"
+  "uncommitted_files": [
+    ".planning/STATE.md",
+    ".planning/HANDOFF.json",
+    ".planning/.continue-here.md"
+  ],
+  "next_action": "向使用者索取 bug 線索（錯誤訊息／重現步驟／模組）；拿到後先寫能重現的測試再修",
+  "context_notes": "本次 session 是全新工作階段：使用者從選單選了『修 bug / 加功能（指定模組或貼上錯誤訊息）』，接著選『修 bug（我有具體線索）』，但尚未提供線索即暫停。測試套件全綠（201 passed / 1 skipped / 4 warnings，均為預期降級警告），表示 bug 位在測試未覆蓋路徑。專案整體 Phase 1–8 已完成並提交（HEAD 5ef4902），工作區唯一未提交是 .planning 交接檔本身與 reasonix.toml（環境設定，不入庫）。"
 }
