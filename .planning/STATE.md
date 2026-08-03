@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-07-31T09:00:00.000Z"
+last_updated: "2026-08-03T00:00:00.000Z"
 progress:
   total_phases: 9
   completed_phases: 2
@@ -24,7 +24,9 @@ ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (origi
 
 **GSD Phase 1 — 專案骨架 (Project Skeleton) — COMPLETE (2026-07-29)**
 **GSD Phase 2 — 規則庫建置 (Rule Repository) — COMPLETE (2026-07-31)** — all 6 plans done, REQ-rule-repository's 3 acceptance criteria automated-and-passing, 20-code human spot-check confirmed 20/20 correct.
-**Next: Phase 3 — 解析器 (Parsers) — not yet planned. Depends only on Phase 1 (satisfied). Could be planned/executed in any order relative to Phase 4 (also Phase-1-only dependency).**
+**Next: Phase 3 — 解析器 (Parsers) — CONTEXT.md gathered (2026-08-03), ready for planning. Depends only on Phase 1 (satisfied). Could be planned/executed in any order relative to Phase 4 (also Phase-1-only dependency).**
+
+**Phase 3 context highlights (see `.planning/phases/03-parsers/03-CONTEXT.md`):** 使用者提供真實申報 XML `TOTFA.xml`（633 案 / 2,624 醫令 / Big5 / 348 位病患，已 gitignore）。實測推翻兩項文件假設：(1) C11 欄位表為精選子集，真實檔多出 18 個 dbody 欄位，其中 `d20`-`d26` 為次診斷代碼（Phase 5 判斷醫療必要性的關鍵）；(2) C8 的 p8/p9 字數上限描述有誤，官方規格書實為每欄 1000 中文字——影響 Phase 7 字數控制器。另發現 `officialdocument/電子申復文件格式/電子申復格式及填表說明門診.doc` 為官方規格書 104.02.11，是核減清單與申復 XML 的權威定義。真實核減樣本使用者表示將提供但尚未放入專案。
 
 ## Completed Work
 
@@ -48,10 +50,12 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-07-31 (resumed)
-Stopped at: Session resumed from clean pause point (Phase 2 complete, no active work). User elected to gather Phase 3 context before planning.
-Next action: `/gsd-discuss-phase 3` — Phase 3 (解析器 / Parsers) has no CONTEXT.md yet.
-Resume file: `.planning/.continue-here.md` (status: idle — no mid-flight work)
+Last session: 2026-08-03
+Stopped at: Phase 3 context gathered — 4 gray areas discussed, 03-CONTEXT.md + 03-DISCUSSION-LOG.md written and committed (`5e1cd5c`).
+Next action: `/gsd-plan-phase 3`
+Resume file: `.planning/phases/03-parsers/03-CONTEXT.md`
+
+**Carry into planning:** 真實核減樣本尚未放入專案（使用者表示會提供）——規劃時先依官方規格書 104.02.11 建模並造測試資料，介面保留替換空間。fixture 去識別化範圍為使用者知情後的明示決定（**只洗 `d49` 姓名**），下游不得自行擴大。
 
 ## Key References
 
