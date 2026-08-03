@@ -3,7 +3,8 @@
 使用 python-docx 的 `iter_inner_content()` 依文件順序（段落與表格交錯）
 擷取內容區塊，再以 `patterns.detect_heading_depth` 進行階層標記，
 建置出巢狀樹狀結構（node: title, level, path, full_text, children,
-table_refs）。
+table_refs）。表格區塊會被序列化併入所在節點的 `full_text`（P1-3），
+讓表格承載的條文可被關鍵字／向量／LLM 檢索。
 """
 
 import docx
@@ -51,6 +52,23 @@ def _new_node(title: str, level: int, path: str) -> dict:
         "children": [],
         "table_refs": [],
     }
+
+
+def _serialize_table(rows: list[list[str]]) -> str:
+    """將表格區塊序列化為可被全文檢索的文字。
+
+    以 `|` 分隔同列儲存格、換行分隔不同列。表格在審查注意事項中承載
+    大量結構化條文（給付項目、點數、條件對照），若只留在 `table_refs`，
+    會讓關鍵字候選計分、ChromaDB chunk、LLM 候選 prompt 全部看不到
+    表格內容 —— 這是先前「46% 無匹配率／6,582 筆無匹配」的結構性成因
+    之一（P1-3）。序列化後併入節點 `full_text`，`table_refs` 仍保留
+    原始結構供精確處理。
+    """
+    lines = []
+    for row in rows:
+        cells = [(cell or "").replace("\n", " ").strip() for cell in row]
+        lines.append(" | ".join(cells))
+    return "\n".join(lines)
 
 
 def build_tree_for_file(path: str, doc_label: str) -> dict:
@@ -101,5 +119,11 @@ def build_tree_for_file(path: str, doc_label: str) -> dict:
         elif block["type"] == "table":
             current_node, _ = stack[-1]
             current_node["table_refs"].append(block["rows"])
+            serialized = _serialize_table(block["rows"])
+            if serialized.strip():
+                if current_node["full_text"]:
+                    current_node["full_text"] += "\n" + serialized
+                else:
+                    current_node["full_text"] = serialized
 
     return root

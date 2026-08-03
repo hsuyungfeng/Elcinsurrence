@@ -6,33 +6,18 @@ Wave 0 預期紅燈：`docx_tree.tree_builder` 尚未實作（Plan 03 落地）�
 
 import glob
 import os
-import shutil
-import subprocess
-
 import pytest
 
 from config.settings import RULE_SOURCE_DIR
 from elc_audit_engine.rule_repository.docx_tree import tree_builder
+from elc_audit_engine.rule_repository.docx_tree.doc_converter import soffice_is_functional
 
 
-def _soffice_is_functional() -> bool:
-    """實際探測 soffice 是否能執行，不只是檢查 PATH 上有沒有這個檔案。
-
-    某些沙箱/容器環境裡 soffice 存在於 PATH 但因 profile/dconf 權限問題
-    執行時會直接失敗（非 0 結束碼），單用 shutil.which 判斷會誤判環境健康。
-    """
-    if shutil.which("soffice") is None:
-        return False
-    try:
-        result = subprocess.run(["soffice", "--version"], capture_output=True, timeout=15)
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, OSError):
-        return False
 
 
 requires_soffice = pytest.mark.skipif(
-    not _soffice_is_functional(),
-    reason="soffice (LibreOffice) not available/functional — .doc conversion tests need it",
+    not soffice_is_functional(),
+    reason="soffice headless conversion unavailable (real-conversion probe failed) — .doc conversion tests need it",
 )
 
 
@@ -85,3 +70,32 @@ def test_flat_structure_doc_produces_nested_tree(tmp_path):
 
     depth = max_depth(tree)
     assert depth >= 3, f"expected at least 3 depth levels, got {depth}"
+
+
+def test_table_content_merged_into_full_text(tmp_path):
+    """表格內容必須併入節點 full_text（P1-3），讓表格條文可被檢索。
+
+    若表格只在 table_refs、full_text 不含其內容，關鍵字候選／ChromaDB／
+    LLM prompt 都會看不到表格承載的條文 —— 這是 46% 無匹配率的結構性
+    成因。此測試直接以 python-docx 造一個「標題＋表格」文件驗證。
+    """
+    import docx
+
+    docx_path = str(tmp_path / "with_table.docx")
+    document = docx.Document()
+    document.add_heading("第一節 檢驗", level=1)
+    table = document.add_table(rows=2, cols=2)
+    table.cell(0, 0).text = "項目"
+    table.cell(0, 1).text = "規定"
+    table.cell(1, 0).text = "尿一般檢查"
+    table.cell(1, 1).text = "每件給付 100 點"
+    document.save(docx_path)
+
+    from elc_audit_engine.rule_repository.docx_tree.extractor import build_tree_for_file
+    tree = build_tree_for_file(docx_path, "with_table")
+
+    assert tree["table_refs"] == []
+    section = tree["children"][0]
+    assert len(section["table_refs"]) == 1
+    assert "尿一般檢查" in section["full_text"]
+    assert "每件給付 100 點" in section["full_text"]
