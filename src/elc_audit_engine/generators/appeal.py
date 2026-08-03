@@ -207,8 +207,9 @@ def adopted_narratives_from_tracking(tracking) -> tuple[dict, ...]:
         tracking: 審核軌跡 JSON 字串或已解析的 dict（render_tracking 產出）。
 
     Returns:
-        tuple of {text, rule_location}；edited_text 優先、其次 narrative_text。
-        略過／標記不符事實／未審核 的條目一律排除。
+        tuple of {text, rule_location, order_code}；edited_text 優先、其次
+        narrative_text；order_code 供 Phase 7 依醫令過濾證據（08-CONTEXT
+        D-03）。略過／標記不符事實／未審核 的條目一律排除。
 
     Raises:
         ValueError: 傳入字串但無法解析為 JSON。
@@ -225,7 +226,13 @@ def adopted_narratives_from_tracking(tracking) -> tuple[dict, ...]:
         text = entry.get("edited_text") or entry.get("narrative_text") or ""
         if not text.strip():
             continue
-        adopted.append({"text": text, "rule_location": entry.get("rule_location")})
+        adopted.append(
+            {
+                "text": text,
+                "rule_location": entry.get("rule_location"),
+                "order_code": entry.get("order_code"),
+            }
+        )
     return tuple(adopted)
 
 

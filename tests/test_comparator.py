@@ -130,9 +130,10 @@ def test_classify_support_none():
     assert manual is False
 
 
-def test_classify_support_partial_counts_as_support():
+def test_classify_support_partial_is_weak():
+    # Phase 8 E2E-01：部分支持＝有記載但有缺口 → 薄弱（原歸充分使薄弱不可達）
     level, _ = classify_support([Judgment(VERDICT_PARTIAL, "部分")])
-    assert level == SUPPORT_SUFFICIENT
+    assert level == SUPPORT_WEAK
 
 
 def test_classify_support_manual_flags_review():

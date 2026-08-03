@@ -1,0 +1,212 @@
+[
+  {
+    "id": "GS-001",
+    "rule_text": "病歷應記載血糖檢驗結果與檢驗日期。",
+    "evidence": "2026-03-10 HbA1c 7.2%，空腹血糖 126 mg/dL。",
+    "expected_verdict": "支持",
+    "note": "結果與日期皆已記載"
+  },
+  {
+    "id": "GS-002",
+    "rule_text": "影像檢查報告應留存於病歷。",
+    "evidence": "病歷未見任何影像報告留存。",
+    "expected_verdict": "無記載",
+    "note": "完全無影像報告"
+  },
+  {
+    "id": "GS-003",
+    "rule_text": "施行手術處置前應記載適應症。",
+    "evidence": "診斷：腕隧道症候群，進行正中神經解離術。",
+    "expected_verdict": "支持",
+    "note": "診斷即適應症"
+  },
+  {
+    "id": "GS-004",
+    "rule_text": "處方應記載用藥劑量與使用頻率。",
+    "evidence": "Metformin 500mg BID，處方 28 天。",
+    "expected_verdict": "支持",
+    "note": "劑量頻率齊備"
+  },
+  {
+    "id": "GS-005",
+    "rule_text": "追蹤型檢驗應有前後數值比對。",
+    "evidence": "HbA1c 7.2%（三個月前 8.1%）。",
+    "expected_verdict": "支持",
+    "note": "含前值比對"
+  },
+  {
+    "id": "GS-006",
+    "rule_text": "急診觀察應記載生命徵象。",
+    "evidence": "BP 120/80 mmHg，HR 78，RR 18，BT 36.8℃。",
+    "expected_verdict": "支持",
+    "note": "四項生命徵象齊備"
+  },
+  {
+    "id": "GS-007",
+    "rule_text": "轉診病歷應記載轉診理由與轉入科別。",
+    "evidence": "因胸痛轉診心臟內科。",
+    "expected_verdict": "支持",
+    "note": "理由與科別皆明"
+  },
+  {
+    "id": "GS-008",
+    "rule_text": "檢查發現異常應有後續處置記載。",
+    "evidence": "胸部X光顯示肺浸潤，轉胸腔內科追蹤治療。",
+    "expected_verdict": "支持",
+    "note": "異常＋後續處置"
+  },
+  {
+    "id": "GS-009",
+    "rule_text": "疫苗接種紀錄應記載批號與注射部位。",
+    "evidence": "流感疫苗 0.5ml 左臂三角肌注射，批號 FL2026-071。",
+    "expected_verdict": "支持",
+    "note": "批號部位齊備"
+  },
+  {
+    "id": "GS-010",
+    "rule_text": "手術麻醉前應有麻醉評估紀錄。",
+    "evidence": "麻醉評估：ASA II，無藥物過敏史，預估麻醉風險低。",
+    "expected_verdict": "支持",
+    "note": "麻醉評估完整"
+  },
+  {
+    "id": "GS-011",
+    "rule_text": "慢性病連續處方箋應記載下次回診日期。",
+    "evidence": "處方 90 天，囑三個月後回診追蹤。",
+    "expected_verdict": "支持",
+    "note": "回診日期明確"
+  },
+  {
+    "id": "GS-012",
+    "rule_text": "檢驗紀錄應記載檢體採集時間。",
+    "evidence": "檢體採集 08:20，實驗室收件 09:05。",
+    "expected_verdict": "支持",
+    "note": "採集時間已載"
+  },
+  {
+    "id": "GS-013",
+    "rule_text": "病歷應記載主訴、現病史與過去病史。",
+    "evidence": "主訴：咳嗽三天；過去病史未記載。",
+    "expected_verdict": "部分支持",
+    "note": "缺過去病史"
+  },
+  {
+    "id": "GS-014",
+    "rule_text": "處方紀錄應記載用藥與藥物過敏史。",
+    "evidence": "處方 amoxicillin 500mg TID；過敏史欄位空白。",
+    "expected_verdict": "部分支持",
+    "note": "缺過敏史"
+  },
+  {
+    "id": "GS-015",
+    "rule_text": "病歷應記載檢驗結果與對應臨床處置。",
+    "evidence": "HbA1c 7.2%（僅檢驗結果，無處置記載）。",
+    "expected_verdict": "部分支持",
+    "note": "缺處置"
+  },
+  {
+    "id": "GS-016",
+    "rule_text": "影像報告應記載檢查所見與診斷。",
+    "evidence": "胸部X光：兩側肺野清晰（僅所見，未下診斷）。",
+    "expected_verdict": "部分支持",
+    "note": "缺診斷"
+  },
+  {
+    "id": "GS-017",
+    "rule_text": "出院病摘應含入院診斷、出院診斷與衛教。",
+    "evidence": "入院診斷：社區型肺炎；出院診斷未記載。",
+    "expected_verdict": "部分支持",
+    "note": "缺出院診斷與衛教"
+  },
+  {
+    "id": "GS-018",
+    "rule_text": "就診紀錄應記載血壓與脈搏。",
+    "evidence": "BP 130/85 mmHg（脈搏未記載）。",
+    "expected_verdict": "部分支持",
+    "note": "缺脈搏"
+  },
+  {
+    "id": "GS-019",
+    "rule_text": "檢查紀錄應記載檢查日期與報告內容。",
+    "evidence": "胸部X光報告：無異常（未記載檢查日期）。",
+    "expected_verdict": "部分支持",
+    "note": "缺日期"
+  },
+  {
+    "id": "GS-020",
+    "rule_text": "病歷應記載藥物過敏史與目前用藥清單。",
+    "evidence": "過敏史：penicillin 過敏；目前用藥未記載。",
+    "expected_verdict": "部分支持",
+    "note": "缺目前用藥"
+  },
+  {
+    "id": "GS-021",
+    "rule_text": "生命徵象紀錄應包含體溫與呼吸次數。",
+    "evidence": "BT 36.7℃（呼吸次數未記載）。",
+    "expected_verdict": "部分支持",
+    "note": "缺呼吸次數"
+  },
+  {
+    "id": "GS-022",
+    "rule_text": "病歷應記載血糖檢驗結果。",
+    "evidence": "主訴頭暈，當次無任何檢驗紀錄。",
+    "expected_verdict": "無記載",
+    "note": "完全無檢驗"
+  },
+  {
+    "id": "GS-023",
+    "rule_text": "心電圖檢查報告應留存於病歷。",
+    "evidence": "病歷無心電圖相關記載。",
+    "expected_verdict": "無記載",
+    "note": "完全無心電圖"
+  },
+  {
+    "id": "GS-024",
+    "rule_text": "病歷應記載藥物過敏史。",
+    "evidence": "病歷過敏史欄位空白，未見任何記載。",
+    "expected_verdict": "無記載",
+    "note": "過敏史空白"
+  },
+  {
+    "id": "GS-025",
+    "rule_text": "手術病歷應記載手術同意書簽署。",
+    "evidence": "手術紀錄未附同意書簽署日期與簽名。",
+    "expected_verdict": "無記載",
+    "note": "同意書未記載"
+  },
+  {
+    "id": "GS-026",
+    "rule_text": "檢驗異常值應有複檢結果記載。",
+    "evidence": "病歷僅記載異常值，無任何複檢紀錄。",
+    "expected_verdict": "無記載",
+    "note": "無複檢"
+  },
+  {
+    "id": "GS-027",
+    "rule_text": "病歷應記載轉院聯絡紀錄。",
+    "evidence": "病歷未見轉院聯絡相關紀錄。",
+    "expected_verdict": "無記載",
+    "note": "完全無轉院紀錄"
+  },
+  {
+    "id": "GS-028",
+    "rule_text": "病歷應記載會診意見。",
+    "evidence": "病歷未見任何會診紀錄。",
+    "expected_verdict": "無記載",
+    "note": "無會診"
+  },
+  {
+    "id": "GS-029",
+    "rule_text": "復健病歷應記載療程進度。",
+    "evidence": "病歷僅記載開立復健處方，無進度紀錄。",
+    "expected_verdict": "無記載",
+    "note": "處方≠進度"
+  },
+  {
+    "id": "GS-030",
+    "rule_text": "病歷應記載體重與身高（BMI 評估基礎）。",
+    "evidence": "身高 165cm，體重 70kg，BMI 25.7。",
+    "expected_verdict": "支持",
+    "note": "身高體重齊備，可算 BMI"
+  }
+]
