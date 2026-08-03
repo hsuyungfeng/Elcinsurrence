@@ -1,0 +1,57 @@
+{
+  "visits": [
+    {
+      "date": "2026-07-20",
+      "clinic": "骨科",
+      "soap_text": "主訴：右手腕扭傷後疼痛三天\n客觀：局部腫脹、壓痛\n評估：手腕扭傷\n計劃：衛教休息",
+      "diagnoses": ["S6300XA"]
+    },
+    {
+      "date": "2025-05-01",
+      "clinic": "內科",
+      "soap_text": "主訴：頭痛\n客觀：血壓正常\n評估：偏頭痛\n計劃：追蹤",
+      "diagnoses": ["G43009"]
+    }
+  ],
+  "labs": [
+    {
+      "date": "2026-02-15",
+      "test_name": "HbA1c",
+      "result": "7.2",
+      "unit": "%",
+      "reference_range": "4.0-5.6",
+      "abnormal": true
+    },
+    {
+      "date": "20241201",
+      "test_name": "白血球",
+      "result": "12000",
+      "unit": "/uL",
+      "reference_range": "4000-11000",
+      "abnormal": true
+    }
+  ],
+  "exams": [
+    {
+      "date": "2026-03-10",
+      "exam_name": "心電圖",
+      "finding": "竇性心律，無異常"
+    }
+  ],
+  "imaging": [
+    {
+      "date": "2026-06-01",
+      "modality": "CT",
+      "body_part": "胸部",
+      "impression": "無明顯異常",
+      "image_refs": ["ct_chest_001.dcm", "ct_chest_002.dcm"]
+    },
+    {
+      "date": "2025-11-01",
+      "modality": "X-ray",
+      "body_part": "右手腕",
+      "impression": "未見骨折",
+      "image_refs": ["xr_wrist_001.dcm"]
+    }
+  ]
+}
