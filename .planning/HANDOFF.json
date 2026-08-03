@@ -1,9 +1,9 @@
 {
   "version": "1.0",
-  "timestamp": "2026-08-03T16:20:00.000Z",
-  "phase": "3",
-  "phase_name": "解析器",
-  "phase_dir": ".planning/phases/03-parsers",
+  "timestamp": "2026-08-03T16:55:00.000Z",
+  "phase": "4",
+  "phase_name": "病歷彙整器",
+  "phase_dir": ".planning/phases/04-record-aggregator",
   "plan": null,
   "task": null,
   "total_tasks": null,
@@ -12,49 +12,19 @@
   "completed_tasks": [
     {
       "id": 1,
-      "name": "/gsd-discuss-phase 3 — 4 個灰色地帶討論完成",
+      "name": "Phase 3（解析器）三個解析器交付＋commit/push",
       "status": "done",
-      "commit": "5e1cd5c"
+      "commit": "1c94b51"
     },
     {
       "id": 2,
-      "name": "核減輸入 vs 申復輸出釐清（推翻 D-14）",
-      "status": "done",
-      "commit": "0f1df83"
-    },
-    {
-      "id": 3,
-      "name": "抽樣樣本檔為 CSV，升為主要目標格式（D-14c）",
-      "status": "done",
-      "commit": "e605d26"
-    },
-    {
-      "id": 4,
-      "name": "申復明細資料檔 18 欄欄位表登錄（D-14d）",
-      "status": "done",
-      "commit": "73f71d4"
-    },
-    {
-      "id": 5,
-      "name": "核減解析器納入 Phase 3 範圍（D-14b-rev）+ progress.md 同步",
-      "status": "done",
-      "commit": "269adcc"
-    },
-    {
-      "id": 6,
-      "name": "提交積壓的 P0/P1 修正（6 個原子 commit）",
-      "status": "done",
-      "commit": "d5f8ea4"
-    },
-    {
-      "id": 7,
-      "name": "/gsd-plan-phase 3 — 產出 03-01-PLAN.md",
+      "name": "/gsd-plan-phase 4 — 產出 04-CONTEXT.md＋04-01-PLAN.md",
       "status": "done",
       "commit": null
     },
     {
-      "id": 8,
-      "name": "執行 Phase 3：三個解析器（申報 XML / 核減申復明細 / SOAP）",
+      "id": 3,
+      "name": "執行 Phase 4：RecordProvider ABC＋LocalFileProvider＋build_timeline 半年時間軸",
       "status": "done",
       "commit": null
     }
@@ -101,6 +71,6 @@
     }
   ],
   "uncommitted_files": [],
-  "next_action": "/gsd-plan-phase 4（病歷彙整器，僅依賴 Phase 1）— Phase 3 已完成，三個解析器交付：submission_xml.py / deduction.py / soap.py，全套件 95 passed / 5 skipped。",
-  "context_notes": "Phase 3（解析器）COMPLETE（2026-08-03）。03-01-PLAN 單輪交付三個解析器：(1) 申報 XML — Big5 宣告偵測＋big5→cp950→big5hkscs→utf-8 回退、CRLF 相容、三種致命缺漏分級（缺 d1/d2、缺 d3、無 pdata）、d19 只警告、raw 全保留、d20-d26 次診斷清單；真實檔回放 633 案／2,624 醫令／0 拒收。(2) 核減明細 — D-14d 18 欄、欄 17 代碼-說明拆分、欄 1 零填補/欄 14 純數字雙格式 int() 正規化、8 碼西元日期、欄 16 原樣保留、reader 層（encoding/delimiter/has_header）參數化待實體檔。(3) SOAP — marker（high）/keyword（low）兩層、317 關鍵詞程式化移植自 soap-classifier.js、無命中歸 UNKNOWN（修正原 JS 預設 subjective）。差異記錄：D-16 稱 d3=樣本註記與真實檔（病歷號）衝突，以真實檔為準；D-14d 欄 10 對應申報 XML p13（非 p1）。未提交：本 session 全部變更（含前次 藥品碼不送 LLM 的 3 檔）留待使用者指示 commit。"
+  "next_action": "/gsd-plan-phase 5（三方比對器，依賴 Phase 2/3/4 皆已完成）",
+  "context_notes": "Phase 4（病歷彙整器）COMPLETE（2026-08-03）。04-01 單輪交付：(1) RecordProvider ABC（fetch_records＋name，雲端/本地可互換，窗邏輯集中 aggregator）；(2) LocalFileProvider 讀 `<root>/<patient_id>/records.json` 契約（四類：visits/labs/exams/imaging，ISO/8 碼日期相容）；(3) build_timeline(provider, patient_id, months=6, end_date=None) — 時間窗過濾＋排序＋excluded_counts，病歷缺席（PatientRecordsNotFound）→ degraded=True（C5），JSON 損毀 → RecordProviderError 向外拋（P0-2 教訓）。對接：patient_id=Phase 3 d3 病歷號；VisitRecord.soap_text 存原文，Phase 5 呼叫 parse_soap_text。全套件 110 passed / 5 skipped。未提交：本 session 全部變更（含 Phase 4 交付＋文件）留待使用者指示 commit。"
 }

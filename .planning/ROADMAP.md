@@ -15,7 +15,7 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 - [x] **Phase 1: 專案骨架** - uv 專案初始化、config、目錄結構
 - [x] **Phase 2: 規則庫建置** - CSV→SQLite、審查注意事項→PageIndex、rule_mapping 預編譯
 - [x] **Phase 3: 解析器** - 申報XML（tdata/ddata/pdata）、核減清單、SOAP文字
-- [ ] **Phase 4: 病歷彙整器** - Provider介面＋本地檔案Provider、半年病史時間軸
+- [x] **Phase 4: 病歷彙整器** - Provider介面＋本地檔案Provider、半年病史時間軸
 - [ ] **Phase 5: 三方比對器** - 醫令↔規則↔病歷 支持度判定＋候選補強生成
 - [ ] **Phase 6: 輸出一（病歷補強報告）** - 病歷補強報告.md 生成
 - [ ] **Phase 7: 輸出二（申復理由草稿）** - 申復理由草稿（p8/p9 ≤2000字）＋申復XML欄位
@@ -73,13 +73,13 @@ Plans:
 **Depends on**: Phase 1
 **Requirements**: REQ-record-aggregator
 **Success Criteria** (what must be TRUE):
-  1. Provider 介面定義完成，支援雲端與本地兩種實作切換
-  2. 本地檔案 Provider 可運作（Phase 1 頂替雲端病歷）
-  3. 可產出近半年病史時間軸（就診紀錄/檢驗/檢查/影像清單）
+  1. [x] Provider 介面定義完成，支援雲端與本地兩種實作切換 — 04-01 完成：RecordProvider ABC＋LocalFileProvider＋FakeCloudProvider 切換測試
+  2. [x] 本地檔案 Provider 可運作（Phase 1 頂替雲端病歷） — 04-01 完成：讀 records.json 契約（ISO/8 碼日期），fixture 四類紀錄
+  3. [x] 可產出近半年病史時間軸（就診紀錄/檢驗/檢查/影像清單） — 04-01 完成：build_timeline 時間窗過濾＋排序＋excluded 統計；病歷缺席降級（C5）
 **Plans**: TBD
 
 Plans:
-- [ ] 04-01: TBD
+- [x] 04-01-PLAN.md — Wave 1：RecordProvider ABC＋LocalFileProvider（records.json）＋build_timeline 半年時間軸＋降級語意（P0-2）＋14 測試；全套件 110 passed / 5 skipped
 
 ### Phase 5: 三方比對器
 **Goal**: 醫令↔規則↔病歷三方比對，逐檢核項判定支持度並生成候選補強敘述
@@ -159,7 +159,7 @@ Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 
 | 1. 專案骨架 | 1/1 | Complete | 2026-07-29 |
 | 2. 規則庫建置 | 6/6 | Complete | 2026-07-31 |
 | 3. 解析器 | 1/1 | Complete | 2026-08-03 |
-| 4. 病歷彙整器 | 0/TBD | Not started | - |
+| 4. 病歷彙整器 | 1/1 | Complete | 2026-08-03 |
 | 5. 三方比對器 | 0/TBD | Not started | - |
 | 6. 輸出一（病歷補強報告） | 0/TBD | Not started | - |
 | 7. 輸出二（申復理由草稿） | 0/TBD | Not started | - |
