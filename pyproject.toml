@@ -3,12 +3,12 @@ name = "elc-audit-engine"
 version = "0.1.0"
 description = "電子抽審自動化病歷補強與申復生成引擎"
 requires-python = ">=3.12"
+# 依實際 import 收斂（P1-6）：flask/pandas/pageindex 未在任何程式碼使用
+# （pageindex 為雲端 SaaS，違反 D2 離線/不出本機，Phase 2 已改用自建
+# docx 樹狀索引）；python-dotenv/python-docx/chromadb/requests 為實際依賴。
 dependencies = [
-    "flask>=2.0",
     "python-dotenv>=0.19",
-    "pandas>=2.0",
     "python-docx>=1.1.0",
-    "pageindex>=0.1.0",
     "chromadb>=0.4.0",
     "requests>=2.28",
 ]
