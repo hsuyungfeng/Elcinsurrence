@@ -13,6 +13,7 @@ import sqlite3
 import warnings
 
 from elc_audit_engine.rule_repository import db, models
+from elc_audit_engine.rule_repository.errors import RuleRepositoryError
 
 _DEFAULT_DB_PATH = None
 
@@ -44,6 +45,12 @@ def get_rule(code: str, db_path: str | None = None) -> models.RuleResult:
         `found=False`；代碼存在但尚無 rule_mapping 快取項目時，
         `article_location`/`article_full_text`/`article_source`
         皆為 `None`，但 `found` 仍為 `True`。
+
+    Raises:
+        RuleRepositoryError: 資料庫層級故障（連線失敗、檔案/表不存在、
+            損毀等 `sqlite3.Error`）。這與「查無此醫令」不同 —— 前者是
+            系統性異常，後者是正常結果；呼叫端必須能區分兩者，避免把
+            infra 故障誤判為「該醫令無規則」（P0-2）。
     """
     resolved_path = _resolve_db_path(db_path)
 
@@ -78,5 +85,7 @@ def get_rule(code: str, db_path: str | None = None) -> models.RuleResult:
         finally:
             conn.close()
     except sqlite3.Error as exc:
-        warnings.warn(f"get_rule({code!r}) SQLite error, degrading to not_found: {exc}")
-        return models.not_found(code)
+        # 系統性故障：不降級為「查無」，改拋 RuleRepositoryError，讓呼叫端
+        # 區分「DB 壞掉」與「此醫令真的沒有規則」（P0-2）。
+        warnings.warn(f"get_rule({code!r}) SQLite error: {exc}")
+        raise RuleRepositoryError(f"rule repository query failed for code {code!r}: {exc}") from exc
