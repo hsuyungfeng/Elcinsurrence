@@ -17,7 +17,7 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 - [x] **Phase 3: 解析器** - 申報XML（tdata/ddata/pdata）、核減清單、SOAP文字
 - [x] **Phase 4: 病歷彙整器** - Provider介面＋本地檔案Provider、半年病史時間軸
 - [x] **Phase 5: 三方比對器** - 醫令↔規則↔病歷 支持度判定＋候選補強生成
-- [ ] **Phase 6: 輸出一（病歷補強報告）** - 病歷補強報告.md 生成
+- [x] **Phase 6: 輸出一（病歷補強報告）** - 病歷補強報告.md 生成
 - [ ] **Phase 7: 輸出二（申復理由草稿）** - 申復理由草稿（p8/p9 ≤2000字）＋申復XML欄位
 - [ ] **Phase 8: 端到端測試** - 規格造測試資料→待真實樣本進來替換驗證
 - [ ] **Phase 9: doctor-toolbox HIS 整合（佔位）** - Phase 2（原設計文件命名）：雲端病歷 Provider、Flask API化、NHI_EIIAPI 銜接
@@ -99,13 +99,13 @@ Plans:
 **Depends on**: Phase 5
 **Requirements**: REQ-output-reinforcement-report
 **Success Criteria** (what must be TRUE):
-  1. 輸出 Markdown checkbox 逐條審格式
-  2. 內容含醫令支持度缺口、半年病史摘要、候選補強敘述（逐條點選）
-  3. 醫師可勾選/編輯後存檔，並留下審核軌跡
+  1. [x] 輸出 Markdown checkbox 逐條審格式 — 06-01 完成：render_report 產出「- [ ] 敘述〔提示型〕（出處）」逐條 checkbox
+  2. [x] 內容含醫令支持度缺口、半年病史摘要、候選補強敘述（逐條點選） — 06-01 完成：✅充分/⚠️薄弱/❌裸奔/❓查無規則徽章＋半年病史摘要區＋候選補強逐條
+  3. [x] 醫師可勾選/編輯後存檔，並留下審核軌跡 — 06-01 完成：render_tracking 審核軌跡 JSON（四狀態＋原文＋編輯後文＋時間）；write_report 寫 .md＋.json
 **Plans**: TBD
 
 Plans:
-- [ ] 06-01: TBD
+- [x] 06-01-PLAN.md — Wave 1：generators（reinforcement_report/tracking）＋13 測試；真實 TOTFA 首案報告渲染（11 醫令區塊＋警告區）；全套件 152 passed / 5 skipped
 
 ### Phase 7: 輸出二（申復理由草稿）
 **Goal**: 生成申復理由草稿（p8/p9 ≤2000字）與申復XML欄位
@@ -161,7 +161,7 @@ Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 
 | 3. 解析器 | 1/1 | Complete | 2026-08-03 |
 | 4. 病歷彙整器 | 1/1 | Complete | 2026-08-03 |
 | 5. 三方比對器 | 1/1 | Complete | 2026-08-03 |
-| 6. 輸出一（病歷補強報告） | 0/TBD | Not started | - |
+| 6. 輸出一（病歷補強報告） | 1/1 | Complete | 2026-08-03 |
 | 7. 輸出二（申復理由草稿） | 0/TBD | Not started | - |
 | 8. 端到端測試 | 0/TBD | Not started | - |
 | 9. doctor-toolbox HIS 整合（佔位） | 0/TBD | Not started | - |

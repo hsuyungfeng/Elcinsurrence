@@ -1,9 +1,9 @@
 {
   "version": "1.0",
-  "timestamp": "2026-08-03T17:35:00.000Z",
-  "phase": "5",
-  "phase_name": "三方比對器",
-  "phase_dir": ".planning/phases/05-three-way-comparator",
+  "timestamp": "2026-08-03T18:10:00.000Z",
+  "phase": "6",
+  "phase_name": "輸出一（病歷補強報告）",
+  "phase_dir": ".planning/phases/06-output-reinforcement-report",
   "plan": null,
   "task": null,
   "total_tasks": null,
@@ -12,19 +12,19 @@
   "completed_tasks": [
     {
       "id": 1,
-      "name": "Phase 4（病歷彙整器）交付＋commit/push",
+      "name": "Phase 5（三方比對器）交付＋commit/push",
       "status": "done",
-      "commit": "a1bedd1"
+      "commit": "81e5d8d"
     },
     {
       "id": 2,
-      "name": "/gsd-plan-phase 5 — 產出 05-CONTEXT.md＋05-01-PLAN.md",
+      "name": "/gsd-plan-phase 6 — 產出 06-CONTEXT.md＋06-01-PLAN.md",
       "status": "done",
       "commit": null
     },
     {
       "id": 3,
-      "name": "執行 Phase 5：comparator 套件（models/evidence/support/judger/narratives/comparator）",
+      "name": "執行 Phase 6：generators（reinforcement_report/tracking）",
       "status": "done",
       "commit": null
     }
@@ -71,6 +71,6 @@
     }
   ],
   "uncommitted_files": [],
-  "next_action": "/gsd-plan-phase 6（輸出一：病歷補強報告，依賴 Phase 5 已完成）",
-  "context_notes": "Phase 5（三方比對器）COMPLETE（2026-08-03）。05-01 單輪交付：(1) 檢核項＝規則全文＋出處（D-01，結構化檢核項語料不存在）；(2) build_evidence_blocks 組裝當次 SOAP＋半年病史（每類至多 3 筆、每筆 500 字截斷）；(3) LLMJudger 強制 JSON＋```json 容忍＋換措辭重試一次＋失敗降級待人工（C1/C5，不阻斷）；(4) classify_support 三級純函式（充分/薄弱/裸奔）＋manual_review 旗標；(5) LLMNarrativeGenerator 缺口 1~3 條候選補強，每條附 article_location、prompt_only 提示型（C2）；(6) compare_case 主流程：RuleRepositoryError 穿透（P0-2）、found=False 標未知醫令、timeline=None → records_degraded=True（C5）。judge_fn/narrative_fn/rule_lookup 全可注入，測試零真實 LLM 依賴（mock 驗證解析/重試）。真實 TOTFA 首案煙霧測試：11 醫令 4 有規則、7 未知醫令誠實標記。全套件 139 passed / 5 skipped。未提交：本 session 全部變更（Phase 5 交付＋文件）留待使用者指示 commit。"
+  "next_action": "/gsd-plan-phase 7（輸出二：申復理由草稿，依賴 Phase 5 已完成）",
+  "context_notes": "Phase 6（輸出一：病歷補強報告）COMPLETE（2026-08-03）。06-01 單輪交付：(1) render_report(comparison, timeline=None) — Markdown checkbox 逐條審報告：標題/病歷號、警告區（records_degraded⚠本報告未含病史佐證、未知醫令、待人工）、逐醫令支持度徽章（✅充分/⚠️薄弱/❌裸奔/❓查無規則）、判定＋引用原文、候選補強「- [ ] 敘述〔提示型〕（出處）」、半年病史摘要區；(2) render_tracking(comparison, decisions, reviewed_at) — 審核軌跡 JSON：D9 四狀態（採用/編輯後採用/略過/標記不符事實）＋原文＋編輯後文＋時間（ISO UTC 可注入）；(3) write_report 薄包裝寫「病歷補強報告_{病歷號}.md」＋「審核軌跡_{病歷號}.json」。純渲染層無 LLM。真實 TOTFA 首案渲染：11 醫令區塊＋警告區。全套件 152 passed / 5 skipped。未提交：本 session 全部變更（Phase 6 交付＋文件）留待使用者指示 commit。"
 }
