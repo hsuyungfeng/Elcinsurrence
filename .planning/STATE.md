@@ -6,10 +6,10 @@ status: unknown
 last_updated: "2026-08-03T00:00:00.000Z"
 progress:
   total_phases: 9
-  completed_phases: 4
-  total_plans: 9
-  completed_plans: 8
-  percent: 89
+  completed_phases: 5
+  total_plans: 10
+  completed_plans: 9
+  percent: 90
 ---
 
 # STATE.md — elc-audit-engine
@@ -25,8 +25,9 @@ ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (origi
 **GSD Phase 1 — 專案骨架 (Project Skeleton) — COMPLETE (2026-07-29)**
 **GSD Phase 2 — 規則庫建置 (Rule Repository) — COMPLETE (2026-07-31)** — all 6 plans done, REQ-rule-repository's 3 acceptance criteria automated-and-passing, 20-code human spot-check confirmed 20/20 correct.
 **GSD Phase 3 — 解析器 (Parsers) — COMPLETE (2026-08-03)** — 03-01 單輪交付三個解析器：申報 XML（Big5 編碼偵測＋三種致命缺漏分級＋raw 全保留＋次診斷清單，真實檔回放 633 案／2,624 醫令／0 拒收）、核減明細（D-14d 18 欄、欄 17 代碼拆分、reader 參數化）、SOAP（marker/keyword 兩層＋信度、317 關鍵詞移植、無命中歸 UNKNOWN）。46 新測試全綠。
-**GSD Phase 4 — 病歷彙整器 (Record Aggregator) — COMPLETE (2026-08-03)** — 04-01 單輪交付：RecordProvider ABC（雲端/本地可互換）＋LocalFileProvider（records.json 契約）＋build_timeline（半年時間窗過濾＋排序＋excluded 統計）；病歷缺席降級（C5）、JSON 損毀拋 RecordProviderError（P0-2 教訓）。14 新測試全綠，全套件 110 passed / 5 skipped。
-**Next: Phase 5 — 三方比對器 (Three-way Comparator) — 依賴 Phase 2/3/4（2、3、4 皆已完成）。**
+**GSD Phase 4 — 病歷彙整器 (Record Aggregator) — COMPLETE (2026-08-03)** — 04-01 單輪交付：RecordProvider ABC（雲端/本地可互換）＋LocalFileProvider（records.json 契約）＋build_timeline（半年時間窗過濾＋排序＋excluded 統計）；病歷缺席降級（C5）、JSON 損毀拋 RecordProviderError（P0-2 教訓）。14 新測試全綠。
+**GSD Phase 5 — 三方比對器 (Three-way Comparator) — COMPLETE (2026-08-03)** — 05-01 單輪交付：檢核項＝規則全文＋出處；證據組裝 SOAP＋半年病史（含截斷）；LLMJudger（JSON 強制＋重試一次＋失敗降級待人工）；classify_support 三級純函式；LLMNarrativeGenerator（C2：1~3 條附出處、prompt_only 提示型）；RuleRepositoryError 穿透、found=False 標未知醫令；病歷缺席 records_degraded。29 新測試全綠，全套件 139 passed / 5 skipped。
+**Next: Phase 6 — 輸出一（病歷補強報告）— 依賴 Phase 5（已完成）。**
 
 **Phase 3 context highlights (see `.planning/phases/03-parsers/03-CONTEXT.md`):** 使用者提供真實申報 XML `TOTFA.xml`（633 案 / 2,624 醫令 / Big5 / 348 位病患，已 gitignore）。實測推翻三項文件假設：(1) C11 欄位表為精選子集，真實檔多出 18 個 dbody 欄位，其中 `d20`-`d26` 為次診斷代碼（Phase 5 判斷醫療必要性的關鍵）；(2) C8 的 p8/p9 字數上限描述有誤，官方問答集 Q15 確認為**每欄 1000 中文字／合計 2000**——影響 Phase 7 字數控制器；(3) **`電子申復格式及填表說明門診.doc` 是申復「輸出」規格，不是核減「輸入」格式**（原 D-14 據此建模輸入檔屬誤判，已由 D-14a 修正）。
 
@@ -54,10 +55,10 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-08-03（Phase 4 執行完成）
-Stopped at: **Phase 4 COMPLETE** — 04-01-PLAN 產出並執行（Provider 介面＋本地 Provider＋半年時間軸＋14 測試），全套件 110 passed / 5 skipped。Phase 4 的三項成功條件全部達成並自動化驗證（見 ROADMAP.md）。
-Next action: `/gsd-plan-phase 5`（三方比對器；依賴 Phase 2/3/4 皆已完成）
-Resume file: `.planning/phases/04-record-aggregator/04-01-SUMMARY.md`（交付摘要）＋ `.planning/HANDOFF.json`（結構化）
+Last session: 2026-08-03（Phase 5 執行完成）
+Stopped at: **Phase 5 COMPLETE** — 05-01-PLAN 產出並執行（三方比對器＋29 測試），全套件 139 passed / 5 skipped。Phase 5 的三項成功條件全部達成並自動化驗證（見 ROADMAP.md）。
+Next action: `/gsd-plan-phase 6`（輸出一：病歷補強報告；依賴 Phase 5 已完成）
+Resume file: `.planning/phases/05-three-way-comparator/05-01-SUMMARY.md`（交付摘要）＋ `.planning/HANDOFF.json`（結構化）
 
 **Carry into planning:**
 - **核減解析器已納入 Phase 3 範圍**（D-14b-rev）——欄位表見 D-14d。⚠️ **不要**採用已作廢的 D-14／D-14b（保留刪除線供追溯）。

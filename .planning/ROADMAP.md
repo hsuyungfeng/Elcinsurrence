@@ -16,7 +16,7 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 - [x] **Phase 2: 規則庫建置** - CSV→SQLite、審查注意事項→PageIndex、rule_mapping 預編譯
 - [x] **Phase 3: 解析器** - 申報XML（tdata/ddata/pdata）、核減清單、SOAP文字
 - [x] **Phase 4: 病歷彙整器** - Provider介面＋本地檔案Provider、半年病史時間軸
-- [ ] **Phase 5: 三方比對器** - 醫令↔規則↔病歷 支持度判定＋候選補強生成
+- [x] **Phase 5: 三方比對器** - 醫令↔規則↔病歷 支持度判定＋候選補強生成
 - [ ] **Phase 6: 輸出一（病歷補強報告）** - 病歷補強報告.md 生成
 - [ ] **Phase 7: 輸出二（申復理由草稿）** - 申復理由草稿（p8/p9 ≤2000字）＋申復XML欄位
 - [ ] **Phase 8: 端到端測試** - 規格造測試資料→待真實樣本進來替換驗證
@@ -86,13 +86,13 @@ Plans:
 **Depends on**: Phase 2, Phase 3, Phase 4
 **Requirements**: REQ-three-way-comparator
 **Success Criteria** (what must be TRUE):
-  1. 逐檢核項判定支持/部分支持/無記載，並引用病歷原文
-  2. 醫令支持度輸出三級分類（充分/薄弱/裸奔）
-  3. 缺口項目生成 1~3 條候選補強敘述，僅基於既有病史線索擴寫（不憑空編造），每條附規則出處
+  1. [x] 逐檢核項判定支持/部分支持/無記載，並引用病歷原文 — 05-01 完成：LLMJudger（JSON 強制＋重試＋待人工降級），judgment.quote 引用原文；29 測試全綠
+  2. [x] 醫令支持度輸出三級分類（充分/薄弱/裸奔） — 05-01 完成：classify_support 純函式（無 LLM 依賴），真實案件煙霧測試 4/11 有規則醫令正確分級
+  3. [x] 缺口項目生成 1~3 條候選補強敘述，僅基於既有病史線索擴寫（不憑空編造），每條附規則出處 — 05-01 完成：LLMNarrativeGenerator（C2 約束：prompt_only 提示型、每條附 article_location）
 **Plans**: TBD
 
 Plans:
-- [ ] 05-01: TBD
+- [x] 05-01-PLAN.md — Wave 1：comparator 套件（models/evidence/support/judger/narratives/comparator）＋29 測試；真實 TOTFA 首案煙霧測試（未知醫令誠實標記）；全套件 139 passed / 5 skipped
 
 ### Phase 6: 輸出一（病歷補強報告）
 **Goal**: 生成病歷補強報告.md，供醫師逐條審核
@@ -160,7 +160,7 @@ Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 
 | 2. 規則庫建置 | 6/6 | Complete | 2026-07-31 |
 | 3. 解析器 | 1/1 | Complete | 2026-08-03 |
 | 4. 病歷彙整器 | 1/1 | Complete | 2026-08-03 |
-| 5. 三方比對器 | 0/TBD | Not started | - |
+| 5. 三方比對器 | 1/1 | Complete | 2026-08-03 |
 | 6. 輸出一（病歷補強報告） | 0/TBD | Not started | - |
 | 7. 輸出二（申復理由草稿） | 0/TBD | Not started | - |
 | 8. 端到端測試 | 0/TBD | Not started | - |
