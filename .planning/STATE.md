@@ -26,7 +26,9 @@ ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (origi
 **GSD Phase 2 — 規則庫建置 (Rule Repository) — COMPLETE (2026-07-31)** — all 6 plans done, REQ-rule-repository's 3 acceptance criteria automated-and-passing, 20-code human spot-check confirmed 20/20 correct.
 **Next: Phase 3 — 解析器 (Parsers) — CONTEXT.md gathered (2026-08-03), ready for planning. Depends only on Phase 1 (satisfied). Could be planned/executed in any order relative to Phase 4 (also Phase-1-only dependency).**
 
-**Phase 3 context highlights (see `.planning/phases/03-parsers/03-CONTEXT.md`):** 使用者提供真實申報 XML `TOTFA.xml`（633 案 / 2,624 醫令 / Big5 / 348 位病患，已 gitignore）。實測推翻兩項文件假設：(1) C11 欄位表為精選子集，真實檔多出 18 個 dbody 欄位，其中 `d20`-`d26` 為次診斷代碼（Phase 5 判斷醫療必要性的關鍵）；(2) C8 的 p8/p9 字數上限描述有誤，官方規格書實為每欄 1000 中文字——影響 Phase 7 字數控制器。另發現 `officialdocument/電子申復文件格式/電子申復格式及填表說明門診.doc` 為官方規格書 104.02.11，是核減清單與申復 XML 的權威定義。真實核減樣本使用者表示將提供但尚未放入專案。
+**Phase 3 context highlights (see `.planning/phases/03-parsers/03-CONTEXT.md`):** 使用者提供真實申報 XML `TOTFA.xml`（633 案 / 2,624 醫令 / Big5 / 348 位病患，已 gitignore）。實測推翻三項文件假設：(1) C11 欄位表為精選子集，真實檔多出 18 個 dbody 欄位，其中 `d20`-`d26` 為次診斷代碼（Phase 5 判斷醫療必要性的關鍵）；(2) C8 的 p8/p9 字數上限描述有誤，官方問答集 Q15 確認為**每欄 1000 中文字／合計 2000**——影響 Phase 7 字數控制器；(3) **`電子申復格式及填表說明門診.doc` 是申復「輸出」規格，不是核減「輸入」格式**（原 D-14 據此建模輸入檔屬誤判，已由 D-14a 修正）。
+
+**核減輸入格式已釐清（D-14c/D-14d）：** 使用者提供 VPN 下載畫面實況與官方欄位範例——抽樣樣本檔為 **CSV**（兩種院所型態都拿得到）；**申復明細資料檔 18 欄欄位順序已確定**（日期為西元非民國、金額有零填補與純數字兩種格式、身分證號已遮罩但出生日期未遮罩、第 17 欄為 `代碼-說明` 複合欄即核減代碼表線索、欄 5/6/10/11 為與申報 XML 的完整 join key）。**故核減解析器已納入 Phase 3 實作範圍（D-14b-rev），ROADMAP Phase 3 的 Goal 與三項成功條件維持原樣不需修改。** 仍待補：實體檔案（分隔符／表頭／編碼／檔名規則），故 reader 層須參數化。
 
 ## Completed Work
 
@@ -50,12 +52,17 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-08-03
-Stopped at: Phase 3 context gathered — 4 gray areas discussed, 03-CONTEXT.md + 03-DISCUSSION-LOG.md written and committed (`5e1cd5c`).
+Last session: 2026-08-03（paused via `/gsd-pause-work`）
+Stopped at: Phase 3 context gathered **and corrected** — 4 gray areas discussed (`5e1cd5c`)，後續依使用者陸續提供的三份新證據修正核減格式假設（`0f1df83`、`e605d26`、`73f71d4`、`269adcc`）。另補提交積壓的 P0/P1 修正 6 個原子 commit（`6e3718b`..`d5f8ea4`）。工作區乾淨，測試 51 passed / 1 skipped。
 Next action: `/gsd-plan-phase 3`
-Resume file: `.planning/phases/03-parsers/03-CONTEXT.md`
+Resume file: `.planning/phases/03-parsers/.continue-here.md`（完整交接）＋ `.planning/HANDOFF.json`（結構化）
 
-**Carry into planning:** 真實核減樣本尚未放入專案（使用者表示會提供）——規劃時先依官方規格書 104.02.11 建模並造測試資料，介面保留替換空間。fixture 去識別化範圍為使用者知情後的明示決定（**只洗 `d49` 姓名**），下游不得自行擴大。
+**Carry into planning:**
+- **核減解析器已納入 Phase 3 範圍**（D-14b-rev）——欄位表見 D-14d。⚠️ **不要**採用已作廢的 D-14／D-14b（保留刪除線供追溯）。
+- **核減欄位只認 D-14d**：`officialdocument/電子申復文件格式/` 底下所有規格書都是申復**輸出**格式（Phase 7），不得用來建模輸入檔。
+- **reader 層須參數化**（分隔符／表頭／編碼），實體檔到手只調參數、不動欄位映射。
+- fixture 去識別化範圍為使用者知情後的明示決定（**只洗 `d49` 姓名**），下游不得自行擴大。
+- **`get_rule()` 已改為會拋 `RuleRepositoryError`**（P0-2 breaking change）——Phase 3 解析器不呼叫它，但 Phase 5 比對器必須處理此例外。
 
 ## Key References
 
