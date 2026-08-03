@@ -306,3 +306,78 @@ def test_low_value_article_heading_only_is_degraded(tmp_path):
     assert row["source_version"] == "v3"
     assert result["llm_matched_count"] == 0
     assert result["no_match_count"] == 1
+
+
+def _make_db_with_drug(db_path, codes):
+    conn = db.get_connection(db_path)
+    db.init_schema(conn)
+    for code, name, text in codes:
+        conn.execute(
+            "INSERT INTO drug_rules (code, name, payment_text, effective_from, effective_to) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (code, name, text, "2023-10-01", None),
+        )
+    conn.commit()
+    conn.close()
+
+
+def test_drug_codes_skip_llm_path_and_lock_version(tmp_path):
+    """藥品碼不送 LLM：即使 payment_text 短，也不呼叫 chat_completion，
+    直接誠實無匹配並鎖定版本（設計決定，非故障）。"""
+    db_path = str(tmp_path / "rules.sqlite3")
+    trees_path = str(tmp_path / "docx_trees.json")
+    _make_db_with_drug(db_path, [("AC10000100", "測試藥品", None)])
+    with open(trees_path, "w", encoding="utf-8") as f:
+        json.dump({}, f)
+
+    with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
+         patch.object(build_mapping.llm_client, "chat_completion") as mock_chat:
+        result = build_mapping.build_rule_mapping(
+            db_path, trees_path, source_version="v10", incremental=False
+        )
+
+    # 藥品碼不應觸發任何 LLM 呼叫
+    assert mock_chat.call_count == 0
+    assert result["no_match_count"] == 1
+    assert result["llm_matched_count"] == 0
+    assert result["degraded_count"] == 0
+
+    conn = db.get_connection(db_path)
+    row = conn.execute(
+        "SELECT article_location, article_full_text, article_source, source_version "
+        "FROM rule_mapping WHERE code=?", ("AC10000100",)
+    ).fetchone()
+    conn.close()
+
+    assert row["article_source"] is None
+    assert row["article_location"] is None
+    assert row["article_full_text"] is None
+    # 鎖定版本：下次同版本增量不重試（這是「誠實查無」而非故障）
+    assert row["source_version"] == "v10"
+
+
+def test_drug_csv_reuse_still_stamps_csv(tmp_path):
+    """藥品碼 payment_text 夠長仍走 CSV 重用（不受「不送 LLM」影響）。"""
+    db_path = str(tmp_path / "rules.sqlite3")
+    trees_path = str(tmp_path / "docx_trees.json")
+    _make_db_with_drug(db_path, [("AC10000200", "長規定藥品", "給付規定：" + ("藥" * 100))])
+    with open(trees_path, "w", encoding="utf-8") as f:
+        json.dump({}, f)
+
+    with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
+         patch.object(build_mapping.llm_client, "chat_completion") as mock_chat:
+        result = build_mapping.build_rule_mapping(
+            db_path, trees_path, source_version="v10", incremental=False
+        )
+
+    assert result["csv_reuse_count"] == 1
+    assert mock_chat.call_count == 0
+
+    conn = db.get_connection(db_path)
+    row = conn.execute(
+        "SELECT article_source, source_version FROM rule_mapping WHERE code=?",
+        ("AC10000200",),
+    ).fetchone()
+    conn.close()
+    assert row["article_source"] == "csv"
+    assert row["source_version"] == "v10"

@@ -9,6 +9,10 @@
    約可避免 49% 的付款代碼需要 LLM 呼叫）。
 2. LLM 輔助路徑：否則，從 docx tree 中以關鍵字預先篩選出候選節點，
    呼叫本地 llama.cpp server 提出比對建議。
+   **藥品碼（drug_rules）例外：不送 LLM。** 審查注意事項語料是「診療項目」
+   審查規定，幾乎不含藥品給付條文；送 LLM 只會得到「查無」或誤配章節標題
+   （品質抽看 ③ 的成因）。藥品碼僅走 CSV 重用快速路徑，其餘直接誠實
+   無匹配並鎖定版本。
 
 LLM 僅在此建置步驟使用一次；查詢階段（Phase 3-5）完全零 LLM，只走
 `rule_mapping` 表查表（D-05）。若 smoke test 未通過，本函式會優雅降級
@@ -258,6 +262,22 @@ def build_rule_mapping(
                     source_version=source_version,
                 )
                 csv_reuse_count += 1
+                continue
+
+            if table_name == "drug_rules":
+                # 藥品碼不送 LLM（設計決定）：審查注意事項語料是「診療項目」
+                # 審查規定，幾乎不含藥品給付條文；送 LLM 只會得到「查無」或
+                # 誤配章節標題。直接誠實無匹配並鎖定版本（此為正常結果，
+                # 非故障，故寫 source_version 讓增量不再重試）。
+                db.upsert_rule_mapping(
+                    conn,
+                    code=code,
+                    article_location=None,
+                    article_full_text=None,
+                    article_source=None,
+                    source_version=source_version,
+                )
+                no_match_count += 1
                 continue
 
             if not llm_available:
