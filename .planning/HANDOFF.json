@@ -1,14 +1,14 @@
 {
   "version": "1.0",
-  "timestamp": "2026-08-03T07:39:23.680Z",
+  "timestamp": "2026-08-03T16:20:00.000Z",
   "phase": "3",
   "phase_name": "解析器",
   "phase_dir": ".planning/phases/03-parsers",
   "plan": null,
   "task": null,
   "total_tasks": null,
-  "status": "paused",
-  "phase_stage": "context_gathered_ready_for_planning",
+  "status": "complete",
+  "phase_stage": "complete",
   "completed_tasks": [
     {
       "id": 1,
@@ -45,20 +45,21 @@
       "name": "提交積壓的 P0/P1 修正（6 個原子 commit）",
       "status": "done",
       "commit": "d5f8ea4"
-    }
-  ],
-  "remaining_tasks": [
+    },
     {
       "id": 7,
-      "name": "/gsd-plan-phase 3 — 產出 03-*-PLAN.md",
-      "status": "not_started"
+      "name": "/gsd-plan-phase 3 — 產出 03-01-PLAN.md",
+      "status": "done",
+      "commit": null
     },
     {
       "id": 8,
       "name": "執行 Phase 3：三個解析器（申報 XML / 核減申復明細 / SOAP）",
-      "status": "not_started"
+      "status": "done",
+      "commit": null
     }
   ],
+  "remaining_tasks": [],
   "blockers": [],
   "human_actions_pending": [
     {
@@ -100,6 +101,6 @@
     }
   ],
   "uncommitted_files": [],
-  "next_action": "/gsd-plan-phase 3 — Phase 3 context 齊備（三個解析器都有依據），工作區乾淨，測試 51 passed / 1 skipped。",
-  "context_notes": "本次工作區乾淨、測試全綠。Phase 3 尚未有 PLAN.md，處於『context 已蒐集、待規劃』階段（非執行中）。本 session 的主軸是修正 03-CONTEXT.md 中關於核減輸入格式的一連串錯誤假設——起因是使用者陸續提供了 VPN 下載畫面實況與官方欄位範例圖，每一次都推翻前一個假設。最終結論：三個解析器都有實作依據。另補提交了先前積壓的 P0/P1 修正（6 個原子 commit）。注意 STATE.md 第 29/58 行原本殘留舊假設（『核減樣本尚未提供、先依規格造測試資料』），已於本次同步更新。"
+  "next_action": "/gsd-plan-phase 4（病歷彙整器，僅依賴 Phase 1）— Phase 3 已完成，三個解析器交付：submission_xml.py / deduction.py / soap.py，全套件 95 passed / 5 skipped。",
+  "context_notes": "Phase 3（解析器）COMPLETE（2026-08-03）。03-01-PLAN 單輪交付三個解析器：(1) 申報 XML — Big5 宣告偵測＋big5→cp950→big5hkscs→utf-8 回退、CRLF 相容、三種致命缺漏分級（缺 d1/d2、缺 d3、無 pdata）、d19 只警告、raw 全保留、d20-d26 次診斷清單；真實檔回放 633 案／2,624 醫令／0 拒收。(2) 核減明細 — D-14d 18 欄、欄 17 代碼-說明拆分、欄 1 零填補/欄 14 純數字雙格式 int() 正規化、8 碼西元日期、欄 16 原樣保留、reader 層（encoding/delimiter/has_header）參數化待實體檔。(3) SOAP — marker（high）/keyword（low）兩層、317 關鍵詞程式化移植自 soap-classifier.js、無命中歸 UNKNOWN（修正原 JS 預設 subjective）。差異記錄：D-16 稱 d3=樣本註記與真實檔（病歷號）衝突，以真實檔為準；D-14d 欄 10 對應申報 XML p13（非 p1）。未提交：本 session 全部變更（含前次 藥品碼不送 LLM 的 3 檔）留待使用者指示 commit。"
 }

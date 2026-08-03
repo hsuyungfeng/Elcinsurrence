@@ -14,7 +14,7 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 
 - [x] **Phase 1: 專案骨架** - uv 專案初始化、config、目錄結構
 - [x] **Phase 2: 規則庫建置** - CSV→SQLite、審查注意事項→PageIndex、rule_mapping 預編譯
-- [ ] **Phase 3: 解析器** - 申報XML（tdata/ddata/pdata）、核減清單、SOAP文字
+- [x] **Phase 3: 解析器** - 申報XML（tdata/ddata/pdata）、核減清單、SOAP文字
 - [ ] **Phase 4: 病歷彙整器** - Provider介面＋本地檔案Provider、半年病史時間軸
 - [ ] **Phase 5: 三方比對器** - 醫令↔規則↔病歷 支持度判定＋候選補強生成
 - [ ] **Phase 6: 輸出一（病歷補強報告）** - 病歷補強報告.md 生成
@@ -60,13 +60,13 @@ Plans:
 **Depends on**: Phase 1
 **Requirements**: REQ-parsers
 **Success Criteria** (what must be TRUE):
-  1. 申報XML tdata/ddata/pdata 欄位可正確解析
-  2. 欄位缺漏依致命／可容忍分級處理
-  3. SOAP文字可分段定位（S/O/A/P）
+  1. [x] 申報XML tdata/ddata/pdata 欄位可正確解析 — 03-01 完成：Big5 編碼偵測＋回退、tdata/dhead/dbody/pdata 全欄位保留，真實檔回放 633 案／2,624 醫令／0 拒收
+  2. [x] 欄位缺漏依致命／可容忍分級處理 — 03-01 完成：三種致命（缺 d1/d2、缺 d3、無 pdata）進 rejected；d19 與高出現率欄位缺席僅警告（D-05/D-06/D-08）
+  3. [x] SOAP文字可分段定位（S/O/A/P） — 03-01 完成：marker（high）→ keyword（low）兩層、317 關鍵詞移植、無命中歸 UNKNOWN
 **Plans**: TBD
 
 Plans:
-- [ ] 03-01: TBD
+- [x] 03-01-PLAN.md — Wave 1：三個解析器（申報 XML Big5/缺漏分級、核減明細 18 欄 reader 參數化、SOAP marker/keyword 兩層＋317 關鍵詞移植）＋ fixtures（TOTFA 抽 4 案／D-14d 官方 2 筆）＋ 46 測試；真實檔回放 633 案 0 拒收
 
 ### Phase 4: 病歷彙整器
 **Goal**: Provider 介面抽象化雲端/本地資料來源，本地檔案 Provider 可運作並產出近半年病史時間軸
@@ -158,7 +158,7 @@ Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 
 |-------|----------------|--------|-----------|
 | 1. 專案骨架 | 1/1 | Complete | 2026-07-29 |
 | 2. 規則庫建置 | 6/6 | Complete | 2026-07-31 |
-| 3. 解析器 | 0/TBD | Not started | - |
+| 3. 解析器 | 1/1 | Complete | 2026-08-03 |
 | 4. 病歷彙整器 | 0/TBD | Not started | - |
 | 5. 三方比對器 | 0/TBD | Not started | - |
 | 6. 輸出一（病歷補強報告） | 0/TBD | Not started | - |

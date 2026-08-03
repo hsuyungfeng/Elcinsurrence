@@ -6,10 +6,10 @@ status: unknown
 last_updated: "2026-08-03T00:00:00.000Z"
 progress:
   total_phases: 9
-  completed_phases: 2
-  total_plans: 7
-  completed_plans: 6
-  percent: 86
+  completed_phases: 3
+  total_plans: 8
+  completed_plans: 7
+  percent: 88
 ---
 
 # STATE.md — elc-audit-engine
@@ -24,7 +24,8 @@ ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (origi
 
 **GSD Phase 1 — 專案骨架 (Project Skeleton) — COMPLETE (2026-07-29)**
 **GSD Phase 2 — 規則庫建置 (Rule Repository) — COMPLETE (2026-07-31)** — all 6 plans done, REQ-rule-repository's 3 acceptance criteria automated-and-passing, 20-code human spot-check confirmed 20/20 correct.
-**Next: Phase 3 — 解析器 (Parsers) — CONTEXT.md gathered (2026-08-03), ready for planning. Depends only on Phase 1 (satisfied). Could be planned/executed in any order relative to Phase 4 (also Phase-1-only dependency).**
+**GSD Phase 3 — 解析器 (Parsers) — COMPLETE (2026-08-03)** — 03-01 單輪交付三個解析器：申報 XML（Big5 編碼偵測＋三種致命缺漏分級＋raw 全保留＋次診斷清單，真實檔回放 633 案／2,624 醫令／0 拒收）、核減明細（D-14d 18 欄、欄 17 代碼拆分、reader 參數化）、SOAP（marker/keyword 兩層＋信度、317 關鍵詞移植、無命中歸 UNKNOWN）。46 新測試全綠，全套件 95 passed / 5 skipped。
+**Next: Phase 4 — 病歷彙整器 (Record Aggregator) — 未開始，僅依賴 Phase 1（已滿足）；與 Phase 3 平行可行，現可規劃。**
 
 **Phase 3 context highlights (see `.planning/phases/03-parsers/03-CONTEXT.md`):** 使用者提供真實申報 XML `TOTFA.xml`（633 案 / 2,624 醫令 / Big5 / 348 位病患，已 gitignore）。實測推翻三項文件假設：(1) C11 欄位表為精選子集，真實檔多出 18 個 dbody 欄位，其中 `d20`-`d26` 為次診斷代碼（Phase 5 判斷醫療必要性的關鍵）；(2) C8 的 p8/p9 字數上限描述有誤，官方問答集 Q15 確認為**每欄 1000 中文字／合計 2000**——影響 Phase 7 字數控制器；(3) **`電子申復格式及填表說明門診.doc` 是申復「輸出」規格，不是核減「輸入」格式**（原 D-14 據此建模輸入檔屬誤判，已由 D-14a 修正）。
 
@@ -52,10 +53,10 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-08-03（paused via `/gsd-pause-work`）
-Stopped at: Phase 3 context gathered **and corrected** — 4 gray areas discussed (`5e1cd5c`)，後續依使用者陸續提供的三份新證據修正核減格式假設（`0f1df83`、`e605d26`、`73f71d4`、`269adcc`）。另補提交積壓的 P0/P1 修正 6 個原子 commit（`6e3718b`..`d5f8ea4`）。工作區乾淨，測試 51 passed / 1 skipped。
-Next action: `/gsd-plan-phase 3`
-Resume file: `.planning/phases/03-parsers/.continue-here.md`（完整交接）＋ `.planning/HANDOFF.json`（結構化）
+Last session: 2026-08-03（Phase 3 執行完成）
+Stopped at: **Phase 3 COMPLETE** — 03-01-PLAN 產出並執行（三個解析器＋fixtures＋46 測試），全套件 95 passed / 5 skipped。Phase 3 的三項成功條件全部達成並自動化驗證（見 ROADMAP.md）。
+Next action: `/gsd-plan-phase 4`（病歷彙整器；僅依賴 Phase 1，與 Phase 3 平行）
+Resume file: `.planning/phases/03-parsers/03-01-SUMMARY.md`（交付摘要）＋ `.planning/HANDOFF.json`（結構化）
 
 **Carry into planning:**
 - **核減解析器已納入 Phase 3 範圍**（D-14b-rev）——欄位表見 D-14d。⚠️ **不要**採用已作廢的 D-14／D-14b（保留刪除線供追溯）。
