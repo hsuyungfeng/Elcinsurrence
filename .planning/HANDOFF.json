@@ -1,9 +1,9 @@
 {
   "version": "1.0",
-  "timestamp": "2026-08-03T20:10:00.000Z",
-  "phase": "7",
-  "phase_name": "輸出二（申復理由草稿）",
-  "phase_dir": ".planning/phases/07-output-appeal-draft",
+  "timestamp": "2026-08-03T22:10:00.000Z",
+  "phase": "8",
+  "phase_name": "端到端測試",
+  "phase_dir": ".planning/phases/08-e2e-testing",
   "plan": "01",
   "task": null,
   "total_tasks": null,
@@ -12,19 +12,19 @@
   "completed_tasks": [
     {
       "id": 1,
-      "name": "/gsd-plan-phase 7 — 產出 07-CONTEXT.md＋07-01-PLAN.md",
+      "name": "/gsd-plan-phase 8 — 產出 08-CONTEXT.md＋08-01-PLAN.md",
       "status": "done",
       "commit": null
     },
     {
       "id": 2,
-      "name": "執行 Phase 7：generators/appeal.py（四段組裝/字數控制器/P6 硬檢查/輸出）＋24 測試",
+      "name": "執行 Phase 8：金標準 30 組＋harness＋回放 CLI＋端到端管線＋3 案例＋E2E-01 修正（21 測試）",
       "status": "done",
       "commit": null
     },
     {
       "id": 3,
-      "name": "文件同步（progress/ROADMAP/STATE/HANDOFF/continue-here/SUMMARY）＋索引重建",
+      "name": "文件同步（progress/ROADMAP/STATE/HANDOFF/continue-here/SUMMARY/05-CONTEXT 註記）＋索引重建",
       "status": "done",
       "commit": null
     }
@@ -34,12 +34,17 @@
   "human_actions_pending": [
     {
       "action": "取得申復明細資料檔『實體檔案』（非範例畫面）",
-      "context": "18 欄欄位順序已知（D-14d），但分隔符／表頭／編碼／檔名規則未定。取得後才能鎖定 reader 層參數。不阻擋規劃，只影響 reader 細節。",
+      "context": "18 欄欄位順序已知（D-14d），但分隔符／表頭／編碼／檔名規則未定。取得後才能鎖定 reader 層參數並跑 C6-5 真實樣本回放。",
       "blocking": false
     },
     {
       "action": "取得門診抽樣樣本檔（CSV）",
       "context": "D-14c：兩種院所型態都拿得到，是配案流程（病歷補強情境）的實際輸入。",
+      "blocking": false
+    },
+    {
+      "action": "以真實 llama.cpp 執行 scripts/replay_gold_standard.py（需 server 健康）",
+      "context": "金標準 30 組回放是換模型回歸基準（C6-3）；測試已用替身驗證 harness，真實回放需外部 server。",
       "blocking": false
     },
     {
@@ -50,24 +55,29 @@
   ],
   "decisions": [
     {
-      "decision": "D-10a：申復字數上限以官方問答集 Q15 為準（p8/p9 各 1000 中文字、合計放寬至 2000）",
-      "rationale": "官方問答集 Q15 明示『可以是每醫令或每案，各1000個中文字，總長度已經放寬至2000字』；C8 舊『支援最多2,000個中文字』為欄位長度上限的保守記載，以 Q15 為準（每欄 1000／合計 2000）。",
-      "phase": "7"
+      "decision": "E2E-01：classify_support 任一『部分支持』→ 薄弱（原歸充分）",
+      "rationale": "端到端探索發現單檢核項流程下『薄弱』不可達（D7 三級缺一角）；部分支持＝有記載但有缺口，語意上正是薄弱。05-CONTEXT D-04 同步更新。",
+      "phase": "8"
     },
     {
-      "decision": "D-10b：A001 虛擬醫令綜整延後至 Phase 2（申復 XML 上傳層）",
-      "rationale": "官方註 5／Q15-4 允許以虛擬醫令 A001 做整體申復理由綜整陳述，但 Phase 7 依 D10 只做『每筆核減醫令獨立生成』；A001 屬多筆醫令合併的 XML 組裝選項。",
-      "phase": "7"
+      "decision": "D-8a：run_case_pipeline 為端到端/真實樣本回放單一入口",
+      "rationale": "把 Phase 5→6→7 接成一條可測試管線；注入層（rule_lookup/judge_fn/narrative_fn/decisions）可換，C6-5 真實樣本回放只換輸入層。",
+      "phase": "8"
     },
     {
-      "decision": "D-10c：P6 硬檢查為 pure function（resolve_p6_points），申覆點數≤核減上界（D-15）驗證進 validation_errors 不靜默修正",
-      "rationale": "C3 要求硬檢查不走 LLM；P6=0 可直接強制，但『申復點數超過核減上界』屬院所訴求事實，自動修正會竄改申復意圖，故記錄錯誤留醫師確認。",
-      "phase": "7"
+      "decision": "D-8b：appeal 階段單筆規則庫故障降級查無規則；比對階段故障依 P0-2 穿透",
+      "rationale": "appeal 查詢的醫令可能不在比對範圍，單筆故障不阻斷整案輸出（C5 精神）；比對階段的 infra 故障必須穿透（不得吞成查無規則，P0-2）。",
+      "phase": "8"
+    },
+    {
+      "decision": "D-8c：金標準 fixture 判定分佈 12/9/9（支持/部分支持/無記載）",
+      "rationale": "覆蓋三種判定與邊界（空證據/無相關記載）；fixture 為純資料，測試以替身 judge_fn 驗證 harness，真實回放留給 CLI（外部 server）。",
+      "phase": "8"
     }
   ],
   "next_phase": {
-    "phase": "8",
-    "name": "端到端測試",
-    "note": "五層測試策略全數涵蓋並可執行：單元（已齊）／規則庫驗收（已齊）／LLM 判定金標準 30 組／端到端 3 案例（規格造：充分/薄弱/裸奔各一）／真實樣本回放。appeal 組裝器與補強報告生成器可作為端到端輸出端。"
+    "phase": "9",
+    "name": "doctor-toolbox HIS 整合（佔位）",
+    "note": "Phase 2（原設計文件命名）：雲端病歷 Provider 接 doctor-toolbox（cloud_sync/his_connection）、核心引擎 Flask API 化、與 Local Agent/NHI_EIIAPI VPN 上傳流程銜接。以 run_case_pipeline 為引擎接入點；appeal_{流水號}.json 為轉申復 XML 契約。"
   }
 }

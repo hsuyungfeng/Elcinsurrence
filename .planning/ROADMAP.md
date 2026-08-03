@@ -19,7 +19,7 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 - [x] **Phase 5: 三方比對器** - 醫令↔規則↔病歷 支持度判定＋候選補強生成
 - [x] **Phase 6: 輸出一（病歷補強報告）** - 病歷補強報告.md 生成
 - [x] **Phase 7: 輸出二（申復理由草稿）** - 申復理由草稿（p8/p9 ≤2000字）＋申復XML欄位
-- [ ] **Phase 8: 端到端測試** - 規格造測試資料→待真實樣本進來替換驗證
+- [x] **Phase 8: 端到端測試** - 規格造測試資料→待真實樣本進來替換驗證
 - [ ] **Phase 9: doctor-toolbox HIS 整合（佔位）** - Phase 2（原設計文件命名）：雲端病歷 Provider、Flask API化、NHI_EIIAPI 銜接
 
 ## Phase Details
@@ -130,10 +130,10 @@ Plans:
   2. 規則庫驗收測試（rule_mapping 命中率）通過
   3. LLM 判定金標準 30 組測試建立並可回放
   4. 端到端 3 案例測試通過（規格造測試資料，介面保留真實樣本替換空間）
-**Plans**: TBD
+**Plans**: 1 plan — **Phase COMPLETE (2026-08-03)**
 
 Plans:
-- [ ] 08-01: TBD
+- [x] 08-01-PLAN.md — 五層測試補齊：LLM 判定金標準 30 組（fixture＋harness＋回放 CLI，C6-3）＋端到端 3 案例（充分/薄弱/裸奔，run_case_pipeline 全管線，C6-4）＋E2E-01 修正（部分支持→薄弱）＋真實樣本替換介面（C6-5）
 
 ### Phase 9: doctor-toolbox HIS 整合（佔位）
 **Goal**: 將 Phase 1-8 核心引擎整合進 doctor-toolbox HIS 模組（原設計文件「Phase 2」）

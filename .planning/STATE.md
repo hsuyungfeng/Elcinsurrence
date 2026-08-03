@@ -29,6 +29,7 @@ ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (origi
 **GSD Phase 5 — 三方比對器 (Three-way Comparator) — COMPLETE (2026-08-03)** — 05-01 單輪交付：檢核項＝規則全文＋出處；證據組裝 SOAP＋半年病史（含截斷）；LLMJudger（JSON 強制＋重試一次＋失敗降級待人工）；classify_support 三級純函式；LLMNarrativeGenerator（C2：1~3 條附出處、prompt_only 提示型）；RuleRepositoryError 穿透、found=False 標未知醫令；病歷缺席 records_degraded。29 新測試全綠。
 **GSD Phase 6 — 輸出一（病歷補強報告）— COMPLETE (2026-08-03)** — 06-01 單輪交付：render_report（Markdown checkbox 逐條審：標題/警告區/支持度徽章/候選補強/半年病史摘要）＋render_tracking（審核軌跡 JSON：D9 四狀態＋原文＋編輯後文＋時間）＋write_report（.md＋.json 薄包裝）。13 新測試全綠，全套件 152 passed / 5 skipped。
 **GSD Phase 7 — 輸出二（申復理由草稿）— COMPLETE (2026-08-03)** — 07-01 單輪交付：build_appeal_draft（D10 四段組裝：①案情摘要/②醫療必要性/③規則依據/④病歷佐證；每筆核減醫令獨立生成）＋字數控制器（官方問答集 Q15：每欄 1000／合計 2000、裁剪優先 ④→②、①③骨架不動）＋P6 不申覆強制填 0 硬檢查（C3/Q13）＋D-15 核減上界檢查（申復點數≤不予核銷金額）＋adopted_narratives_from_tracking（審核軌跡消費，D-08）＋render_appeal_markdown/render_appeal_json/write_appeal（C7：申復草稿_{流水號}.md＋appeal_{流水號}.json，含 p1-p9 醫令段欄位）。24 新測試全綠，全套件 176 passed / 5 skipped。
+**GSD Phase 8 — 端到端測試 — COMPLETE (2026-08-03)** — 08-01 單輪交付：LLM 判定金標準 30 組（tests/fixtures/llm_gold_standard_30.json：支持12/部分支持9/無記載9＋eval/gold_standard.py harness＋scripts/replay_gold_standard.py 真實 LLM 回放 CLI，health guard，C6-3）＋端到端 3 案例（充分/薄弱/裸奔，run_case_pipeline：compare→write_report→審核 decisions→build_appeal→write_appeal，C6-4）＋E2E-01 修正（classify_support 任一『部分支持』→ 薄弱，原歸充分使 D7 三級缺一角）＋真實樣本替換介面（注入層可換，C6-5）。21 新測試全綠，全套件 197 passed / 5 skipped。五層測試策略全數涵蓋並可執行（C6）。
 **Next: Phase 7 — 輸出二（申復理由草稿）— 依賴 Phase 5（已完成）。**
 
 **Phase 3 context highlights (see `.planning/phases/03-parsers/03-CONTEXT.md`):** 使用者提供真實申報 XML `TOTFA.xml`（633 案 / 2,624 醫令 / Big5 / 348 位病患，已 gitignore）。實測推翻三項文件假設：(1) C11 欄位表為精選子集，真實檔多出 18 個 dbody 欄位，其中 `d20`-`d26` 為次診斷代碼（Phase 5 判斷醫療必要性的關鍵）；(2) C8 的 p8/p9 字數上限描述有誤，官方問答集 Q15 確認為**每欄 1000 中文字／合計 2000**——影響 Phase 7 字數控制器；(3) **`電子申復格式及填表說明門診.doc` 是申復「輸出」規格，不是核減「輸入」格式**（原 D-14 據此建模輸入檔屬誤判，已由 D-14a 修正）。
@@ -57,12 +58,15 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-08-03（Phase 7 執行完成）
-Stopped at: **Phase 7 COMPLETE** — 07-01-PLAN 產出並執行（申復理由草稿組裝器＋24 測試），全套件 176 passed / 5 skipped。Phase 7 的五項成功條件全部達成並自動化驗證（見 ROADMAP.md）。
-Next action: `/gsd-plan-phase 8`（端到端測試：規格造測試資料→待真實樣本進來替換驗證；依賴 Phase 6/7 已完成）
+Last session: 2026-08-03（Phase 8 執行完成）
+Stopped at: **Phase 8 COMPLETE** — 08-01-PLAN 產出並執行（金標準 30 組＋端到端 3 案例＋E2E-01 修正），全套件 197 passed / 5 skipped。Phase 8 的四項成功條件全部達成並自動化驗證（見 ROADMAP.md；C6 五層全數涵蓋）。
+Next action: `/gsd-plan-phase 9`（doctor-toolbox HIS 整合佔位；依賴 Phase 8 已完成 — 屬 Phase 2 原設計文件命名）
 Resume file: `.planning/phases/06-output-reinforcement-report/06-01-SUMMARY.md`（交付摘要）＋ `.planning/HANDOFF.json`（結構化）
 
 **Carry into planning:**
+- **E2E-01 已修正**：classify_support「部分支持（無無記載）」由充分改為薄弱（05-CONTEXT D-04 已同步加註記）；薄弱三級在單檢核項流程下已可達。
+- **run_case_pipeline 是 Phase 9/真實樣本回放的接入點**：換真解析器/Provider/rule_lookup/judge_fn 即可回放真實核減案（C6-5）；appeal 階段單筆規則庫故障降級查無規則不阻斷（C5 精神），比對階段故障依 P0-2 穿透。
+- **金標準回放**：`scripts/replay_gold_standard.py` 需 llama.cpp :8080 健康（換模型回歸基準，C6-3）；測試零 LLM 依賴（替身 judge_fn）。
 - **Phase 7 字數上限已定案**：以官方問答集 Q15 為準（p8/p9 各 1000 中文字、合計放寬至 2000），取代 C8 舊「2000/欄」；A001 虛擬醫令綜整（官方註 5）屬申復 XML 上傳層（Phase 2）選項，Phase 7 未實作。
 - **appeal JSON 為 Phase 2 轉 XML 的契約**：`appeal_{流水號}.json` 含 p1-p9 醫令段欄位（p3 改支序號/p4 成數/p5 數量 目前為 null，待真實改支檔與院所填報）；t38/t39 總計、A001 綜整、XML 序列化 → Phase 2。
 - **核減解析器已納入 Phase 3 範圍**（D-14b-rev）——欄位表見 D-14d。⚠️ **不要**採用已作廢的 D-14／D-14b（保留刪除線供追溯）。
