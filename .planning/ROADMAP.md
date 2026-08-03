@@ -157,7 +157,7 @@ Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. 專案骨架 | 1/1 | Complete | 2026-07-29 |
-| 2. 規則庫建置 | 2/6 | In progress | - |
+| 2. 規則庫建置 | 6/6 | Complete | 2026-07-31 |
 | 3. 解析器 | 0/TBD | Not started | - |
 | 4. 病歷彙整器 | 0/TBD | Not started | - |
 | 5. 三方比對器 | 0/TBD | Not started | - |

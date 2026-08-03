@@ -46,6 +46,13 @@ ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (origi
 
 None. Conflict detection found zero BLOCKER-severity issues and zero competing-variant issues. See `.planning/INGEST-CONFLICTS.md`.
 
+## Session Continuity
+
+Last session: 2026-07-31 (resumed)
+Stopped at: Session resumed from clean pause point (Phase 2 complete, no active work). User elected to gather Phase 3 context before planning.
+Next action: `/gsd-discuss-phase 3` — Phase 3 (解析器 / Parsers) has no CONTEXT.md yet.
+Resume file: `.planning/.continue-here.md` (status: idle — no mid-flight work)
+
 ## Key References
 
 - `.planning/PROJECT.md` — project overview, locked architecture, source doc precedence

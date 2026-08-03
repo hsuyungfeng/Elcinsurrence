@@ -27,3 +27,11 @@ data/rag/*
 !data/rag/.gitkeep
 data/converted_docx/
 logs/
+
+# 真實病患資料（PHI）—— 絕不進版控（D2：病患資料不離開本機）
+# 申報 XML／核減清單／病歷文字等含個資的真實樣本
+TOTFA.xml
+*.xml
+!tests/fixtures/**/*.xml
+data/samples/
+data/phi/
