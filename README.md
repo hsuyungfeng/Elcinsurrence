@@ -63,6 +63,8 @@
 
 ### 2. 核心 REST API 規格
 
+> **案例清單端點**（`GET /api/sampling/cases`、`GET /api/appeal/cases`）：目前回傳**示範資料**（每個案例帶 `"demo": true`），供 UI 展示工作流；醫令名稱一律以規則庫為準（例：`64140C`＝甲床與手指重建術，曾誤標為「手腕韌帶縫合術」，2026-08-04 修正）。真實資料源（抽樣 CSV／核減明細 CSV 匯入端點）為 Phase 2 待辦。
+
 #### 🔹 [POST] `/api/sampling/audit` — 抽樣事前預審支持度評估
 
 呼叫真實引擎（`run_presubmission_check`）：查規則庫 ➔ Phase 3 `parse_soap_text` 分段 ➔ LLM 逐檢核項判定 ➔ 三級分類 ➔ 缺口候選補強。**需 llama.cpp server 可用**。
@@ -111,11 +113,11 @@
     "order_code": "64140C",
     "deduct_amount": 3200,
     "claimed_points": 3200,
-    "deduction_reason": "病歷未載明肌腱撕裂之影像與術前評估",
+    "deduction_reason": "病歷未載明甲床損傷範圍與術前影像評估",
     "is_appealing": true,
     "has_attachment": false,
     "evidence": [
-      "影像 Wrist MRI：Complete tear of TFCC ligament",
+      "影像 Finger X-ray：Distal phalanx fracture with nail bed defect",
       "檢驗 CBC/WBC：11,500 /uL"
     ]
   }

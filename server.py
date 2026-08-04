@@ -78,10 +78,16 @@ def index():
 # ==============================================================================
 @app.route('/api/sampling/cases', methods=['GET'])
 def get_sampling_cases():
-    """回傳門診抽樣事前預審案例"""
+    """回傳門診抽樣事前預審案例（示範資料）。
+
+    demo=true：無真實資料源（CSV 匯入）前的 UI 展示用；
+    support_level 欄位僅為版面初始值，判定一律以 /api/sampling/audit
+    引擎結果為準（前端已不直接顯示此欄位，P1-1/P0-1 教訓）。
+    """
     return jsonify([
         {
             "id": "SAMP-001",
+            "demo": True,
             "case_seq": "101",
             "record_no": "M1001",
             "patient_name": "林聰明",
@@ -96,6 +102,7 @@ def get_sampling_cases():
         },
         {
             "id": "SAMP-002",
+            "demo": True,
             "case_seq": "102",
             "record_no": "M1002",
             "patient_name": "黃淑芬",
@@ -189,33 +196,40 @@ def audit_sampling_case():
 # ==============================================================================
 @app.route('/api/appeal/cases', methods=['GET'])
 def get_appeal_cases():
-    """回傳核減需申復案件清單 (多源證據已載入)"""
+    """回傳核減需申復案件清單 (示範資料，多源證據已載入)。
+
+    demo=true：無真實資料源（核減明細 CSV 匯入）前的 UI 展示用。
+    醫令名稱一律以規則庫為準（64140C＝甲床與手指重建術；原示範資料
+    誤標為「手腕韌帶縫合術」，progress.md 2026-08-04 已記錄此教訓）。
+    """
     return jsonify([
         {
             "id": "APP-001",
+            "demo": True,
             "case_seq": "201",
             "record_no": "M2001",
             "patient_name": "王大明",
             "order_code": "64140C",
-            "order_name": "手腕韌帶縫合術",
+            "order_name": "甲床與手指重建術",
             "deduct_amount": 3200,
-            "deduction_reason": "病歷未載明肌腱撕裂之影像是項與術前評估",
+            "deduction_reason": "病歷未記載甲床損傷範圍與術前影像評估",
             "visit_date": "115/06/20",
-            "soap": "S: 右手腕外傷挫傷後劇痛。\nO: 局部壓痛腫脹，活動受限。\nA: Wrist injury\nP: Schedule surgery.",
+            "soap": "S: 右手食指重物壓砸傷後劇痛出血。\nO: 食指末端甲床撕裂，指甲剝離。\nA: Nail bed injury\nP: Schedule nail bed repair surgery.",
             "multisource_evidence": {
                 "labs": [
                     {"date": "2026-06-20", "name": "CBC/WBC", "result": "11,500 /uL (異常偏高)", "unit": "/uL"}
                 ],
                 "images": [
-                    {"date": "2026-06-20", "name": "Wrist MRI", "report": "Complete tear of TFCC ligament (三角纖維軟骨複合體完全撕裂)", "dicom_id": "DICOM-9982"}
+                    {"date": "2026-06-20", "name": "Finger X-ray", "report": "Distal phalanx fracture with nail bed defect (遠端指骨骨折併甲床缺損)", "dicom_id": "DICOM-9982"}
                 ],
                 "cloud_sync": [
-                    {"date": "2026-05-15", "source": "健保雲端跨院病歷", "note": "外院 X 光顯示右腕關節腔狹窄與不穩定"}
+                    {"date": "2026-05-15", "source": "健保雲端跨院病歷", "note": "外院 X 光顯示右食指遠端指骨骨折"}
                 ]
             }
         },
         {
             "id": "APP-002",
+            "demo": True,
             "case_seq": "202",
             "record_no": "M2002",
             "patient_name": "張美玲",

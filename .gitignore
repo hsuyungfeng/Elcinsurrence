@@ -26,7 +26,13 @@ data/db/*
 data/rag/*
 !data/rag/.gitkeep
 data/converted_docx/
+# 輸出報告/審核軌跡/申復草稿（含 PHI，P0-3：絕不進版控）
+data/output/*
+!data/output/.gitkeep
 logs/
+
+# gsd 工作階段暫存（HANDOFF 會由工具重建，勿再進版控）
+.planning/HANDOFF.json
 
 # 真實病患資料（PHI）—— 絕不進版控（D2：病患資料不離開本機）
 # 申報 XML／核減清單／病歷文字等含個資的真實樣本

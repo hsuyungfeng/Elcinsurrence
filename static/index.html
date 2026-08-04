@@ -252,7 +252,7 @@
         <div style="background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 12px; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center;">
           <div>
             <span style="font-size: 12px; color: var(--text-muted); display: block;">核減刪減醫令申復處理</span>
-            <strong style="font-size: 16px; color: #ef4444;" id="aOrderName">64140C - 手腕韌帶縫合術 (核減 3,200 點)</strong>
+            <strong style="font-size: 16px; color: #ef4444;" id="aOrderName">64140C - 甲床與手指重建術 (核減 3,200 點)</strong>
           </div>
           <div>
             <span style="font-size: 12px; color: var(--text-muted); margin-right: 8px;">核減原因：</span>
@@ -360,14 +360,20 @@
         div.className = `case-item ${currentSelectedCase && currentSelectedCase.id === item.id ? 'active' : ''}`;
         div.onclick = () => currentMode === 'sampling' ? selectSamplingCase(item.id) : selectAppealCase(item.id);
         
-        const badgeTag = item.support_level ? `<span class="badge ${item.support_level === '充分' ? 'badge-sufficient' : 'badge-weak'}">${item.support_level}</span>` : `<span class="badge badge-none">核減 ${item.deduct_amount}點</span>`;
+        const demoTag = item.demo ? '<span style="font-size:11px;color:#888;border:1px solid #ccc;border-radius:4px;padding:0 4px;margin-left:6px;">示範</span>' : '';
+        // 列表徽章不再顯示 GET 端點未經驗證的 support_level（P0-1 教訓：
+        // 假判定比沒接線更危險）；sampling 一律顯示「待審」，點擊後以
+        // /api/sampling/audit 引擎結果覆蓋；appeal 顯示核減點數。
+        const badgeTag = currentMode === 'appeal'
+          ? `<span class="badge badge-none">核減 ${item.deduct_amount}點</span>`
+          : '<span class="badge badge-weak">待審</span>';
 
         div.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
             <span class="case-code">${item.order_code}</span>
             ${badgeTag}
           </div>
-          <div style="font-size:13px; font-weight:500;">${item.patient_name} - ${item.order_name}</div>
+          <div style="font-size:13px; font-weight:500;">${item.patient_name} - ${item.order_name}${demoTag}</div>
         `;
         container.appendChild(div);
       });
@@ -383,8 +389,10 @@
       document.getElementById('sMissingReason').innerText = currentSelectedCase.missing_reason;
 
       const badge = document.getElementById('sSupportBadge');
-      badge.innerText = currentSelectedCase.support_level === '充分' ? '✅ 充分' : '⚠️ 薄弱';
-      badge.className = `badge ${currentSelectedCase.support_level === '充分' ? 'badge-sufficient' : 'badge-weak'}`;
+      // 初始一律「待審」——清單不再帶未經驗證的判定值，引擎結果由
+      // runSamplingAudit() 覆寫（含三態＋待判定，P1-1）。
+      badge.innerText = '⏳ 待審';
+      badge.className = 'badge badge-weak';
 
       runSamplingAudit();
     }
