@@ -67,8 +67,16 @@
 
 ### Phase 2 — HIS 整合（後續）
 - [ ] 雲端病歷 Provider 接 doctor-toolbox（cloud_sync / his_connection 模式）
-- [ ] Flask API 化，供 HIS 呼叫
+- [~] Flask API 化，供 HIS 呼叫 — **雛形已接真實引擎**（2026-08-04，P0-1）：
+      `/api/sampling/audit` → `run_presubmission_check`、`/api/appeal/generate` → `build_appeal_draft`；
+      安全預設（綁本機／debug=False／錯誤脫敏／入參校驗）。**尚缺**：認證授權、
+      案件狀態機、任務佇列、CSV 批次匯入端點
 - [ ] 與 Local Agent / NHI_EIIAPI 上傳流程銜接（見 電子抽審.md 第四節）
+- [ ] Package Builder：PDF/DICOM/申復 XML 序列化（目前僅出 .md/.json）
+- [ ] Local Gateway 七元件（Heartbeat／Job Downloader／AES 快取／NHI Adapter／
+      Retry Manager／Status Reporter／NHI_EIIAPI.DLL wrapper）— 全數未開工
+
+> 架構差距矩陣見 [`deepflash4improve.md`](deepflash4improve.md) §7.3：引擎＝架構圖的「大腦」已完備，服務外殼與 Local Gateway 整側空白。
 
 ## 五、待釐清 / 待補資料
 
@@ -106,3 +114,13 @@
 | 2026-08-03 | 取得申復明細資料檔官方欄位範例（18 欄），核減解析器由「延後、造假資料」改為「納入 M3 實作」 | 欄位順序確定後「猜欄序」風險消失；並確認日期為西元非民國、金額有零填補與純數字兩種格式並存、身分證號已由健保署遮罩、第 17 欄為 `代碼-說明` 複合欄（即待補的核減代碼表線索）、欄 5/6/10/11 為與申報 XML 的完整 join key |
 | 2026-08-03 | Phase 7 完成：申復理由草稿組裝器交付（D10 四段組裝＋字數控制器＋P6 硬檢查） | build_appeal_draft：每筆核減醫令獨立生成四段（①案情摘要/②醫療必要性/③規則依據/④病歷佐證）；字數上限依官方問答集 Q15（每欄 1000／合計 2000）、裁剪優先 ④→②（C4，①③骨架不動）；P6 不申覆強制填 0 為 pure function 硬檢查（C3/Q13）、申復點數≤核減上界（D-15）；消費審核軌跡 JSON（採用/編輯後採用敘述，D-08）；輸出 申復草稿_{案件流水號}.md ＋ appeal_{流水號}.json（C7，含 p1-p9 醫令段欄位）；純組裝層無 LLM；24 新測試，全套件 176 passed / 5 skipped |
 | 2026-08-03 | Phase 8 完成：五層測試補齊（LLM 金標準 30 組＋端到端 3 案例）＋E2E-01 修正 | eval/gold_standard.py（GoldCase/load/evaluate，judge_fn 可注入）＋llm_gold_standard_30.json（支持12/部分支持9/無記載9）＋scripts/replay_gold_standard.py（真實 LLM 回放 CLI，health guard）；pipeline.run_case_pipeline 單一入口（比對→補強報告＋審核軌跡→逐筆申復草稿，注入層可替換＝真實樣本替換空間）；E2E-01：classify_support 任一『部分支持』→ 薄弱（原歸充分使薄弱不可達）；21 新測試，全套件 197 passed / 5 skipped |
+| 2026-08-04 | 全項目審查（對照 Cloud HIS／Local Gateway 目標架構）寫入 deepflash4improve.md 第七節 | 4 個平行只讀子代理＋pytest 全量回放；舊 P0-1/P0-2/P1-3/P1-4 確認已修，新發現 P0-1 server.py 假邏輯、P0-2 flask 依賴漂移、P0-3 PHI 輸出未 gitignore、P1-1~P1-5；並產出架構差距矩陣（引擎＝大腦已備，服務外殼與 Local Gateway 全空白） |
+| 2026-08-04 | P0-2：pyproject.toml 加回 flask>=3.0＋uv lock（3.1.3） | P1-6「清未用依賴」誤判 flask 未使用而移除，但 server.py:18 實際 import；乾淨環境 `uv sync` 後啟動直接 ImportError，README 啟動說明失配 |
+| 2026-08-04 | **P1-1（經裁示升級為 P0）：全「待人工」不得歸為「裸奔」** | LLM 逾時/解析失敗降級為 VERDICT_MANUAL，但 classify_support 的 else 分支把「全部待人工」歸為 SUPPORT_NONE — 系統故障偽裝成業務結論。後果：完整病歷因 LLM 逾時被判「裸奔、核減風險極高」，醫師照著補強**不存在的缺漏**。改回 `(None, True)`（待判定）；models.py 載明 None 的兩種成因（以 rule_found 分辨）；報告新增「⏳ 待判定」徽章（原兩種成因都印「❓ 查無規則」）。與 D-06/P0-2「DB 故障 ≠ 查無規則」**同源原則：系統故障必須與業務結論可區分** |
+| 2026-08-04 | 測試修正：`test_classify_support_manual_flags_review` 原斷言 `== SUPPORT_NONE` | 該測試把 bug 鎖進規格（隔壁 `test_classify_support_empty_is_none` 名字說 None、斷言卻是「裸奔」）；全綠證明的是「行為沒變」而非「行為正確」。改為斷言 `is None`，另補「待人工混合有效判定仍正常分級」與報告徽章不混淆的回歸測試 |
+| 2026-08-04 | **P0-1：server.py 兩端點接真實引擎（採選項 C — 新增預審入口）** | 原 `/api/sampling/audit` 以硬編碼關鍵字 if/else 判定支持度、未呼叫引擎——比「沒接線」更危險（會動、會回 JSON、會給三級分類，但結論全屬虛構）；`/api/appeal/generate` 模板拼接四段，其中「規則依據」把醫令碼代入固定句型＝**為任何醫令捏造法規依據**，字數檢查亦用錯誤的「合計 2000」。選項 C：pipeline.py 新增 `run_presubmission_check()`＋`PresubmissionResult`（唯讀、不寫檔），對應架構圖 Review Service／Appeal Service 分離，Phase 9 服務化可直接沿用 |
+| 2026-08-04 | 假資料本身即錯誤：示範資料稱 `64140C` 為「手腕韌帶縫合術」，規則庫實際為「甲床與手指重建術」 | 接上真實規則庫後才顯現；示範時無人會比對此欄，正是「假邏輯看似可用」的具體危害 |
+| 2026-08-04 | server.py 安全預設＋入參校驗 | 原 `host='0.0.0.0'` + `debug=True` ＝無認證對全網卡開放且例外回顯堆疊，而本服務接觸病歷資料。改綁 127.0.0.1、debug=False（`ELC_SERVER_*` 可覆寫）；新增統一 `@app.errorhandler` 脫敏、入參型別/長度校驗（SOAP ≤10KB、識別欄位 ≤200 字，部分回應 P1-5）；`RuleRepositoryError` → HTTP 503（不偽裝成「查無規則」） |
+| 2026-08-04 | 前端 static/index.html 同步 API 契約 | 徽章原停留在案例清單硬編碼值且**從不更新**（後端判定正確也顯示假值）；改以引擎結果為準並新增「⏳ 待判定」分支；`appeal_sections` 由物件改陣列、字數改顯示 p8/p9 各別計數（Q15 各 ≤1000）；新增 `flattenEvidence()` 將多源證據轉為 API 要求的字串陣列 |
+| 2026-08-04 | 移除 .planning/HANDOFF.json（內容保留於 94cb9e1） | 其唯一阻塞「等使用者提供 bug 線索」已由全項目審查取代——問題已定位到行號，不需再等線索 |
+| 2026-08-04 | 全套件 **207 passed / 1 skipped**（原 201），新增 6 測試、無回歸 | P0-2／P1-1／P0-1 三項修復完成；P0-3 經使用者決定暫緩（倉庫稍後轉 private） |
