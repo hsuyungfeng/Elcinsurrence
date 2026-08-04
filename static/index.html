@@ -402,7 +402,34 @@
         })
       });
       const data = await res.json();
+      if (!res.ok) {
+        document.getElementById('sAdviceBox').innerText =
+          data.message || '預審失敗，請稍後再試。';
+        return;
+      }
       document.getElementById('sAdviceBox').innerText = data.reinforcement_advice;
+
+      // 徽章以引擎實際結果為準（原本停留在清單的硬編碼值）。
+      // support_level=null 有兩種成因，必須分辨（P1-1）：
+      // undetermined=true → 系統未能判定；否則為查無規則。
+      // 兩者都不得顯示為「裸奔」。
+      const badge = document.getElementById('sSupportBadge');
+      if (data.support_level === '充分') {
+        badge.innerText = '✅ 充分';
+        badge.className = 'badge badge-sufficient';
+      } else if (data.support_level === '薄弱') {
+        badge.innerText = '⚠️ 薄弱';
+        badge.className = 'badge badge-weak';
+      } else if (data.support_level === '裸奔') {
+        badge.innerText = '❌ 裸奔';
+        badge.className = 'badge badge-none';
+      } else if (data.undetermined) {
+        badge.innerText = '⏳ 待判定';
+        badge.className = 'badge badge-weak';
+      } else {
+        badge.innerText = '❓ 查無規則';
+        badge.className = 'badge badge-weak';
+      }
     }
 
     function selectAppealCase(id) {
@@ -432,17 +459,42 @@
           order_name: currentSelectedCase.order_name,
           deduct_amount: currentSelectedCase.deduct_amount,
           deduction_reason: currentSelectedCase.deduction_reason,
-          evidence: currentSelectedCase.multisource_evidence
+          // ④ 素材＝醫師採用的補強敘述（字串陣列）。多源證據摘要暫以
+          // 文字帶入；正式流程應改為 Phase 6 審核軌跡的採用項。
+          evidence: flattenEvidence(currentSelectedCase.multisource_evidence)
         })
       });
       const data = await res.json();
+      if (!res.ok) {
+        alert(data.message || '草稿生成失敗');
+        return;
+      }
 
-      document.getElementById('aSec1').value = data.appeal_sections.section_1;
-      document.getElementById('aSec2').value = data.appeal_sections.section_2;
-      document.getElementById('aSec3').value = data.appeal_sections.section_3;
-      document.getElementById('aSec4').value = data.appeal_sections.section_4;
+      // appeal_sections 為 [{key,title,text}]，依 D10 四段順序回傳。
+      const boxes = ['aSec1', 'aSec2', 'aSec3', 'aSec4'];
+      boxes.forEach((id, i) => {
+        const sec = data.appeal_sections[i];
+        document.getElementById(id).value = sec ? sec.text : '';
+      });
 
-      document.getElementById('aCharCount').innerText = `${data.total_char_count} / 2000 字`;
+      // 官方問答集 Q15：p8/p9 各 ≤1000（非合計 2000）。
+      const warn = data.xml_p8_p9_valid ? '' : '　⚠️ 超過欄位字數上限';
+      document.getElementById('aCharCount').innerText =
+        `p8 ${data.reason1.length} / 1000　p9 ${data.reason2.length} / 1000${warn}`;
+      if (!data.rule_found) {
+        document.getElementById('aSec3').value =
+          '（規則庫查無此醫令條文，請人工補充依據）\n' +
+          document.getElementById('aSec3').value;
+      }
+    }
+
+    function flattenEvidence(ev) {
+      if (!ev) return [];
+      const out = [];
+      (ev.images || []).forEach(i => out.push(`影像 ${i.name}：${i.report}`));
+      (ev.labs || []).forEach(l => out.push(`檢驗 ${l.name}：${l.result}`));
+      (ev.cloud_sync || []).forEach(c => out.push(`${c.source}：${c.note}`));
+      return out;
     }
 
     // Init

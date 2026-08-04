@@ -16,6 +16,7 @@ from elc_audit_engine.comparator.models import (
     SUPPORT_NONE,
     SUPPORT_SUFFICIENT,
     SUPPORT_WEAK,
+    VERDICT_MANUAL,
     VERDICT_PARTIAL,
     VERDICT_SUPPORTED,
     VERDICT_UNSUPPORTED,
@@ -24,7 +25,7 @@ from elc_audit_engine.comparator.models import (
 )
 from elc_audit_engine.generators import STATUS_ADOPT, STATUS_ADOPT_EDITED
 from elc_audit_engine.parsers.models import DeductionRecord, OrderRecord, SOAPDocument, SubmissionCase
-from elc_audit_engine.pipeline import run_case_pipeline
+from elc_audit_engine.pipeline import run_case_pipeline, run_presubmission_check
 from elc_audit_engine.record_aggregator.models import (
     ImagingRecord,
     LabRecord,
@@ -307,3 +308,75 @@ def test_e2e_appeal_rule_error_degraded_per_record(tmp_path):
     assert result.report_path.endswith("病歷補強報告_M220518024.md")
     appeal_md = open(result.appeal_paths[0][0], encoding="utf-8").read()
     assert "查無規則依據，建議人工查核" in appeal_md
+
+
+# ------------------------------------------------- 事前預審（P0-1 選項 C）
+
+def test_presubmission_check_is_read_only(tmp_path):
+    """預審不得寫出任何檔案（與 run_case_pipeline 的關鍵差異）。
+
+    預審發生在送件前，此時尚無核減資料；若誤用整案管線會產出申復草稿
+    並寫檔，是 P0-1 的成因之一。
+    """
+    before = set(os.listdir(tmp_path))
+    result = run_presubmission_check(
+        _case(),
+        _soap_doc(),
+        _timeline(),
+        rule_lookup=lambda code: _rule(code),
+        judge_fn=lambda item, ev: Judgment(VERDICT_SUPPORTED, "局部腫脹、壓痛", "有記載"),
+        narrative_fn=_narrative_fn(),
+    )
+    assert set(os.listdir(tmp_path)) == before
+    assert result.comparison.order_judgments[0].support_level == SUPPORT_SUFFICIENT
+    assert result.undetermined_orders == ()
+
+
+def test_presubmission_check_flags_undetermined_not_none_support():
+    """P1-1：判定全部待人工 → support_level=None 且列入 undetermined_orders。
+
+    絕不可回報為裸奔——那會讓醫師針對一個從未成功執行的判定，去補強
+    不存在的缺漏。
+    """
+    result = run_presubmission_check(
+        _case(),
+        _soap_doc(),
+        _timeline(),
+        rule_lookup=lambda code: _rule(code),
+        judge_fn=lambda item, ev: Judgment(VERDICT_MANUAL, "", "LLM 逾時"),
+        narrative_fn=_narrative_fn(),
+    )
+    oj = result.comparison.order_judgments[0]
+    assert oj.support_level is None
+    assert oj.support_level != SUPPORT_NONE
+    assert oj.manual_review is True
+    assert result.undetermined_orders == ("64140C",)
+
+
+def test_presubmission_check_propagates_rule_repository_error():
+    """D-06/P0-2：規則庫故障穿透，不得降級為「查無規則」。"""
+    def _boom(code):
+        raise RuleRepositoryError("db is gone")
+
+    with pytest.raises(RuleRepositoryError):
+        run_presubmission_check(
+            _case(),
+            _soap_doc(),
+            None,
+            rule_lookup=_boom,
+            judge_fn=lambda item, ev: Judgment(VERDICT_SUPPORTED, "", ""),
+        )
+
+
+def test_presubmission_check_without_timeline_degrades():
+    """病歷缺席（C5）：只用當次 SOAP，標記 records_degraded。"""
+    result = run_presubmission_check(
+        _case(),
+        _soap_doc(),
+        None,
+        rule_lookup=lambda code: _rule(code),
+        judge_fn=lambda item, ev: Judgment(VERDICT_UNSUPPORTED, "", "未記載"),
+        narrative_fn=_narrative_fn(),
+    )
+    assert result.comparison.records_degraded is True
+    assert result.comparison.order_judgments[0].support_level == SUPPORT_NONE

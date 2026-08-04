@@ -1,5 +1,16 @@
 """端到端管線（Phase 8）：比對 → 病歷補強報告 → 申復草稿 的單一入口。
 
+本模組提供兩條互不相同的路徑，對應目標架構圖 Cloud HIS 的兩個服務：
+
+- `run_presubmission_check`（事前預審／Review Service）：送件前檢查病歷
+  是否足以支撐醫令。**唯讀**——不產生申復草稿、不寫任何檔案；此時尚無
+  核減資料。
+- `run_case_pipeline`（事後申復／Appeal Service）：已收到核減後，比對 →
+  補強報告 → 逐筆申復草稿，並寫出檔案。
+
+兩者共用 Phase 5 `compare_case`，故判定語意一致；分開的原因是產出與副
+作用不同，混用會讓預審意外寫出申復草稿（P0-1）。
+
 `run_case_pipeline` 把 Phase 5（比對）→ Phase 6（補強報告＋審核軌跡）→
 Phase 7（申復草稿）接成可測試、可替換的一條管線（C6-4 端到端案例的
 執行面；C6-5 真實樣本回放時只換注入層，不動管線）。
@@ -58,6 +69,67 @@ class PipelineResult:
     tracking_path: str
     appeal_paths: tuple[tuple[str, str], ...] = ()
     appeal_drafts: tuple[AppealDraft, ...] = ()
+
+
+@dataclass(frozen=True)
+class PresubmissionResult:
+    """事前預審輸出（唯讀，無檔案副作用）。
+
+    Attributes:
+        comparison: Phase 5 比對結果（逐醫令三級分類＋候選補強）。
+        undetermined_orders: 系統未能判定的醫令代碼（support_level=None
+            且 rule_found=True，P1-1「待判定」）。呼叫端**必須**與「裸奔」
+            分開呈現：前者是系統故障，後者才是病歷確實未記載。
+    """
+
+    comparison: CaseComparisonResult
+    undetermined_orders: tuple[str, ...] = ()
+
+
+def run_presubmission_check(
+    case: SubmissionCase,
+    soap_doc: SOAPDocument | None,
+    timeline: PatientTimeline | None = None,
+    *,
+    rule_lookup: RuleLookupFn | None = None,
+    judge_fn: JudgeFn | None = None,
+    narrative_fn: NarrativeFn | None = None,
+) -> PresubmissionResult:
+    """事前預審：送件前評估病歷對醫令的支持度（Review Service 入口）。
+
+    與 `run_case_pipeline` 的差異：預審時尚未有核減資料，故不生成申復
+    草稿、不寫檔案。純唯讀，可安全供 HTTP 端點呼叫。
+
+    Args:
+        case: 申報案件（含待預審醫令）。
+        soap_doc: 當次 SOAP 分段結果（可 None）。
+        timeline: 半年病史時間軸；None＝病歷缺席降級（C5），結果
+            `comparison.records_degraded=True`。
+        rule_lookup: 規則查詢函式，預設 `get_rule`（可注入替身）。
+        judge_fn: 判定函式（可注入替身，D-08；測試零 LLM 依賴）。
+        narrative_fn: 候選補強生成函式（可注入替身）。
+
+    Returns:
+        PresubmissionResult：比對結果＋待判定醫令清單。
+
+    Raises:
+        RuleRepositoryError: 規則庫 DB 故障（D-06/P0-2 穿透不吞——
+            infra 故障不得偽裝成「查無規則」）。
+    """
+    comparison = compare_case(
+        case,
+        soap_doc,
+        timeline,
+        rule_lookup=rule_lookup,
+        judge_fn=judge_fn,
+        narrative_fn=narrative_fn,
+    )
+    undetermined = tuple(
+        oj.order_code
+        for oj in comparison.order_judgments
+        if oj.rule_found and oj.support_level is None
+    )
+    return PresubmissionResult(comparison=comparison, undetermined_orders=undetermined)
 
 
 def _rule_text_for(rule: object) -> tuple[str | None, str | None]:
