@@ -69,8 +69,10 @@
 - [ ] 雲端病歷 Provider 接 doctor-toolbox（cloud_sync / his_connection 模式）
 - [~] Flask API 化，供 HIS 呼叫 — **雛形已接真實引擎**（2026-08-04，P0-1）：
       `/api/sampling/audit` → `run_presubmission_check`、`/api/appeal/generate` → `build_appeal_draft`；
-      安全預設（綁本機／debug=False／錯誤脫敏／入參校驗）。**尚缺**：認證授權、
-      案件狀態機、任務佇列、CSV 批次匯入端點
+      安全預設（綁本機／debug=False／錯誤脫敏／入參校驗）。
+      **批次匯入已上線**（2026-08-04）：`/api/sampling/import`、`/api/appeal/import`
+      （CSV＋PDF＋JPEG 影像 OCR，見 ingest 模組）。**尚缺**：認證授權、
+      案件狀態機、任務佇列
 - [ ] 與 Local Agent / NHI_EIIAPI 上傳流程銜接（見 電子抽審.md 第四節）
 - [ ] Package Builder：PDF/DICOM/申復 XML 序列化（目前僅出 .md/.json）
 - [ ] Local Gateway 七元件（Heartbeat／Job Downloader／AES 快取／NHI Adapter／
@@ -82,6 +84,7 @@
 
 - [x] ~~真實樣本：申報 XML 完整檔~~ → **已取得** `TOTFA.xml`（633 案／2,624 醫令／Big5／348 位病患，已 gitignore）
 - [ ] 真實樣本：**申復明細資料檔實體檔**（欄位定義已取得，見下）、核減清單/醫令改支檔、門診抽樣樣本檔（CSV）、病歷 SOAP、過去人工申復案例
+- [ ] 抽樣清單**官方欄位契約**樣本對照（自訂 8 欄契約已上線 2026-08-04，待官方/實際 CSV 核對調整）；紙本掃描樣本（JPEG/PDF）驗證 OCR 品質
 - [ ] `.embed_cache/` 既有嵌入向量是否重用（評估於 M2）
 - [x] ~~核減代碼表（健保署核減理由代碼清單）來源確認~~ → **線索已定位**：申復明細資料檔第 17 欄「院所申復事項」為 `代碼-說明` 複合格式（範例 `A-檢驗結果確實於時效內上傳`），該代碼即核減理由代碼；完整代碼表待取得實體檔或 VPN HELP 說明後彙整
 - [ ] 申復明細資料檔的 reader 細節：分隔符（CSV／Tab／定寬）、有無表頭列、編碼（推測 Big5）、檔名規則 — 欄位順序已知（18 欄，見 `.planning/phases/03-parsers/03-CONTEXT.md` D-14d）
@@ -126,3 +129,4 @@
 | 2026-08-04 | 全套件 **207 passed / 1 skipped**（原 201），新增 6 測試、無回歸 | P0-2／P1-1／P0-1 三項修復完成；P0-3 經使用者決定暫緩（倉庫稍後轉 private） |
 | 2026-08-04 | 清理 GET 案例端點殘留假數據＋前端徽章以引擎為準 | 原假邏輯只清了一半：`/api/sampling/cases`、`/api/appeal/cases` 仍回傳硬編碼 support_level 且 64140C 誤標「手腕韌帶縫合術」（規則庫實際為「甲床與手指重建術」——同一教訓的殘留，`static/index.html` 靜態文案也誤標）。改為：案例加 `demo: true` 標記、名稱以規則庫為準、前端列表徽章一律「待審」、點擊後才以引擎結果覆寫（含三態＋待判定） |
 | 2026-08-04 | `.gitignore` 補 `data/output/*` 與 `.planning/HANDOFF.json` | P0-3 的一行成本緩解：輸出報告/審核軌跡/申復草稿含 PHI，轉 private 前仍可能被 `git add .` 提交；HANDOFF.json 由 gsd 工具重建，移出版控後需 ignore 防止再次進版 |
+| 2026-08-04 | **批次匯入上線：抽樣/核減清單 CSV＋PDF＋JPEG 影像（新 ingest 模組）** | 使用者需求「處理 digital data and paper--image」。`ingest/media.py`：型別偵測＋本機系統工具（pdftotext／pdftoppm／tesseract，D2 不出本機）提取文字；`ingest/sampling.py`：抽樣清單自訂欄位契約（8 欄，使用者裁示）；`ingest/ocr_rows.py`：以醫令代碼（5 數字+1 字母）為錨點的行解析，**誠實降級不猜欄位**（其餘欄位留空供人工補齊，每筆附原始辨識行）。`/api/sampling/import`、`/api/appeal/import`：multipart 上傳（10MB 上限、uuid 暫存防路徑穿越、解析後即刪）、匯入成功後 GET 清單優先回傳導入資料、落盤 `data/uploads/*.json`（gitignore，重啟自動載入）。核減清單 PDF/影像**誠實降級**：18 欄結構無法由 OCR 可靠重建，回 OCR 文字預覽並提示改用 CSV（P0-1 教訓：錯誤資料比沒有資料更危險）。17 新測試（tests/test_ingest.py），全套件 **224 passed / 1 skipped**，無回歸 |

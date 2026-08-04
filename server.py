@@ -12,12 +12,25 @@
    - 生成 4 段式申復理由草稿 (≤2000字) 與申復 XML 欄位
 """
 
+import json
 import os
+import uuid
+from datetime import datetime
+from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 
 from elc_audit_engine.generators import build_appeal_draft
+from elc_audit_engine.ingest import (
+    MediaExtractError,
+    SamplingImportError,
+    detect_media_type,
+    extract_text,
+    parse_sampling_csv,
+    parse_sampling_ocr_text,
+)
 from elc_audit_engine.parsers import parse_soap_text
+from elc_audit_engine.parsers.deduction import DeductionFileError, parse_deduction_file
 from elc_audit_engine.parsers.models import (
     DeductionRecord,
     OrderRecord,
@@ -44,9 +57,18 @@ class ApiError(Exception):
         self.status = status
 
 
+class UploadFileError(Exception):
+    """上傳檔案不合法（副檔名／大小）。"""
+
+
 @app.errorhandler(ApiError)
 def _handle_api_error(exc: ApiError):
     return jsonify({"status": "error", "message": exc.message}), exc.status
+
+
+@app.errorhandler(UploadFileError)
+def _handle_upload_error(exc: UploadFileError):
+    return jsonify({"status": "error", "message": str(exc)}), 400
 
 
 @app.errorhandler(Exception)
@@ -68,6 +90,119 @@ def _clean_str(data: dict, key: str, *, required: bool = False, max_len: int = _
     return value
 
 
+# ==============================================================================
+# 批次匯入（CSV / PDF / JPEG 影像）— 2026-08-04 新增
+# ==============================================================================
+_UPLOAD_DIR = os.path.join("data", "uploads")
+_RAW_DIR = os.path.join(_UPLOAD_DIR, "raw")
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+_ALLOWED_EXTS = {".csv", ".pdf", ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
+
+# 導入後案件清單（None＝尚未導入，回傳示範資料）。落盤於 data/uploads/*.json，
+# server 啟動時載入最新一份，重啟不丟失。
+_sampling_cases: list[dict] | None = None
+_appeal_cases: list[dict] | None = None
+
+
+def _save_upload(file_storage) -> tuple[str, str]:
+    """儲存上傳檔到 data/uploads/raw/（uuid 檔名，防路徑穿越 P1-3）。
+
+    Returns:
+        (儲存路徑, 原始檔名)。
+    """
+    filename = (file_storage.filename or "").strip()
+    ext = Path(filename).suffix.lower()
+    if ext not in _ALLOWED_EXTS:
+        raise UploadFileError(f"不支援的檔案類型: {ext or '(無副檔名)'}（支援 CSV / PDF / JPEG 等）")
+    os.makedirs(_RAW_DIR, exist_ok=True)
+    dest = os.path.join(_RAW_DIR, f"{uuid.uuid4().hex}{ext}")
+    size = 0
+    with open(dest, "wb") as out:
+        while True:
+            chunk = file_storage.stream.read(64 * 1024)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > _MAX_UPLOAD_BYTES:
+                out.close()
+                os.remove(dest)
+                raise UploadFileError("檔案超過 10MB 上限")
+            out.write(chunk)
+    return dest, filename
+
+
+def _save_cases_json(kind: str, cases: list[dict]) -> str:
+    """把導入的案件清單落盤 data/uploads/{kind}_{timestamp}.json。"""
+    os.makedirs(_UPLOAD_DIR, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(_UPLOAD_DIR, f"{kind}_{ts}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(cases, f, ensure_ascii=False, indent=2)
+    return path
+
+
+def _load_latest_cases(kind: str) -> list[dict] | None:
+    """載入最新一份導入清單；無檔案或損毀回 None（回退示範資料）。"""
+    files = sorted(Path(_UPLOAD_DIR).glob(f"{kind}_*.json"))
+    if not files:
+        return None
+    try:
+        with open(files[-1], encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+_sampling_cases = _load_latest_cases("sampling")
+_appeal_cases = _load_latest_cases("appeal")
+
+
+def _to_sampling_case(idx: int, rec) -> dict:
+    """SamplingCaseRecord → 前端列表契約 dict。"""
+    return {
+        "id": f"SAMP-{idx:04d}",
+        "demo": False,
+        "case_seq": rec.case_seq or str(idx),
+        "record_no": rec.record_no,
+        "patient_name": rec.patient_name,
+        "order_code": rec.order_code,
+        "order_name": rec.order_name,
+        "visit_date": rec.visit_date,
+        "clinic": rec.clinic,
+        "soap": rec.soap_text or "",
+        "support_level": None,
+        "missing_reason": None,
+        "source": rec.source,
+        "ocr_line": rec.ocr_line,
+    }
+
+
+def _to_appeal_case(idx: int, rec) -> dict:
+    """DeductionRecord → 前端列表契約 dict（醫令名稱以規則庫為準）。"""
+    name = None
+    try:
+        rule = get_rule(rec.order_code or "")
+        if rule.found:
+            name = rule.name
+    except RuleRepositoryError:
+        pass  # 名稱缺失不阻斷導入，前端以代碼顯示
+    return {
+        "id": f"APP-{idx:04d}",
+        "demo": False,
+        "case_seq": rec.case_seq or str(idx),
+        "record_no": None,
+        "patient_name": None,
+        "order_code": rec.order_code,
+        "order_name": name or rec.order_code,
+        "deduct_amount": rec.non_reimbursed_amount,
+        "deduction_reason": rec.deduction_reason or rec.institution_note or "",
+        "visit_date": rec.visit_date,
+        "soap": "",
+        "multisource_evidence": {"labs": [], "images": [], "cloud_sync": []},
+        "source": "csv",
+    }
+
+
 @app.route('/')
 def index():
     return send_from_directory('static', 'index.html')
@@ -83,7 +218,10 @@ def get_sampling_cases():
     demo=true：無真實資料源（CSV 匯入）前的 UI 展示用；
     support_level 欄位僅為版面初始值，判定一律以 /api/sampling/audit
     引擎結果為準（前端已不直接顯示此欄位，P1-1/P0-1 教訓）。
+    已有導入清單（POST /api/sampling/import）時優先回傳導入資料。
     """
+    if _sampling_cases is not None:
+        return jsonify(_sampling_cases)
     return jsonify([
         {
             "id": "SAMP-001",
@@ -191,6 +329,76 @@ def audit_sampling_case():
     })
 
 
+@app.route('/api/sampling/import', methods=['POST'])
+def import_sampling_cases():
+    """批次匯入抽樣清單：CSV（digital）／PDF／JPEG 影像（paper→OCR）。
+
+    CSV 走自訂欄位契約（ingest.sampling，2026-08-04 使用者裁示）；PDF／影像
+    經本機系統工具（pdftotext/pdftoppm/tesseract，D2 不出本機）提取文字後
+    以 OCR 行解析——僅結構化醫令代碼＋名稱，其餘欄位留空供前端人工補齊
+    （誠實降級：OCR 猜欄位比留空更危險）。匯入成功後覆蓋案例清單並落盤。
+    """
+    global _sampling_cases
+    file = request.files.get('file')
+    if file is None or not (file.filename or '').strip():
+        raise ApiError('缺少上傳檔案（multipart 欄位名 file）')
+    try:
+        path, filename = _save_upload(file)
+    except UploadFileError as exc:
+        raise ApiError(str(exc))
+
+    try:
+        media_type = detect_media_type(filename)
+        if media_type == 'csv':
+            with open(path, 'rb') as f:
+                result = parse_sampling_csv(f.read())
+            source = 'csv'
+        else:
+            text, _tool = extract_text(path, media_type=media_type)
+            result = parse_sampling_ocr_text(text)
+            source = 'ocr'
+    except (MediaExtractError, SamplingImportError) as exc:
+        app.logger.warning('sampling import failed: %s', exc)
+        raise ApiError(f'匯入失敗：{exc}')
+    finally:
+        os.remove(path)  # 暫存檔即時清除（PHI 最小化）
+
+    cases = [
+        _to_sampling_case(i, rec) for i, rec in enumerate(result.records, start=1)
+    ]
+    rejected = [
+        {'row': r.row_number, 'reason': r.reason, 'raw': list(r.raw)}
+        for r in result.rejected
+    ]
+
+    if not cases:
+        return jsonify({
+            'status': 'error',
+            'media_type': media_type,
+            'imported': 0,
+            'rejected': len(rejected),
+            'rejected_rows': rejected,
+            'message': (
+                '未匯入任何案件：找不到可識別的醫令代碼（OCR 品質不足，'
+                '請改以 CSV 匯出後上傳）。'
+                if source == 'ocr'
+                else '未匯入任何案件（請檢查 CSV 欄位契約：需含「醫令代碼」）。'
+            ),
+        }), 400
+
+    saved = _save_cases_json('sampling', cases)
+    _sampling_cases = cases
+    return jsonify({
+        'status': 'success',
+        'media_type': media_type,
+        'source': source,
+        'imported': len(cases),
+        'rejected': len(rejected),
+        'rejected_rows': rejected,
+        'saved_to': saved,
+    })
+
+
 # ==============================================================================
 # 2. 核減事後申復 API (多源證據補強: 影像/檢驗/雲端病歷)
 # ==============================================================================
@@ -201,7 +409,10 @@ def get_appeal_cases():
     demo=true：無真實資料源（核減明細 CSV 匯入）前的 UI 展示用。
     醫令名稱一律以規則庫為準（64140C＝甲床與手指重建術；原示範資料
     誤標為「手腕韌帶縫合術」，progress.md 2026-08-04 已記錄此教訓）。
+    已有導入清單（POST /api/appeal/import）時優先回傳導入資料。
     """
+    if _appeal_cases is not None:
+        return jsonify(_appeal_cases)
     return jsonify([
         {
             "id": "APP-001",
@@ -342,6 +553,75 @@ def generate_appeal_draft():
         ),
         "over_limit": draft.over_limit,
         "validation_errors": list(draft.validation_errors),
+    })
+
+
+@app.route('/api/appeal/import', methods=['POST'])
+def import_appeal_cases():
+    """批次匯入核減刪減醫令清單。
+
+    CSV：走 D-14d 18 欄 parser（parse_deduction_file）。
+    PDF／影像（紙本）：**誠實降級**——18 欄結構無法由 OCR 可靠重建，提取
+    文字供參考並提示改用 CSV；不自動產生可能錯誤的記錄（P0-1 教訓：
+    錯誤的資料比沒有資料更危險）。
+    """
+    global _appeal_cases
+    file = request.files.get('file')
+    if file is None or not (file.filename or '').strip():
+        raise ApiError('缺少上傳檔案（multipart 欄位名 file）')
+    try:
+        path, filename = _save_upload(file)
+    except UploadFileError as exc:
+        raise ApiError(str(exc))
+
+    try:
+        media_type = detect_media_type(filename)
+        if media_type != 'csv':
+            text, tool = extract_text(path, media_type=media_type)
+            return jsonify({
+                'status': 'partial',
+                'media_type': media_type,
+                'tool': tool,
+                'imported': 0,
+                'message': (
+                    '紙本核減清單（PDF／影像）無法自動結構化為 18 欄，'
+                    '請以 CSV 匯出後上傳，或改用逐筆新增。'
+                ),
+                'extracted_text_preview': text[:500],
+            })
+        result = parse_deduction_file(path)
+    except (MediaExtractError, DeductionFileError) as exc:
+        app.logger.warning('appeal import failed: %s', exc)
+        raise ApiError(f'匯入失敗：{exc}')
+    finally:
+        if os.path.exists(path):
+            os.remove(path)  # 暫存檔即時清除（PHI 最小化）
+
+    cases = [_to_appeal_case(i, rec) for i, rec in enumerate(result.records, start=1)]
+    rejected = [
+        {'row': r.row_number, 'reason': r.reason, 'raw': list(r.raw)}
+        for r in result.rejected
+    ]
+    if not cases:
+        return jsonify({
+            'status': 'error',
+            'media_type': 'csv',
+            'imported': 0,
+            'rejected': len(rejected),
+            'rejected_rows': rejected,
+            'message': '未匯入任何案件（請檢查核減明細欄位數是否為 18 欄）。',
+        }), 400
+
+    saved = _save_cases_json('appeal', cases)
+    _appeal_cases = cases
+    return jsonify({
+        'status': 'success',
+        'media_type': 'csv',
+        'source': 'csv',
+        'imported': len(cases),
+        'rejected': len(rejected),
+        'rejected_rows': rejected,
+        'saved_to': saved,
     })
 
 

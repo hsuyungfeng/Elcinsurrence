@@ -187,8 +187,9 @@
     <!-- Sidebar Case List -->
     <aside class="sidebar">
       <div class="sidebar-header">
-        <div class="sidebar-title" id="sidebarListTitle">事前預審抽樣清單 (CSV)</div>
-        <button style="background: rgba(6,182,212,0.15); border: 1px solid var(--accent-cyan); color: #38bdf8; font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer;">📂 匯入 CSV</button>
+        <div class="sidebar-title" id="sidebarListTitle">事前預審抽樣清單</div>
+        <button style="background: rgba(6,182,212,0.15); border: 1px solid var(--accent-cyan); color: #38bdf8; font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer;" onclick="document.getElementById('importFile').click()" title="匯入 CSV（digital）／PDF／JPEG 掃描影像（paper→OCR）">📂 匯入 CSV/PDF/影像</button>
+        <input type="file" id="importFile" accept=".csv,.pdf,.jpg,.jpeg,.png,.tif,.tiff,.bmp,.webp" style="display:none;" onchange="importCases(this.files[0])">
       </div>
       <div class="case-list" id="caseList"></div>
     </aside>
@@ -333,9 +334,35 @@
       document.getElementById('workflow1View').className = `view-container ${mode === 'sampling' ? 'active' : ''}`;
       document.getElementById('workflow2View').className = `view-container ${mode === 'appeal' ? 'active' : ''}`;
       
-      document.getElementById('sidebarListTitle').innerText = mode === 'sampling' ? '事前預審抽樣清單 (CSV)' : '核減刪減醫令清單';
+      document.getElementById('sidebarListTitle').innerText = mode === 'sampling' ? '事前預審抽樣清單' : '核減刪減醫令清單';
 
       loadCaseData();
+    }
+
+    async function importCases(file) {
+      if (!file) return;
+      const kind = currentMode === 'sampling' ? 'sampling' : 'appeal';
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`/api/${kind}/import`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) {
+        alert('匯入失敗：' + (data.message || '請稍後再試'));
+        return;
+      }
+      if (data.status === 'partial') {
+        alert(data.message + (data.extracted_text_preview ? '\n\n【OCR 預覽】\n' + data.extracted_text_preview : ''));
+        return;
+      }
+      let msg = `匯入完成：${data.imported} 筆（來源 ${data.source}）`;
+      if (data.rejected > 0) {
+        const reasons = (data.rejected_rows || []).slice(0, 5)
+          .map(r => `第 ${r.row} 列：${r.reason}`).join('\n');
+        msg += `\n拒絕 ${data.rejected} 筆：\n${reasons}`;
+      }
+      alert(msg);
+      document.getElementById('importFile').value = '';
+      await loadCaseData();
     }
 
     async function loadCaseData() {
@@ -386,7 +413,7 @@
 
       document.getElementById('sOrderName').innerText = `${currentSelectedCase.order_code} - ${currentSelectedCase.order_name}`;
       document.getElementById('sSoapInput').value = currentSelectedCase.soap;
-      document.getElementById('sMissingReason').innerText = currentSelectedCase.missing_reason;
+      document.getElementById('sMissingReason').innerText = currentSelectedCase.missing_reason || '';
 
       const badge = document.getElementById('sSupportBadge');
       // 初始一律「待審」——清單不再帶未經驗證的判定值，引擎結果由
@@ -406,7 +433,7 @@
           order_code: currentSelectedCase.order_code,
           order_name: currentSelectedCase.order_name,
           soap_text: document.getElementById('sSoapInput').value,
-          missing_reason: currentSelectedCase.missing_reason
+          missing_reason: currentSelectedCase.missing_reason || ''
         })
       });
       const data = await res.json();
