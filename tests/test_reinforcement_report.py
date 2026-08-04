@@ -13,6 +13,7 @@ from elc_audit_engine.comparator.models import (
     SUPPORT_NONE,
     SUPPORT_SUFFICIENT,
     SUPPORT_WEAK,
+    VERDICT_MANUAL,
     VERDICT_SUPPORTED,
     VERDICT_UNSUPPORTED,
     CandidateNarrative,
@@ -138,6 +139,33 @@ def test_render_report_badges():
     assert "✅ 充分" in report
     assert "❌ 裸奔" in report
     assert "❓ 查無規則" in report
+
+
+def test_render_report_undetermined_badge_is_not_confused_with_others():
+    """P1-1：規則查到但判定全部待人工（LLM 故障）→「待判定」。
+
+    此態的 support_level 也是 None，但與「查無規則」（rule_found=False）
+    成因不同，必須分辨；更不得顯示為裸奔——否則醫師會照著一個系統故障
+    產生的「完全未記載」結論去補強不存在的缺漏。
+    """
+    comparison = CaseComparisonResult(
+        case_record_no="M220518024",
+        order_judgments=(
+            OrderJudgment(
+                order_code="64140C",
+                rule_found=True,
+                check_item=CheckItem(rule_text="規則全文"),
+                judgment=Judgment(VERDICT_MANUAL, "", "LLM 逾時"),
+                support_level=None,
+                manual_review=True,
+            ),
+        ),
+        manual_review_orders=("64140C",),
+    )
+    report = render_report(comparison)
+    assert "⏳ 待判定" in report
+    assert "❌ 裸奔" not in report
+    assert "❓ 查無規則" not in report
 
 
 def test_render_report_checkbox_narratives():

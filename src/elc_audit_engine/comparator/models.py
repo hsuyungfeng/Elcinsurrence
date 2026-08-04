@@ -61,7 +61,10 @@ class OrderJudgment:
         rule_source: 規則來源（payment/drug/unknown）。
         check_item: 檢核項（規則全文＋出處）；未知醫令時 None。
         judgment: 檢核項判定結果；未知醫令時 None。
-        support_level: 三級分類（充分/薄弱/裸奔）；未知醫令時 None。
+        support_level: 三級分類（充分/薄弱/裸奔）。None 有兩種成因，
+            以 rule_found 分辨：rule_found=False→未知醫令；
+            rule_found=True→判定全部「待人工」（LLM 故障降級，P1-1
+            「待判定」態）。None 一律不得當作裸奔呈現。
         manual_review: 是否有「待人工」判定（C5 降級，不阻斷）。
         note: 補充說明（未知醫令→「查無規則依據，建議人工查核」）。
         narratives: 候選補強敘述清單（僅薄弱/裸奔生成，0~3 條）。

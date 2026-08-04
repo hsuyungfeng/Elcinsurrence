@@ -38,9 +38,17 @@ _SUPPORT_BADGES = {
 }
 
 
-def _support_badge(level: str | None) -> str:
+def _support_badge(level: str | None, rule_found: bool = False) -> str:
+    """支持度徽章。
+
+    level=None 有兩種成因，必須分辨（P1-1）：
+    - rule_found=False：規則庫查無此醫令 →「查無規則」
+    - rule_found=True：規則有、但判定全部待人工（LLM 故障降級）
+      →「待判定」。絕不可顯示為裸奔或查無規則——兩者都會讓醫師
+      誤以為已完成判定。
+    """
     if level is None:
-        return "❓ 查無規則"
+        return "⏳ 待判定（系統未能判定，請人工複核）" if rule_found else "❓ 查無規則"
     return _SUPPORT_BADGES.get(level, level)
 
 
@@ -132,7 +140,7 @@ def render_report(comparison: CaseComparisonResult, timeline=None) -> str:
     for oj in comparison.order_judgments:
         lines.append(f"### {oj.order_code}" + (f"（序 {oj.order_seq}）" if oj.order_seq else ""))
         lines.append("")
-        lines.append(f"- 支持度：{_support_badge(oj.support_level)}")
+        lines.append(f"- 支持度：{_support_badge(oj.support_level, oj.rule_found)}")
         if oj.judgment is not None:
             lines.append(
                 f"- 判定：{_VERDICT_LABELS.get(oj.judgment.verdict, oj.judgment.verdict)}"

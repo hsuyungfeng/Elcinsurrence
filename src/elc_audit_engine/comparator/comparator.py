@@ -114,6 +114,9 @@ def compare_case(
 
         narratives: list[CandidateNarrative] = []
         if support_level in (SUPPORT_WEAK, SUPPORT_NONE):
+            # support_level=None（全部待人工，P1-1）不生成候選補強：判定
+            # 階段的 LLM 已失敗，補強階段沒有可靠的缺口可寫，再呼叫一次
+            # 只會是注定失敗的重試，且會讓「待判定」看起來像有具體缺漏。
             narratives = generate(check_item, evidence, support_level)
 
         order_judgments.append(

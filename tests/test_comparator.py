@@ -136,15 +136,29 @@ def test_classify_support_partial_is_weak():
     assert level == SUPPORT_WEAK
 
 
-def test_classify_support_manual_flags_review():
+def test_classify_support_all_manual_is_undetermined():
+    # P1-1：全部「待人工」＝LLM 故障降級，是系統故障不是業務結論。
+    # 原實作歸為裸奔，等於把 infra 故障偽裝成「病歷完全未記載」，
+    # 醫師會照著補強不存在的缺漏。必須回 None（待判定）。
     level, manual = classify_support([Judgment(VERDICT_MANUAL, "")])
     assert manual is True
-    assert level == SUPPORT_NONE
+    assert level is None
+    assert level != SUPPORT_NONE
+
+
+def test_classify_support_manual_mixed_with_evidence_still_classifies():
+    # 有有效判定時，「待人工」只設旗標、不改變分級（C5 不阻斷）。
+    level, manual = classify_support(
+        [Judgment(VERDICT_MANUAL, ""), Judgment(VERDICT_SUPPORTED, "有記載")]
+    )
+    assert manual is True
+    assert level == SUPPORT_SUFFICIENT
 
 
 def test_classify_support_empty_is_none():
+    # 無任何判定＝無法判定，同樣不得歸裸奔（P1-1）。
     level, manual = classify_support([])
-    assert level == SUPPORT_NONE
+    assert level is None
     assert manual is False
 
 
