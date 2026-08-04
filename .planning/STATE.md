@@ -58,10 +58,29 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-08-03（Phase 8 執行完成）
-Stopped at: **Phase 8 COMPLETE** — 08-01-PLAN 產出並執行（金標準 30 組＋端到端 3 案例＋E2E-01 修正），全套件 197 passed / 5 skipped。Phase 8 的四項成功條件全部達成並自動化驗證（見 ROADMAP.md；C6 五層全數涵蓋）。
-Next action: `/gsd-plan-phase 9`（doctor-toolbox HIS 整合佔位；依賴 Phase 8 已完成 — 屬 Phase 2 原設計文件命名）
-Resume file: `.planning/phases/06-output-reinforcement-report/06-01-SUMMARY.md`（交付摘要）＋ `.planning/HANDOFF.json`（結構化）
+Last session: 2026-08-04
+Stopped at: 全項目審查 P0/P1 修復（P0-2／P0-1／P1-1），測試 207 passed / 1 skipped
+Resume file: 無（HANDOFF.json 的「等使用者 bug 線索」阻塞已由
+`deepflash4improve.md` 第七節全項目審查取代——問題已具體定位，不需再等線索）
+
+**2026-08-04 修復（詳見 `deepflash4improve.md` §7.5）：**
+- **P0-2 flask 依賴漂移**：`pyproject.toml` 加回 `flask>=3.0`＋`uv lock`。
+- **P1-1（升級為 P0）系統故障偽裝成業務結論**：`classify_support` 全「待人工」
+  → `support_level=None`（待判定），不再歸「裸奔」；報告新增「⏳ 待判定」徽章，
+  依 `rule_found` 與「查無規則」分辨。**與 D-06/P0-2「DB 故障 ≠ 查無規則」同源
+  原則：系統故障必須與業務結論可區分。**
+- **P0-1 server.py 假邏輯**：新增 `run_presubmission_check()`（事前預審＝唯讀比對，
+  不寫檔），`/api/sampling/audit` 與 `/api/appeal/generate` 改接真實引擎；
+  安全預設 debug=False＋綁 127.0.0.1＋統一錯誤脫敏＋入參校驗。
+
+**Carry into Phase 9：**
+- `pipeline.py` 現有**兩個**入口，對應架構圖兩個服務：
+  `run_presubmission_check`（Review Service，唯讀）／`run_case_pipeline`
+  （Appeal Service，寫檔）。Phase 9 服務化拆分直接沿用此切分。
+- **P0-3 使用者決定暫緩**（倉庫稍後轉 private）：`data/output/*` 目前**未**被
+  `.gitignore` 排除，跑 pipeline 後 `git add -A` 會把 PHI 入庫——轉 private 前
+  務必人工確認暫存區。
+- 未處理：P1-2 prompt 注入、P1-3 路徑穿越、P1-4 版本管理、P1-5 前端 XSS、P2 全部。
 
 **Carry into planning:**
 - **E2E-01 已修正**：classify_support「部分支持（無無記載）」由充分改為薄弱（05-CONTEXT D-04 已同步加註記）；薄弱三級在單檢核項流程下已可達。

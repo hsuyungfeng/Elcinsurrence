@@ -3,6 +3,7 @@
 > 調查日期：2026-08-03
 > 方法：codebase-memory-mcp 知識圖譜（full index：980 nodes / 1,838 edges）＋原始碼逐檔閱讀＋實際跑測試＋檢查資料產物（SQLite／docx_trees.json／ChromaDB collection）
 > 狀態：Phase 1、2 已完成；Phase 3（解析器）context 已蒐集、尚未規劃
+> 追加審查：2026-08-04 — 全項目審查（對照 Cloud HIS／Local Gateway 目標架構），見第七節
 
 ---
 
@@ -89,3 +90,130 @@ docx 樹把表格全部丟進 `table_refs`（實測 **213 個表格區塊**）�
 3. **P1-3**：表格併入 `full_text` → 重跑 docx_trees/ChromaDB → 複查無匹配率。
 4. **P1-4**：`rule_mapping` 版本追蹤＋增量建置。
 5. **P1-6**：清依賴、補 README 管線。
+
+---
+
+## 七、全項目審查（2026-08-04，對照目標架構）
+
+> 觸發：使用者提供生產目標架構圖（Cloud HIS 九服務＋Local Gateway 七元件＋VPN/SAM/Reader→健保署 IDC），要求 review 專案。
+> 方法：4 個平行只讀子代理（核心引擎正確性／規則庫與資料層安全／Web API 安全／架構差距）＋ pytest 全量回放。
+> 測試基線：`201 passed / 1 skipped`（103s，全綠；與 progress.md Phase 8 一致）。
+
+### 7.1 舊發現（第一～六節）現況對照
+
+| 舊編號 | 內容 | 狀態（2026-08-04） |
+|---|---|---|
+| P0-1 | soffice 探測太弱 | ✅ 已修（真實轉檔探測） |
+| P0-2 | get_rule 錯誤語意 | ✅ 已修（RuleRepositoryError；本次覆核 `rule_repository/__init__.py:57-91` 行為正確） |
+| P1-3 | 表格未進 full_text | ✅ 已修（165→282 chunks，99.98% 有候選） |
+| P1-4 | rule_mapping 無版本追蹤 | ✅ 已修（source_version＋增量）；**但 CSV 版本僅取檔名 6 位數、無內容 hash**，見 7.2 P1-4 |
+| P1-5 | ChromaDB 不可觀測 | 🟡 部分（skipped 合約仍在；collection 無版本綁定，換版重跑會 `::dupN` 堆積） |
+| P1-6 | 清依賴 | ⚠️ 已修但有副作用：flask 被誤刪，而 server.py 仍 `import flask` → 依賴漂移，見 7.2 P0-2 |
+| P2-9 | parse_flexible_date | ❌ 未修（本次再次發現：`2025-13-99` 非法日期仍可產出） |
+
+### 7.2 新發現（本次審查）
+
+#### P0 — 上線前必須處理
+
+**P0-1｜server.py 是「演示殼」而非 Gateway API，且預設危險**
+- `/api/sampling/audit`（`server.py:74-104`）用關鍵字 if/else 硬編碼判定，**未呼叫引擎**；`/api/appeal/generate`（`server.py:161-196`）模板字串拼接，**無 P6 硬檢查、無 p8/p9 各 ≤1000 校驗**，與核心 `build_appeal_draft` 契約不一致。
+- `app.run(host='0.0.0.0', port=5000, debug=True)`（`server.py:199-201`）：無認證＋監聽全網卡＋debug 回顯堆疊。
+- 修法：端點接 `run_case_pipeline`／`build_appeal_draft`；`debug=False`＋綁定 127.0.0.1 或加認證；統一 `@app.errorhandler` 脫敏 JSON。
+
+**P0-2｜flask 依賴漂移：乾淨環境直接崩**
+- `pyproject.toml:9-14` 無 flask（P1-6 誤判「未使用」），但 `server.py:18` 實際 import；`uv sync` 重建後 `python server.py` 會 ImportError，README 啟動說明失配。
+- 修法：加回 `flask` 依賴並 `uv lock`。
+
+**P0-3｜`.gitignore` 漏掉輸出目錄，PHI 可能進公開倉庫**
+- `.gitignore:23-29` 未排除 `data/output/*`；跑一次 pipeline 即產出含 SOAP/醫囑的 `病歷補強報告_*.md`、`審核軌跡_*.json`、`申復草稿_*.md`（`reinforcement_report.py:187-196`、`appeal.py:539-545`），而 remote 為公開 GitHub。
+- `config/llama_config.json` 含本機絕對路徑 `/home/hsu/llama.cpp/...` 且已被 git 追蹤。
+- 修法：`.gitignore` 追加 `data/output/*`（保留 `.gitkeep`）；llama 路徑改環境變數並清查 git 歷史。
+
+#### P1 — 影響正確性／安全
+
+**P1-1｜「待人工」被歸為「裸奔」（系統故障→業務結論誤判）**
+- `judger.py:97-107` 把 LLM 逾時/解析失敗降級為 VERDICT_MANUAL，但 `support.py:54-56` 的 else 分支把「全部待人工」歸為 SUPPORT_NONE（❌ 裸奔），且會再觸發一次注定失敗的 narrative LLM 呼叫（`comparator.py:116-117`）。
+- 修法：全待人工時 `support_level=None` 輸出「待判定」態。
+
+**P1-2｜LLM prompt 注入面**
+- `judger.py:83-86` 把 `rule_text`（LLM 生成後寫回 SQLite，`build_mapping.py:329-336`）與用戶可控病歷原文直接拼接，無角色隔離；`mapping/prompts.py:36-49` 同理。
+- 修法：prompt 加 `<data>` 定界＋「以下僅為資料」聲明。
+
+**P1-3｜三處路徑穿越（目前 HTTP 面未暴露，一接即爆）**
+- `record_aggregator/providers.py:135-136`：`patient_id`（XML d3）未 sanitize → 讀取型穿越；`reinforcement_report.py:187-188`、`appeal.py:538-540`：`case_record_no`/`case_seq` 未校驗字符集 → 寫入型穿越。
+- 修法：統一 `safe_filename()`（basename＋`^[A-Za-z0-9_-]+$` 白名單）。
+
+**P1-4｜規則庫版本管理缺口**
+- `mapping/versions.py:23-29` CSV 版本只取檔名 6 位數字、無內容 hash：換版不改名 → 增量建置跳過 → rule_mapping 引用舊條文（docx 側有 hash 是對的）。
+- `chroma_store.py:97-117` 無版本綁定、失敗僅靜默 `status="skipped"`。
+
+**P1-5｜前端 XSS 面＋入參零校驗**
+- `static/index.html:363-371` 用 `innerHTML` 拼接 API 欄位（現為硬編碼資料不觸發；CSV 匯入一上線即爆，UI 已承諾「匯入 CSV」卻無實現）。`server.py` 所有入參無長度/型別校驗。
+- 修法：`textContent` 建 DOM＋CSP；請求 schema 校驗（SOAP≤10KB 等），非法 400。
+
+#### P2 — 體質（節錄）
+
+- `parsers/soap.py:80-92` 空標記行（「S：」後換行）導致段內容落入 unclassified；
+- `comparator/narratives.py:80-81` LLM 失敗 `except: return []` 靜默，與「確無可生成」無法區分；
+- `parsers/deduction.py:110-113` `_parse_int` 靜默截斷小數/科學記號；
+- `comparator/narratives.py:90` `bool("false")` 誤判 prompt_only 為 True；
+- `generators/appeal.py:495-497` p3/p4/p5 恆為 None 無 schema 校驗；
+- `generators/appeal.py:285-287` `_split_reason` 純字元位置硬切，句子中間斷裂；
+- `pipeline.py:161-163` 未傳 `claimed_points` 時所有草稿恆帶硬檢查錯誤；
+- `judger.py:33` `_JSON_OBJECT_RE` 貪婪匹配多段 JSON 會誤解析；
+- 隱私：病歷號進證據文本與檔名（`evidence.py:79-80`）、`DeductionRecord.raw` 含未遮罩出生日期，若被日誌/API 序列化會外洩；
+- `submission_xml.py:254-257` 本地 XML 會展開內部實體（billion laughs，目前僅 CLI 路徑）；
+- `server.py:28` 無 `app.secret_key`；回應無 CSP/X-Content-Type-Options（`static/index.html:10` 外鏈 Google Fonts 無 SRI）。
+
+### 7.3 目標架構差距矩陣（Cloud HIS／Local Gateway）
+
+| 架構元件 | 現況 | 說明 |
+|---|---|---|
+| Cloud HIS · Rule Engine | ✅ 已有（最完整） | `rule_repository/` 13,942 碼全帶版本、docx 樹 1,633 節點、查詢零 LLM |
+| Review / Appeal Service | 🟡 部分 | 真實邏輯在引擎（`pipeline.py run_case_pipeline`、`build_appeal_draft`），但 server.py 端點未接線（假邏輯，P0-1） |
+| Validation / Audit Service | 🟡 碎片 | 硬檢查散落 appeal.py/parsers；醫師逐條審軌跡（D9）已實現；傳輸稽核缺失 |
+| Package Builder | ❌ 缺失 | 無 PDF/DICOM/申復 XML 序列化，目前只出 .md/.json |
+| Upload Queue / Status Service | ❌ 缺失 | 無任務佇列、無案件狀態機 |
+| Local Gateway 全 7 元件 | ❌ 缺失（白紙） | Heartbeat／Job Downloader／AES 快取／NHI Adapter／Retry Manager／Status Reporter／NHI_EIIAPI.DLL 均無任何程式碼 |
+| VPN + SAM + Reader → 健保署 IDC | ❌ 缺失 | 行政/硬體前置，非純程式問題 |
+
+**結論**：引擎＝架構圖的「大腦」，服務外殼＝零。Phase 2（HIS 整合）完全未開工，Local Gateway 整側空白。NHI_EIIAPI.DLL 倉庫中無 DLL、無頭檔、無 wrapper，只有協定文件線索（電子抽審.md §四）。Phase 2 粗估 2–3 個月，最大風險點：Package Builder（官方格式規格）與 DLL 實機驗證。
+
+### 7.4 建議執行順序（更新）
+
+1. **P0-1** server.py 接真實引擎＋安全預設（debug=False、綁定本機/認證、統一錯誤處理）— 0.5–1 天
+2. **P0-2** 加回 flask 依賴＋`uv lock` — 半天
+3. **P0-3** `.gitignore` 補 `data/output/*`、llama 路徑脫敏 — 半天
+4. **P1-1** support.py 全待人工→「待判定」— 半天
+5. **P1-2** prompt 定界隔離 — 半天
+6. **P1-3** 統一 `safe_filename()` — 半天
+7. **P1-4** CSV 內容 hash＋ChromaDB 版本綁定 — 1–2 天
+8. 之後才進入 Phase 2 服務化拆分
+
+### 7.5 執行紀錄（2026-08-04）
+
+**測試基線：`207 passed / 1 skipped`**（原 201 passed；新增 6 個測試，無回歸）。
+
+| 項目 | 狀態 | 說明 |
+|---|---|---|
+| P0-3 | ⏸️ 使用者決定暫緩 | 倉庫稍後轉為 private，現階段不擋 `data/output/*` |
+| P0-2 | ✅ 已修 | `pyproject.toml` 加回 `flask>=3.0` 並 `uv lock`（flask 3.1.3）；原註解誤稱「未使用」已更正 |
+| P0-1 | ✅ 已修 | 見下方細節 |
+| P1-1 | ✅ 已修（依使用者裁示升級為 P0） | 見下方細節 |
+
+**P1-1（系統故障偽裝成業務結論）**
+- `support.py`：全部「待人工」→ `support_level=None`（待判定），不再歸「裸奔」；空判定清單同理。
+- `models.py`：`None` 的兩種成因（`rule_found=False` 查無規則 vs `rule_found=True` 判定失敗）寫入契約文件。
+- `reinforcement_report.py`：`_support_badge()` 依 `rule_found` 分辨，新增「⏳ 待判定」徽章——原本兩種成因都印「❓ 查無規則」。
+- 測試：`test_classify_support_manual_flags_review` 原本斷言 `== SUPPORT_NONE`（把 bug 鎖進測試），已改為斷言 `is None`；另補「待人工混合有效判定仍正常分級」與報告徽章不混淆的回歸測試。
+
+**P0-1（server.py 假邏輯＋危險預設）— 採選項 C**
+- `pipeline.py` 新增 `run_presubmission_check()`＋`PresubmissionResult`：事前預審＝唯讀比對，不產草稿、不寫檔（對應架構圖 Review Service 與 Appeal Service 分離）。
+- `/api/sampling/audit`：移除硬編碼關鍵字 if/else，改接 `run_presubmission_check`＋Phase 3 真實 `parse_soap_text`。
+- `/api/appeal/generate`：移除模板拼接，改接 `build_appeal_draft`。原第三段「規則依據」是把醫令碼代入固定句型＝**為任何醫令捏造法規依據**；字數檢查亦由錯誤的「合計 2000」改為 Q15 的「p8/p9 各 ≤1000」。
+  - 實測旁證：硬編碼示範資料稱 `64140C` 為「手腕韌帶縫合術」，規則庫實際為「甲床與手指重建術」——假資料本身就是錯的。
+- 安全預設：`debug=False`、綁定 `127.0.0.1`，三者皆可經 `ELC_SERVER_*` 環境變數覆寫；新增統一 `@app.errorhandler` 脫敏（不回傳 traceback）＋入參型別/長度校驗（SOAP ≤10KB，識別欄位 ≤200 字）——部分回應 P1-5。
+- `RuleRepositoryError` → HTTP 503（規則庫故障不偽裝成「查無規則」，D-06/P0-2 語意延伸至 HTTP 層）。
+- 前端 `static/index.html` 同步：徽章改以引擎結果為準（原停留在清單硬編碼值、且從不更新）、新增「⏳ 待判定」分支、`appeal_sections` 改讀陣列、字數改顯示 p8/p9 各別計數。
+
+**尚未處理**：P0-3（使用者暫緩）、P1-2 prompt 注入、P1-3 路徑穿越、P1-4 版本管理、P1-5 前端 XSS（`innerHTML` 部分）、全部 P2。
