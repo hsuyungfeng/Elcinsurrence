@@ -63,7 +63,7 @@
 
 ### 2. 核心 REST API 規格
 
-> **案例清單端點**（`GET /api/sampling/cases`、`GET /api/appeal/cases`）：目前回傳**示範資料**（每個案例帶 `"demo": true`），供 UI 展示工作流；醫令名稱一律以規則庫為準（例：`64140C`＝甲床與手指重建術，曾誤標為「手腕韌帶縫合術」，2026-08-04 修正）。真實資料源（抽樣 CSV／核減明細 CSV 匯入端點）為 Phase 2 待辦。
+> **案例清單端點**（`GET /api/sampling/cases`、`GET /api/appeal/cases`）：未匯入資料時回傳**示範資料**（每個案例帶 `"demo": true`），供 UI 展示工作流；**匯入後優先回傳導入資料**（`source: "csv" / "paddle" / "ocr"`）。醫令名稱一律以規則庫為準（例：`64140C`＝甲床與手指重建術，曾誤標為「手腕韌帶縫合術」，2026-08-04 修正）。
 
 #### 🔹 [POST] `/api/sampling/audit` — 抽樣事前預審支持度評估
 
@@ -150,7 +150,7 @@
 
 #### 🔹 [POST] `/api/sampling/import` 與 `/api/appeal/import` — 批次匯入清單（digital + paper）
 
-接受 **CSV（digital）、PDF、JPEG/PNG 掃描影像（paper→OCR）**，multipart 欄位名 `file`，單檔上限 10MB。**一律本機處理**（pdftotext/pdftoppm/tesseract，D2：個資不出本機），不呼叫雲端 API。
+接受 **CSV（digital）、PDF、JPEG/PNG 掃描影像（paper→OCR）**，multipart 欄位名 `file`，單檔上限 10MB。**一律本機處理**（PDF 文字層 pdftotext；掃描文件 PP-StructureV3 表格結構化，降級 tesseract；D2：個資不出本機），不呼叫雲端 API。
 
 - **抽樣清單（`/api/sampling/import`）**：
   - CSV：自訂欄位契約（2026-08-04 裁示）— `流水號(case_seq)／病歷號(record_no)／病患姓名(patient_name)／醫令代碼(order_code, 必填)／醫令名稱(order_name)／就醫日期(visit_date)／科別(clinic)／SOAP(soap_text)`，表頭別名中英皆可、自動偵測，編碼 utf-8-sig→big5→cp950。
@@ -202,8 +202,9 @@ print("申復 XML / JSON 草稿：", result.appeal_paths)
 ### 1. 啟動 Web UI 雙軌控制台
 
 ```bash
-# 安裝依賴（含 flask）
+# 安裝依賴（含 flask；紙本表格結構化加 --extra ocr）
 uv sync
+uv sync --extra ocr   # 選用：PP-StructureV3 表格結構化（paddlepaddle==3.2.2 釘版）
 
 # 啟動 API 與 雙軌控制台 Web Server
 uv run python server.py
