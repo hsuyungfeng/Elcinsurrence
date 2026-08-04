@@ -217,3 +217,46 @@ docx 樹把表格全部丟進 `table_refs`（實測 **213 個表格區塊**）�
 - 前端 `static/index.html` 同步：徽章改以引擎結果為準（原停留在清單硬編碼值、且從不更新）、新增「⏳ 待判定」分支、`appeal_sections` 改讀陣列、字數改顯示 p8/p9 各別計數。
 
 **尚未處理**：P0-3（使用者暫緩）、P1-2 prompt 注入、P1-3 路徑穿越、P1-4 版本管理、P1-5 前端 XSS（`innerHTML` 部分）、全部 P2。
+
+---
+
+## 八、PaddleOCR 評估（2026-08-04，紙本表格結構化升級）
+
+> 觸發：使用者提供 ClinFusion（達摩院醫學影像 MLLM）評估是否對本專案有用。
+> 結論：ClinFusion 解決「讀醫學影像」（X光/CT/MRI），本專案缺的是「讀掃描文件」
+> （紙本抽樣/核減清單）——是兩種「影像」；表格結構化應選 PaddleOCR。
+
+### 8.1 ClinFusion 評估摘要
+
+- **定位**：Vision-Centric 醫學多模態 LLM（Qwen3-VL-8B/32B＋DINOv2/ConvNeXt），醫學 VQA／報告生成；Apache-2.0。
+- **不匹配**：非文檔/表格 OCR；**GPU-only**（requirements：vllm＋flash-attn 預編譯 wheel＋多卡）；倉庫極新（9 commits／16 stars，安裝腳本帶作者個人路徑）。
+- **長期價值**：若申復流程未來要自動判讀影像證據（MRI/CT →「醫療必要性」佐證），ClinFusion-8B 為開源 SOTA 候選；pipeline 的 `judge_fn`/`narrative_fn` 可注入層可直接換接，無需改架構。
+- **可吸收**：factualness-driven／RoI-grounded 評估原則（與 D9「標記不符事實」、Phase 8 金標準同源）。
+
+### 8.2 PaddleOCR（PP-StructureV3）實測
+
+隔離環境（Python 3.12，CPU）實測：模擬抽樣清單繁體表格圖 → 輸出結構化 HTML：
+
+```html
+<table><tr><td>醫令代碼</td><td>醫令名稱</td><td>就醫日期</td></tr>
+<tr><td>14050B</td><td>糖化血色素檢驗 HbAlc</td><td>2026/07/10</td></tr>…</table>
+```
+
+- ✅ 表頭/欄位對齊正確——tesseract 無法做到（只能錨定醫令代碼）；表格 HTML 可直接對接 8 欄/18 欄契約
+- ✅ 繁中＋英文混排；Apache-2.0 商用無礙；本地 CPU 推理符合 D2
+
+**避坑（實測發現）**：
+
+| 項目 | 結論 |
+|---|---|
+| paddlepaddle 版本 | **3.3.1 在 CPU 有 blocking bug**（`ConvertPirAttribute2RuntimeAttribute`，oneDNN/PIR）→ 釘 **3.2.2** 實測通過 |
+| 依賴 | `paddleocr==3.7` 需 `paddlex[ocr]` extra（僅裝 `paddleocr` 會 DependencyError） |
+| 緩存目錄 | 預設 `~/.paddlex` 本機唯讀 → 設 `PADDLE_PDX_CACHE_HOME` 指向可寫目錄 |
+| 重量 | paddlepaddle wheel ~600MB＋模型首次下載 ~300MB；CPU 熱推理數秒~數十秒/張 |
+| OCR 字符瑕疵 | `HbA1c→HbAlc` 等字符級誤識存在；**醫令代碼為錨點**（數字+字母 pattern），其餘欄位供人工核對 |
+
+### 8.3 整合設計（已實作）
+
+`ingest/table_ocr.py`：PP-StructureV3 → 版面 `table` 元素 HTML → `<tr>/<td>` 解析 → 表頭列對映 `sampling.COLUMN_ALIASES` 契約欄位 → `SamplingCaseRecord`（source="paddle"）。paddleocr 不可用（未安裝/import 失敗）時自動降級回 `ocr_rows.py` 的 tesseract 行解析——延續「誠實降級」精神：有表格結構化就用，沒有就用代碼錨點，絕不靜默給錯誤結構。
+
+pyproject.toml 新增 `[project.optional-dependencies] ocr`（paddlepaddle==3.2.2、paddleocr、paddlex[ocr]）——不強制安裝，`uv sync --extra ocr` 才啟用。

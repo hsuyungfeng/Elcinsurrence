@@ -17,6 +17,15 @@ dependencies = [
     "flask>=3.0",
 ]
 
+# 紙本表格結構化 OCR（PP-StructureV3，可選）：不裝也能跑（降級 tesseract 行解析）。
+# 版本釘選：paddlepaddle 3.3.1 在 CPU 有 oneDNN/PIR bug，須 3.2.2（deepflash4improve §8.2）。
+[project.optional-dependencies]
+ocr = [
+    "paddlepaddle==3.2.2",
+    "paddleocr==3.7",
+    "paddlex[ocr]>=3.7,<3.8",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",

@@ -22,6 +22,11 @@ from .sampling import (
     parse_sampling_csv,
     parse_sampling_csv_path,
 )
+from .table_ocr import (
+    parse_image_tables,
+    parse_pdf_tables,
+    parse_sampling_tables,
+)
 
 __all__ = [
     "MediaExtractError",
@@ -33,8 +38,11 @@ __all__ = [
     "extract_pdf_text",
     "extract_text",
     "ocr_image",
+    "parse_image_tables",
+    "parse_pdf_tables",
     "parse_sampling_csv",
     "parse_sampling_csv_path",
     "parse_sampling_ocr_text",
+    "parse_sampling_tables",
     "render_pdf_pages",
 ]

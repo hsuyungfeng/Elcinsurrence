@@ -26,6 +26,8 @@ from elc_audit_engine.ingest import (
     SamplingImportError,
     detect_media_type,
     extract_text,
+    parse_image_tables,
+    parse_pdf_tables,
     parse_sampling_csv,
     parse_sampling_ocr_text,
 )
@@ -354,9 +356,26 @@ def import_sampling_cases():
                 result = parse_sampling_csv(f.read())
             source = 'csv'
         else:
-            text, _tool = extract_text(path, media_type=media_type)
-            result = parse_sampling_ocr_text(text)
-            source = 'ocr'
+            # 紙本（PDF/影像）：優先 PP-StructureV3 表格結構化（欄位級），
+            # 引擎不可用／無表格時降級 tesseract 全文 OCR → 醫令代碼行解析。
+            if media_type == 'pdf':
+                text, tool = extract_text(path, media_type=media_type)
+                result = parse_sampling_ocr_text(text)
+                source = 'ocr'
+                if tool != 'pdftotext':  # 掃描型 PDF（無文字層）→ 再試表格結構化
+                    t_result = parse_pdf_tables(path)
+                    if t_result is not None:
+                        result = t_result
+                        source = 'paddle'
+            else:
+                t_result = parse_image_tables(path)
+                if t_result is not None:
+                    result = t_result
+                    source = 'paddle'
+                else:
+                    text, _tool = extract_text(path, media_type=media_type)
+                    result = parse_sampling_ocr_text(text)
+                    source = 'ocr'
     except (MediaExtractError, SamplingImportError) as exc:
         app.logger.warning('sampling import failed: %s', exc)
         raise ApiError(f'匯入失敗：{exc}')

@@ -154,7 +154,8 @@
 
 - **抽樣清單（`/api/sampling/import`）**：
   - CSV：自訂欄位契約（2026-08-04 裁示）— `流水號(case_seq)／病歷號(record_no)／病患姓名(patient_name)／醫令代碼(order_code, 必填)／醫令名稱(order_name)／就醫日期(visit_date)／科別(clinic)／SOAP(soap_text)`，表頭別名中英皆可、自動偵測，編碼 utf-8-sig→big5→cp950。
-  - PDF／影像：OCR 行解析 — 以醫令代碼（5 數字+1 字母）為錨點結構化「代碼＋名稱」，其餘欄位留空供前端人工補齊（誠實降級：OCR 猜欄位比留空更危險）。每筆標 `source: "ocr"`＋保留原始辨識行。
+  - PDF／影像（紙本）：**優先 PP-StructureV3 表格結構化**（`source: "paddle"`，欄位級：表頭對齊 8 欄契約、日期正規化）；引擎不可用／無表格時**自動降級** tesseract 行解析（`source: "ocr"`，以醫令代碼為錨點結構化「代碼＋名稱」）。每筆保留原始辨識行供人工核對。
+  - ⚠️ 表格結構化需 `uv sync --extra ocr`（paddlepaddle==3.2.2 釘版，見 deepflash4improve §8.2）；未裝則全程降級，功能不中斷。
 - **核減清單（`/api/appeal/import`）**：CSV 走 D-14d 18 欄 parser（編碼/分隔符/表頭自動偵測）；**PDF／影像誠實降級** — 18 欄結構無法由 OCR 可靠重建，回 `status: "partial"`＋OCR 文字預覽，提示改用 CSV 匯出。
 - **回傳**：`{status, media_type, source, imported, rejected, rejected_rows:[{row,reason,raw}], saved_to}`；匯入成功後案例清單端點（GET）優先回傳導入資料，並落盤 `data/uploads/*.json`（gitignore，server 重啟自動載入最新一份）。
 - **狀態碼**：`400` 缺檔／不支援類型／超過 10MB／未匯入任何案件（含原因）；`500` 其他（已脫敏）。
@@ -246,7 +247,7 @@ uv run python -m elc_audit_engine.rule_repository.mapping.build_mapping
 uv run pytest -q
 ```
 
-目前基線：**224 passed / 1 skipped**。測試零 LLM 依賴（判定與生成皆以替身注入），故不需啟動 llama.cpp 即可全數執行。
+目前基線：**235 passed / 1 skipped**。測試零 LLM 依賴（判定與生成皆以替身注入），故不需啟動 llama.cpp 即可全數執行；OCR 表格結構化測試以替身覆蓋，不需 GPU。
 
 ---
 
