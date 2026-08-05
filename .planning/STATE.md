@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-08-03T00:00:00.000Z"
+status: in_progress
+last_updated: "2026-08-05T00:00:00.000Z"
 progress:
-  total_phases: 9
-  completed_phases: 6
+  total_phases: 10
+  completed_phases: 8
   total_plans: 11
-  completed_plans: 10
-  percent: 91
+  completed_plans: 11
+  percent: 80
 ---
 
 # STATE.md — elc-audit-engine
@@ -30,7 +30,8 @@ ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (origi
 **GSD Phase 6 — 輸出一（病歷補強報告）— COMPLETE (2026-08-03)** — 06-01 單輪交付：render_report（Markdown checkbox 逐條審：標題/警告區/支持度徽章/候選補強/半年病史摘要）＋render_tracking（審核軌跡 JSON：D9 四狀態＋原文＋編輯後文＋時間）＋write_report（.md＋.json 薄包裝）。13 新測試全綠，全套件 152 passed / 5 skipped。
 **GSD Phase 7 — 輸出二（申復理由草稿）— COMPLETE (2026-08-03)** — 07-01 單輪交付：build_appeal_draft（D10 四段組裝：①案情摘要/②醫療必要性/③規則依據/④病歷佐證；每筆核減醫令獨立生成）＋字數控制器（官方問答集 Q15：每欄 1000／合計 2000、裁剪優先 ④→②、①③骨架不動）＋P6 不申覆強制填 0 硬檢查（C3/Q13）＋D-15 核減上界檢查（申復點數≤不予核銷金額）＋adopted_narratives_from_tracking（審核軌跡消費，D-08）＋render_appeal_markdown/render_appeal_json/write_appeal（C7：申復草稿_{流水號}.md＋appeal_{流水號}.json，含 p1-p9 醫令段欄位）。24 新測試全綠，全套件 176 passed / 5 skipped。
 **GSD Phase 8 — 端到端測試 — COMPLETE (2026-08-03)** — 08-01 單輪交付：LLM 判定金標準 30 組（tests/fixtures/llm_gold_standard_30.json：支持12/部分支持9/無記載9＋eval/gold_standard.py harness＋scripts/replay_gold_standard.py 真實 LLM 回放 CLI，health guard，C6-3）＋端到端 3 案例（充分/薄弱/裸奔，run_case_pipeline：compare→write_report→審核 decisions→build_appeal→write_appeal，C6-4）＋E2E-01 修正（classify_support 任一『部分支持』→ 薄弱，原歸充分使 D7 三級缺一角）＋真實樣本替換介面（注入層可換，C6-5）。21 新測試全綠，全套件 197 passed / 5 skipped。五層測試策略全數涵蓋並可執行（C6）。
-**Next: Phase 7 — 輸出二（申復理由草稿）— 依賴 Phase 5（已完成）。**
+**GSD Phase 9 — HIS 服務化（本機可驗證）— 規劃中（2026-08-05 開 phase）。** 前導碎片已落地並 commit（Flask API 接真實引擎 `b80cd08`、批次匯入 `56d9902`、PP-StructureV3 表格 OCR `8c38a19`、安全清尾 `f6ac775`）。首項工作＝認證授權（使用者裁示）。
+**GSD Phase 10 — VPN／實機串接 — 阻塞中**（雲端 Provider 需 doctor-toolbox 存取權、NHI_EIIAPI.DLL 需 Windows＋VPN＋SAM 實機）。2026-08-05 自原 Phase 9 拆出：含阻塞項的 phase 永遠無法通過 verify，會汙染 phase 完成訊號。
 
 **Phase 3 context highlights (see `.planning/phases/03-parsers/03-CONTEXT.md`):** 使用者提供真實申報 XML `TOTFA.xml`（633 案 / 2,624 醫令 / Big5 / 348 位病患，已 gitignore）。實測推翻三項文件假設：(1) C11 欄位表為精選子集，真實檔多出 18 個 dbody 欄位，其中 `d20`-`d26` 為次診斷代碼（Phase 5 判斷醫療必要性的關鍵）；(2) C8 的 p8/p9 字數上限描述有誤，官方問答集 Q15 確認為**每欄 1000 中文字／合計 2000**——影響 Phase 7 字數控制器；(3) **`電子申復格式及填表說明門診.doc` 是申復「輸出」規格，不是核減「輸入」格式**（原 D-14 據此建模輸入檔屬誤判，已由 D-14a 修正）。
 
@@ -58,10 +59,23 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-08-04
-Stopped at: 全項目審查 P0/P1 修復（P0-2／P0-1／P1-1），測試 207 passed / 1 skipped
-Resume file: 無（HANDOFF.json 的「等使用者 bug 線索」阻塞已由
-`deepflash4improve.md` 第七節全項目審查取代——問題已具體定位，不需再等線索）
+Last session: 2026-08-05
+Stopped at: 安全清尾 P1-5／P1-2／P1-3 完成並 commit（`f6ac775`），測試
+277 passed / 1 skipped；ROADMAP 拆分 Phase 9（服務化）／Phase 10（實機門控）；
+下一步＝`/gsd-plan-phase 9`，首項工作認證授權
+Resume file: 無（HANDOFF.json 已於 2026-08-05 恢復後消費並刪除）
+
+**2026-08-05 修復（詳見 `deepflash4improve.md` §7.6）：**
+- **P1-5 前端 XSS＋CSP**：`renderCaseList` 改 DOM API（`createElement`＋
+  `textContent`）；移除 Google Fonts 外鏈（D2 個資不出本機）；`server.py`
+  新增 `@app.after_request` 安全標頭。**此漏洞原為休眠，因 `56d9902` 匯入
+  上線而活化——教訓：靜態安全清單需在功能上線時重新評級。**
+- **P1-3 路徑穿越**：新增 `safe_paths.py::safe_filename()`（校驗後拒絕，
+  非清洗取代；白名單含 CJK）。實作期抓到自身 bug：初版先取 `basename()`
+  會把 `../etc/passwd` 悄悄清洗成 `passwd` 而通過白名單。
+- **P1-2 prompt 注入**：新增 `prompt_safety.py::fence()`，三處 prompt 標籤
+  定界；包夾前中和 payload 內閉合標籤防逃逸。**緩解非證明安全**，下游
+  `VERDICTS` 白名單校驗仍是真正邊界。
 
 **2026-08-04 修復（詳見 `deepflash4improve.md` §7.5）：**
 - **P0-2 flask 依賴漂移**：`pyproject.toml` 加回 `flask>=3.0`＋`uv lock`。
@@ -80,7 +94,9 @@ Resume file: 無（HANDOFF.json 的「等使用者 bug 線索」阻塞已由
 - **P0-3 使用者決定暫緩**（倉庫稍後轉 private）：`data/output/*` 目前**未**被
   `.gitignore` 排除，跑 pipeline 後 `git add -A` 會把 PHI 入庫——轉 private 前
   務必人工確認暫存區。
-- 未處理：P1-2 prompt 注入、P1-3 路徑穿越、P1-4 版本管理、P1-5 前端 XSS、P2 全部。
+- ~~未處理：P1-2 prompt 注入、P1-3 路徑穿越、P1-5 前端 XSS~~ → **已於
+  2026-08-05 完成（`f6ac775`）**。**仍未處理：P1-4 版本管理（CSV 內容 hash
+  ＋ChromaDB 版本綁定）、P2 全部。**
 
 **Carry into planning:**
 - **E2E-01 已修正**：classify_support「部分支持（無無記載）」由充分改為薄弱（05-CONTEXT D-04 已同步加註記）；薄弱三級在單檢核項流程下已可達。

@@ -9,7 +9,7 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 ## Phases
 
 **Phase Numbering:**
-- Integer phases (1-9): Planned milestone work, 對應 progress.md M1-M8 + Phase 2 佔位
+- Integer phases (1-10): Planned milestone work, 對應 progress.md M1-M8 ＋ Phase 2（服務化＝GSD 9／實機串接＝GSD 10，2026-08-05 拆分）
 - Decimal phases (x.1, x.2): Urgent insertions (marked with INSERTED) — 目前無
 
 - [x] **Phase 1: 專案骨架** - uv 專案初始化、config、目錄結構
@@ -20,7 +20,8 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 - [x] **Phase 6: 輸出一（病歷補強報告）** - 病歷補強報告.md 生成
 - [x] **Phase 7: 輸出二（申復理由草稿）** - 申復理由草稿（p8/p9 ≤2000字）＋申復XML欄位
 - [x] **Phase 8: 端到端測試** - 規格造測試資料→待真實樣本進來替換驗證
-- [ ] **Phase 9: doctor-toolbox HIS 整合（佔位）** - Phase 2（原設計文件命名）：雲端病歷 Provider、Flask API化、NHI_EIIAPI 銜接
+- [ ] **Phase 9: HIS 服務化（本機可驗證）** - 已落地 Flask API＋ingest 納管、認證授權、案件狀態機＋任務佇列、Package Builder（申復 XML）
+- [ ] **Phase 10: VPN／實機串接（門控）** - 雲端病歷 Provider、NHI_EIIAPI wrapper、Local Gateway 七元件 — 阻塞於外部依賴
 
 ## Phase Details
 
@@ -135,24 +136,48 @@ Plans:
 Plans:
 - [x] 08-01-PLAN.md — 五層測試補齊：LLM 判定金標準 30 組（fixture＋harness＋回放 CLI，C6-3）＋端到端 3 案例（充分/薄弱/裸奔，run_case_pipeline 全管線，C6-4）＋E2E-01 修正（部分支持→薄弱）＋真實樣本替換介面（C6-5）
 
-### Phase 9: doctor-toolbox HIS 整合（佔位）
-**Goal**: 將 Phase 1-8 核心引擎整合進 doctor-toolbox HIS 模組（原設計文件「Phase 2」）
+### Phase 9: HIS 服務化（本機可驗證範圍）
+**Goal**: 把核心引擎包成 HIS 可呼叫的服務——認證、案件狀態機、任務佇列、申復 XML 產出，全部可在本機驗證完成
 **Depends on**: Phase 8
-**Requirements**: REQ-phase2-his-integration
+**Requirements**: REQ-phase2-his-integration（前半：服務化）
 **Success Criteria** (what must be TRUE):
-  1. 雲端病歷 Provider 接上 doctor-toolbox（cloud_sync/his_connection 模式），取代 Phase 4 本地檔案 Provider
-  2. 核心引擎 Flask API 化，供 HIS 呼叫
-  3. 與 Local Agent / NHI_EIIAPI VPN 上傳流程銜接
-**Plans**: TBD — 尚未細部規劃，待 Phase 1-8 完成後展開
+  1. 已落地的 Flask API＋ingest 模組納入 phase 管理（追認 b80cd08／56d9902／8c38a19 已完成範圍）
+  2. 端點具備認證授權——不再是無認證即可存取病歷資料的服務
+  3. 案件具備狀態機（取代目前 `data/uploads/*.json` 的無狀態落盤）＋任務佇列
+  4. Package Builder：`appeal_{流水號}.json`（已含 p1-p9）序列化為申復 XML
+**Plans**: 待 /gsd-plan-phase 9 產出
+
+**2026-08-05 切分理由**：原 Phase 9 的三項 criteria 中有兩項被外部依賴硬阻塞
+（雲端 Provider 需 doctor-toolbox 存取權、NHI_EIIAPI 需 Windows＋VPN＋SAM 實機），
+含阻塞項的 phase 永遠無法通過 verify，會汙染 phase 完成訊號。故拆為
+**Phase 9（現在可執行完）** 與 **Phase 10（外部依賴門控）**。
 
 Plans:
-- [ ] 09-01: TBD
+- [ ] 09-01: TBD（首項＝認證授權，使用者裁示 2026-08-05）
+
+### Phase 10: VPN／實機串接（外部依賴門控）
+**Goal**: 接上 doctor-toolbox 雲端病歷與健保署 VPN 上傳鏈路（原 Phase 9 被阻塞的部分）
+**Depends on**: Phase 9
+**Requirements**: REQ-phase2-his-integration（後半：實機串接）
+**Success Criteria** (what must be TRUE):
+  1. 雲端病歷 Provider 接上 doctor-toolbox（cloud_sync/his_connection 模式），取代 Phase 4 本地檔案 Provider
+  2. NHI_EIIAPI wrapper 依協定文檔實作並於實機驗證（電子抽審.md §四）
+  3. Local Gateway 七元件（Heartbeat／Job Downloader／AES 快取／NHI Adapter／Retry Manager／Status Reporter／DLL wrapper）
+**Plans**: 阻塞中——不規劃，待下列外部依賴到位
+
+**阻塞項（皆為外部，非程式問題）**：
+- doctor-toolbox 雲端病歷存取權
+- `NHI_EIIAPI.DLL`（倉庫無 DLL／無頭檔，僅有協定文件線索）
+- Windows＋VPN＋SAM 卡＋讀卡機實機環境
+
+Plans:
+- [ ] 10-01: BLOCKED — 待外部依賴
 
 ## Progress
 
 **Execution Order:**
-Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
-（2/3/4 皆僅依賴 1，可並行規劃；5 需等待 2、3、4 皆完成；6、7 皆依賴 5，可並行；8 需等待 6、7；9 最後）
+Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10
+（2/3/4 皆僅依賴 1，可並行規劃；5 需等待 2、3、4 皆完成；6、7 皆依賴 5，可並行；8 需等待 6、7；9 為服務化；10 為實機串接，外部依賴門控中）
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
