@@ -20,9 +20,21 @@ from elc_audit_engine.rule_repository.embeddings import chroma_store
 
 def main() -> None:
     docx_trees_path = os.path.join(settings.DB_DIR, "docx_trees.json")
+    
+    # Attempt to calculate source_version if data files exist (P1-4)
+    source_ver = None
+    if os.path.exists(settings.PAYMENT_RULES_CSV) and os.path.exists(settings.DRUG_RULES_CSV) and os.path.exists(docx_trees_path):
+        from elc_audit_engine.rule_repository.mapping import versions
+        source_ver = versions.build_source_version(
+            payment_csv_path=settings.PAYMENT_RULES_CSV,
+            drug_csv_path=settings.DRUG_RULES_CSV,
+            docx_trees_path=docx_trees_path,
+        )
+
     result = chroma_store.build_chroma_collection(
         docx_trees_path=docx_trees_path,
         persist_dir=settings.RAG_DIR,
+        source_version=source_ver,
     )
     print(result)
 

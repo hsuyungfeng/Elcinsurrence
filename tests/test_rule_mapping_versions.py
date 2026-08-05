@@ -7,22 +7,31 @@ from elc_audit_engine.rule_repository import db
 from elc_audit_engine.rule_repository.mapping import build_mapping, versions
 
 
-def test_extract_csv_version_payment():
-    v = versions.extract_csv_version(
-        "醫療服務給付項目251027準確板_已優化填入支付規定.csv"
-    )
-    assert v == "251027"
+def test_extract_csv_version_payment(tmp_path):
+    f = tmp_path / "醫療服務給付項目251027準確板_已優化填入支付規定.csv"
+    f.write_text("code,name\n1,2", encoding="utf-8")
+    v = versions.extract_csv_version(str(f))
+    assert v.startswith("251027:")
+    assert len(v.split(":")[1]) == 12
 
 
-def test_extract_csv_version_drug():
-    v = versions.extract_csv_version(
-        "藥品項查詢項目檔260605 AI 摘要支付價大於0.csv"
-    )
-    assert v == "260605"
+def test_extract_csv_version_content_change_changes_hash(tmp_path):
+    f = tmp_path / "醫療服務給付項目251027.csv"
+    f.write_text("v1_content", encoding="utf-8")
+    v1 = versions.extract_csv_version(str(f))
+
+    f.write_text("v2_content", encoding="utf-8")
+    v2 = versions.extract_csv_version(str(f))
+
+    assert v1 != v2
+    assert v1.split(":")[0] == v2.split(":")[0] == "251027"
 
 
-def test_extract_csv_version_no_digits_is_unknown():
-    assert versions.extract_csv_version("rules.csv") == "unknown"
+def test_extract_csv_version_no_digits_is_unknown(tmp_path):
+    f = tmp_path / "rules.csv"
+    f.write_text("data", encoding="utf-8")
+    v = versions.extract_csv_version(str(f))
+    assert v.startswith("unknown:")
 
 
 def test_hash_docx_trees_changes_with_content(tmp_path):
@@ -44,8 +53,12 @@ def test_build_source_version_format(tmp_path):
     drug.write_text("x", encoding="utf-8")
     trees.write_text("{}", encoding="utf-8")
     v = versions.build_source_version(str(pay), str(drug), str(trees))
-    assert v.startswith("251027|260605|")
-    assert len(v.split("|")[2]) == 12
+    assert v.startswith("251027:")
+    parts = v.split("|")
+    assert len(parts) == 3
+    assert parts[0].startswith("251027:")
+    assert parts[1].startswith("260605:")
+    assert len(parts[2]) == 12
 
 
 def _make_db(db_path, codes, source_version=None):

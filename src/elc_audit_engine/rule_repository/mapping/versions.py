@@ -13,20 +13,31 @@ import os
 
 
 def extract_csv_version(csv_path: str) -> str:
-    """從來源 CSV 檔名抽出版本日期碼（YYYYMMDD 或 RRMMDD）。
+    """從來源 CSV 檔名與內容 hash 組成版本代碼。
 
-    例：`醫療服務給付項目251027準確板_已優化填入支付規定.csv` -> `251027`；
-        `藥品項查詢項目檔260605 AI 摘要支付價大於0.csv` -> `260605`。
-
-    找不到 6 位數字時回傳 `unknown`（不讓版本解析失敗阻斷建置）。
+    例：`醫療服務給付項目251027準確板_已優化填入支付規定.csv`
+    -> `251027:a1b2c3d4e5f6` (日期標籤 + SHA-256 前 12 碼)。
+    若檔名無日期數字則標籤為 `unknown`。
+    檔案不存在或讀取失敗時 fallback 僅回傳日期標籤。
     """
     base = os.path.basename(csv_path)
     digits = "".join(ch for ch in base if ch.isdigit())
+    date_tag = "unknown"
     for i in range(len(digits) - 5):
         candidate = digits[i : i + 6]
         if candidate.isdigit():
-            return candidate
-    return "unknown"
+            date_tag = candidate
+            break
+
+    try:
+        hasher = hashlib.sha256()
+        with open(csv_path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                hasher.update(chunk)
+        content_hash = hasher.hexdigest()[:12]
+        return f"{date_tag}:{content_hash}"
+    except Exception:
+        return date_tag
 
 
 def hash_docx_trees(docx_trees_path: str) -> str:

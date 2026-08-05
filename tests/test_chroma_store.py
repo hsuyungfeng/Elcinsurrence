@@ -171,3 +171,38 @@ def test_build_chroma_collection_ingests_or_gracefully_skips(tmp_path):
         assert result["chunks_ingested"] >= 1
     else:
         assert result["reason"] is not None
+
+
+@pytest.mark.skipif(
+    True,
+    reason="Network-dependent best-effort test for ChromaDB source_version binding.",
+)
+def test_build_chroma_collection_binds_source_version(tmp_path):
+    docx_trees_path = tmp_path / "docx_trees.json"
+    docx_trees_path.write_text(
+        json.dumps(
+            {
+                "doc1": {
+                    "title": "doc1",
+                    "level": 0,
+                    "path": "doc1",
+                    "full_text": "條文內容一",
+                    "children": [],
+                    "table_refs": [],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    persist_dir = tmp_path / "rag"
+    result = chroma_store.build_chroma_collection(
+        docx_trees_path=str(docx_trees_path),
+        persist_dir=str(persist_dir),
+        source_version="v1_test_version",
+    )
+    if result["status"] == "ok":
+        import chromadb
+        client = chromadb.PersistentClient(path=str(persist_dir))
+        col = client.get_collection("rule_articles")
+        data = col.get(limit=1, include=["metadatas"])
+        assert data["metadatas"][0]["source_version"] == "v1_test_version"

@@ -63,6 +63,7 @@ def build_chroma_collection(
     docx_trees_path: str,
     persist_dir: str,
     collection_name: str = "rule_articles",
+    source_version: str | None = None,
 ) -> dict:
     """將 docx_trees.json 全部文件節點切塊後攝取進本機持久化 ChromaDB collection。
 
@@ -71,6 +72,7 @@ def build_chroma_collection(
         persist_dir: ChromaDB PersistentClient 的本機儲存目錄
             （通常為 `config.settings.RAG_DIR`）。
         collection_name: ChromaDB collection 名稱，預設 "rule_articles"。
+        source_version: 來源語料版本字串 (P1-4)。若傳入，會綁定至 chunk metadata["source_version"]。
 
     Returns:
         `{"status": "ok" | "skipped", "chunks_ingested": int, "reason": str | None}`。
@@ -88,12 +90,12 @@ def build_chroma_collection(
     if not all_chunks:
         return {"status": "ok", "chunks_ingested": 0, "reason": None}
 
+    # Attach source_version to chunk metadata if provided (P1-4)
+    if source_version:
+        for chunk in all_chunks:
+            chunk["metadata"]["source_version"] = source_version
+
     # ChromaDB requires globally-unique ids within a collection.add() call.
-    # `path` is derived from ancestor heading titles + node text (see Plan 03's
-    # extractor.py), so identical body-text repeated verbatim within the same
-    # document (e.g. boilerplate clauses) can legitimately collide. Disambiguate
-    # with a numeric suffix on any repeat, preserving the base id unchanged for
-    # the (overwhelmingly common) non-colliding case.
     seen_id_counts: dict[str, int] = {}
     for chunk in all_chunks:
         base_id = chunk["id"]
@@ -107,6 +109,20 @@ def build_chroma_collection(
 
         client = chromadb.PersistentClient(path=persist_dir)
         collection = client.get_or_create_collection(collection_name)
+
+        # If collection exists and source_version is given, check existing version (P1-4)
+        # If version matches and item count matches, skip redundant embedding
+        if source_version and collection.count() > 0:
+            existing = collection.get(limit=1, include=["metadatas"])
+            if existing and existing.get("metadatas") and existing["metadatas"][0]:
+                existing_ver = existing["metadatas"][0].get("source_version")
+                if existing_ver == source_version and collection.count() == len(all_chunks):
+                    return {"status": "ok", "chunks_ingested": 0, "reason": "Already up to date (version match)"}
+            
+            # Version changed or count mismatched -> purge existing documents before re-indexing
+            existing_ids = collection.get(include=[])["ids"]
+            if existing_ids:
+                collection.delete(ids=existing_ids)
 
         for start in range(0, len(all_chunks), _BATCH_SIZE):
             batch = all_chunks[start : start + _BATCH_SIZE]
