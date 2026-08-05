@@ -217,6 +217,42 @@ docx 樹把表格全部丟進 `table_refs`（實測 **213 個表格區塊**）�
 - 前端 `static/index.html` 同步：徽章改以引擎結果為準（原停留在清單硬編碼值、且從不更新）、新增「⏳ 待判定」分支、`appeal_sections` 改讀陣列、字數改顯示 p8/p9 各別計數。
 
 **尚未處理**：P0-3（使用者暫緩）、P1-2 prompt 注入、P1-3 路徑穿越、P1-4 版本管理、P1-5 前端 XSS（`innerHTML` 部分）、全部 P2。
+（→ P1-2／P1-3／P1-5 已於 2026-08-05 完成，見 §7.6。）
+
+---
+
+### 7.6 執行紀錄（2026-08-05）— P1-2／P1-3／P1-5
+
+**測試基線：`277 passed / 1 skipped`**（原 235 passed；新增 42 個測試，無回歸）。
+
+| 項目 | 狀態 | 說明 |
+|---|---|---|
+| P1-5 | ✅ 已修 | 前端 XSS＋CSP＋移除外鏈字型 |
+| P1-2 | ✅ 已修 | prompt 標籤定界隔離（3 處） |
+| P1-3 | ✅ 已修 | `safe_filename()` 統一防線（3 處） |
+| P1-4 | ⬜ 未處理 | CSV 內容 hash＋ChromaDB 版本綁定（下一項） |
+
+**P1-3（路徑穿越）— 採「校驗後拒絕」而非「清洗取代」**
+- 新增 `src/elc_audit_engine/safe_paths.py`：`safe_filename(value, field_name)`＋`UnsafeIdentifierError`。
+- 白名單為 **ASCII 英數＋`_`＋`-`＋CJK**（2026-08-05 使用者裁示）：`case_record_no`／`case_seq`／`patient_id` 皆來自健保檔案，可能含中文，純 ASCII 白名單會把真實資料判為非法。刻意不用 `\w`——它在 Python 是 Unicode-aware，範圍遠大於「中文＋英數」。
+- **實作期抓到的真 bug**：初版先取 `os.path.basename()` 再校驗，而 `basename('../etc/passwd')` 回傳 `'passwd'`（白名單可通過）＝**把攻擊悄悄清洗成合法檔名**，正是本次明確拒絕的靜默改寫行為。改為直接校驗原始值（路徑分隔符與 `.` 均不在白名單內）。此 bug 由新測試 `test_safe_filename_rejects_traversal_and_bad_chars` 當場抓出。
+- 選擇拒絕而非清洗的理由：清洗會讓 `A/1` 與 `A_1` 收斂成同一檔名，兩個不同案件的 PHI 報告互相覆寫且無人察覺。**與 P1-1／P0-2 同源原則：系統故障必須與業務結論可區分，不得靜默產生看似正常的結果。**
+- 三處呼叫點：`providers.py::_records_path`（讀取型，XML `d3`）、`reinforcement_report.py::write_report`（寫入型）、`appeal.py::write_appeal`（寫入型，校驗組合後的 `file_stem`，故 `18_1` 等合法組合不受影響）。
+- HTTP 面：`server.py` 目前不直接呼叫這三者（端點走唯讀的 `run_presubmission_check`／`build_appeal_draft`）。`UnsafeIdentifierError` 繼承 `ValueError`，既有的統一 `@app.errorhandler(Exception)` 會回脫敏 500——**fail closed**，未來端點接上寫檔路徑時不會外洩內部路徑。
+
+**P1-2（prompt 注入）— 緩解，非證明安全**
+- 新增 `src/elc_audit_engine/prompt_safety.py`：`fence(payload, tag)`＋`DATA_ISOLATION_NOTICE`。
+- **關鍵細節**：包夾前先中和 payload 內的閉合標籤（含 `</ RULE >` 等大小寫／空白變體），否則資料可自行關閉標籤逃逸到指令層——與輸出 HTML 前需先轉義同理。合法角括號（如 `血壓 <140/90`）不受影響。
+- 三處呼叫點：`judger.py::judge`（`<rule>`／`<record>`）、`narratives.py::generate`（`<rule_location>`／`<rule>`／`<record>`）、`mapping/prompts.py`（`<code>`／`<name>`／`<category_hint>`／`<candidates>`）。system prompt 均附資料隔離宣告。
+- **誠實界定範圍**：這降低成功率，不代表安全——LLM 仍可能服從資料內指示。真正邊界仍在下游：`judger` 只接受 `VERDICTS` 白名單，非法值降級待人工。**不得以「已加定界」為由放寬輸出校驗。**
+- 注意 `rule_text` 是**二階不可信**：由 `build_mapping.py` 的 LLM 批次生成後寫回 SQLite，即 LLM 產出回流為 LLM 輸入。
+
+**P1-5（前端 XSS＋CSP）— 嚴重性隨時間上升**
+- 原審查註明「現為硬編碼資料不觸發；CSV 匯入一上線即爆」。**匯入已於 `56d9902` 上線，此休眠漏洞已活化**——`renderCaseList` 的 `order_code`／`patient_name`／`order_name` 全部來自使用者上傳的 CSV／OCR 結果。教訓：**靜態安全清單需在功能上線時重新評級，而非只在發現時評一次。**
+- `static/index.html::renderCaseList` 改以 DOM API 建構（`createElement`＋`textContent`），移除 innerHTML 樣板。其餘 API 欄位早已走 `innerText`／`.value`（不解析 HTML），經全檔稽核確認 `renderCaseList` 是唯一注入點。
+- 移除 Google Fonts 外鏈（`preconnect` ×2＋`stylesheet`）：本服務接觸病歷資料，外鏈字型會把使用者 IP 與瀏覽行為送到第三方，與 D2「個資不出本機」相衝，且離線／VPN 環境下載入失敗。改用系統字型堆疊（保留 `'Noto Sans TC'` 等作本機優先，僅去掉網路取用）。
+- `server.py` 新增 `@app.after_request` 安全標頭：CSP（`default-src 'self'`、`object-src 'none'`、`frame-ancestors 'none'`、`base-uri 'none'`、`form-action 'self'`）＋`X-Content-Type-Options: nosniff`＋`Referrer-Policy: no-referrer`＋`X-Frame-Options: DENY`。inline `style`/`script` 暫留 `'unsafe-inline'`（頁面為單檔 inline 樣板），待拆出外部 `.css`/`.js` 後可移除此例外。
+- 回歸測試含**負向控制**：刻意重新植入 `innerHTML` 樣板後 `test_frontend_case_list_does_not_use_innerhtml_templating` 確實失敗（已驗證後還原），確認該測試不是空過。
 
 ---
 

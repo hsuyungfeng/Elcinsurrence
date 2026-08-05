@@ -9,6 +9,8 @@ P6 不申覆強制填 0（C3/Q13）、D-15 核減上界檢查、審核軌跡消�
 import json
 from datetime import date
 
+import pytest
+
 from elc_audit_engine.generators import (
     MAX_FIELD_CHARS,
     MAX_TOTAL_CHARS,
@@ -22,6 +24,7 @@ from elc_audit_engine.generators import (
     write_appeal,
 )
 from elc_audit_engine.parsers.models import DeductionRecord
+from elc_audit_engine.safe_paths import UnsafeIdentifierError
 from elc_audit_engine.record_aggregator.models import (
     LabRecord,
     PatientTimeline,
@@ -456,6 +459,23 @@ def test_write_appeal_file_stem_avoids_overwrite(tmp_path):
     assert (tmp_path / "appeal_18_1.json").exists()
     assert (tmp_path / "申復草稿_18_2.md").exists()
     assert (tmp_path / "appeal_18_2.json").exists()
+
+
+def test_write_appeal_rejects_traversal_case_seq(tmp_path):
+    """P1-3：case_seq 進檔名，穿越須拒絕而非寫到 output_dir 之外。"""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    target = tmp_path / "out"
+    target.mkdir()
+    with pytest.raises(UnsafeIdentifierError):
+        write_appeal(str(target), "../outside/leaked", _draft())
+    assert list(outside.iterdir()) == []
+
+
+def test_write_appeal_rejects_traversal_file_stem(tmp_path):
+    """file_stem 覆寫 case_seq 時仍須校驗（合法組合 18_1 不受影響）。"""
+    with pytest.raises(UnsafeIdentifierError):
+        write_appeal(str(tmp_path), "18", _draft(), file_stem="../../evil")
 
 
 def test_build_necessity_pure():

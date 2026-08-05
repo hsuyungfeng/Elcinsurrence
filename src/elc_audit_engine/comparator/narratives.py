@@ -12,6 +12,7 @@ import json
 import re
 from typing import Callable
 
+from elc_audit_engine.prompt_safety import DATA_ISOLATION_NOTICE, fence
 from elc_audit_engine.rule_repository.mapping.llm_client import chat_completion
 
 from .models import (
@@ -28,7 +29,8 @@ _SYSTEM_PROMPT = (
     "2. 若病歷無任何相關線索，改寫成提示型敘述（以「若實際有執行，"
     "請補充：」開頭），事實補充留給醫師；"
     "3. 只輸出一個 JSON 陣列：[{\"text\": \"敘述\", \"prompt_only\": true/false}]。"
-    "不要輸出任何其他文字。"
+    "不要輸出任何其他文字。\n"
+    + DATA_ISOLATION_NOTICE
 )
 
 _JSON_ARRAY_RE = re.compile(r"\[.*\]", re.S)
@@ -68,9 +70,15 @@ class LLMNarrativeGenerator:
     ) -> list[CandidateNarrative]:
         if support_level not in (SUPPORT_WEAK, SUPPORT_NONE):
             return []
+        # P1-2：rule_location/rule_text（LLM 生成後回流）與病歷原文皆不可信，
+        # 以標籤定界隔離。
         user_prompt = (
-            f"規則檢核項（出處：{check_item.rule_location or '未知'}）：\n"
-            f"{check_item.rule_text}\n\n病歷段落：\n{evidence}"
+            "規則檢核項出處：\n"
+            f"{fence(check_item.rule_location or '未知', 'rule_location')}\n\n"
+            "規則檢核項：\n"
+            f"{fence(check_item.rule_text, 'rule')}\n\n"
+            "病歷段落：\n"
+            f"{fence(evidence, 'record')}"
         )
         try:
             raw = chat_completion(

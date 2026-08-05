@@ -1,13 +1,19 @@
 """rule_mapping LLM 候選條文比對的 prompt 樣板。
 
 僅供 `build_mapping.py` 的一次性批次建置流程使用（D-04）。
+
+P1-2：代碼／名稱與候選節點全文皆來自外部檔案（CSV／docx 樹），以
+`<candidates>` 等標籤定界隔離，避免條文內容中的文字被當成指令。
 """
+
+from elc_audit_engine.prompt_safety import DATA_ISOLATION_NOTICE, fence
 
 SYSTEM_PROMPT = (
     "你是健保醫療給付規則比對助手。你會收到一個醫令/藥品代碼與其名稱，"
     "以及若干候選條文樹節點（含標題與路徑）。請從候選節點中選出最相關的一個，"
     "並以此格式回答：條文位置：<path>\n條文摘要：<最相關的一段全文，至多200字>。"
-    "若候選節點都不相關，回答：查無相關條文。"
+    "若候選節點都不相關，回答：查無相關條文。\n"
+    + DATA_ISOLATION_NOTICE
 )
 
 _MAX_CANDIDATES = 5
@@ -42,10 +48,10 @@ def build_candidate_matching_prompt(
     candidates_block = "\n".join(candidates_block_lines) if candidates_block_lines else "（無候選節點）"
 
     user_prompt = (
-        f"代碼：{code}\n"
-        f"名稱：{name}\n"
-        f"分類線索：{category_hint}\n"
-        f"候選條文節點：\n{candidates_block}\n"
+        f"代碼：{fence(code, 'code')}\n"
+        f"名稱：{fence(name, 'name')}\n"
+        f"分類線索：{fence(category_hint, 'category_hint')}\n"
+        f"候選條文節點：\n{fence(candidates_block, 'candidates')}\n"
     )
 
     return SYSTEM_PROMPT, user_prompt

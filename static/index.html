@@ -4,11 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Elcinsurrence - 健保雙軌自動化審核與申復工作台</title>
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  
+  <!-- P1-5：移除 Google Fonts 外鏈——本服務接觸病歷資料，外鏈字型會把
+       使用者 IP 與瀏覽行為送到第三方，與 D2「個資不出本機」相衝；且離線／
+       VPN 環境下字型載入失敗。改用系統字型堆疊（含常見中文字型）。 -->
+
   <style>
     :root {
       --bg-dark: #090d16;
@@ -31,7 +30,8 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: 'Noto Sans TC', sans-serif;
+      font-family: system-ui, -apple-system, 'Noto Sans TC', 'PingFang TC',
+        'Microsoft JhengHei', sans-serif;
       background-color: var(--bg-dark);
       background-image: 
         radial-gradient(circle at 10% 20%, rgba(6, 182, 212, 0.08) 0%, transparent 40%),
@@ -108,7 +108,7 @@
     .case-item:hover { background: rgba(255, 255, 255, 0.05); border-color: rgba(56, 189, 248, 0.3); }
     .case-item.active { background: rgba(6, 182, 212, 0.12); border-color: var(--accent-cyan); box-shadow: 0 0 12px rgba(6, 182, 212, 0.2); }
 
-    .case-code { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #38bdf8; font-size: 14px; }
+    .case-code { font-family: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; font-weight: 700; color: #38bdf8; font-size: 14px; }
     .badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
     .badge-sufficient { background: var(--color-sufficient-bg); color: var(--color-sufficient); border: 1px solid var(--color-sufficient); }
     .badge-weak { background: var(--color-weak-bg); color: var(--color-weak); border: 1px solid var(--color-weak); }
@@ -138,7 +138,7 @@
     textarea.code-editor {
       width: 100%; height: 150px; background: rgba(0, 0, 0, 0.3);
       border: 1px solid var(--panel-border); border-radius: 8px; color: #38bdf8;
-      font-family: 'JetBrains Mono', monospace; font-size: 13px; padding: 12px; line-height: 1.5; resize: vertical;
+      font-family: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 13px; padding: 12px; line-height: 1.5; resize: vertical;
     }
 
     /* Mode 2: Multi-source Evidence Box (多源證據) */
@@ -387,21 +387,44 @@
         div.className = `case-item ${currentSelectedCase && currentSelectedCase.id === item.id ? 'active' : ''}`;
         div.onclick = () => currentMode === 'sampling' ? selectSamplingCase(item.id) : selectAppealCase(item.id);
         
-        const demoTag = item.demo ? '<span style="font-size:11px;color:#888;border:1px solid #ccc;border-radius:4px;padding:0 4px;margin-left:6px;">示範</span>' : '';
+        // P1-5：改以 DOM API 建構，所有 API 欄位一律走 textContent。
+        // 匯入功能上線後 order_code/patient_name/order_name 皆來自使用者
+        // 上傳的 CSV／OCR 結果，innerHTML 樣板即為真實 XSS 注入點。
+        const topRow = document.createElement('div');
+        topRow.style.cssText =
+          'display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;';
+
+        const codeSpan = document.createElement('span');
+        codeSpan.className = 'case-code';
+        codeSpan.textContent = item.order_code ?? '';
+        topRow.appendChild(codeSpan);
+
         // 列表徽章不再顯示 GET 端點未經驗證的 support_level（P0-1 教訓：
         // 假判定比沒接線更危險）；sampling 一律顯示「待審」，點擊後以
         // /api/sampling/audit 引擎結果覆蓋；appeal 顯示核減點數。
-        const badgeTag = currentMode === 'appeal'
-          ? `<span class="badge badge-none">核減 ${item.deduct_amount}點</span>`
-          : '<span class="badge badge-weak">待審</span>';
+        const badge = document.createElement('span');
+        if (currentMode === 'appeal') {
+          badge.className = 'badge badge-none';
+          badge.textContent = `核減 ${item.deduct_amount ?? ''}點`;
+        } else {
+          badge.className = 'badge badge-weak';
+          badge.textContent = '待審';
+        }
+        topRow.appendChild(badge);
+        div.appendChild(topRow);
 
-        div.innerHTML = `
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-            <span class="case-code">${item.order_code}</span>
-            ${badgeTag}
-          </div>
-          <div style="font-size:13px; font-weight:500;">${item.patient_name} - ${item.order_name}${demoTag}</div>
-        `;
+        const nameRow = document.createElement('div');
+        nameRow.style.cssText = 'font-size:13px; font-weight:500;';
+        nameRow.textContent = `${item.patient_name ?? ''} - ${item.order_name ?? ''}`;
+        if (item.demo) {
+          const demoTag = document.createElement('span');
+          demoTag.style.cssText =
+            'font-size:11px;color:#888;border:1px solid #ccc;border-radius:4px;padding:0 4px;margin-left:6px;';
+          demoTag.textContent = '示範';
+          nameRow.appendChild(demoTag);
+        }
+        div.appendChild(nameRow);
+
         container.appendChild(div);
       });
     }

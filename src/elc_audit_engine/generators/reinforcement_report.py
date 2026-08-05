@@ -21,6 +21,7 @@ from elc_audit_engine.comparator.models import (
     VERDICT_UNSUPPORTED,
     CaseComparisonResult,
 )
+from elc_audit_engine.safe_paths import safe_filename
 
 from .tracking import render_tracking
 
@@ -191,9 +192,11 @@ def write_report(
     Returns:
         (報告路徑, 軌跡路徑)。
     """
+    # P1-3：case_record_no 進檔名，未校驗會造成寫入型路徑穿越。
+    safe_no = safe_filename(case_record_no, "case_record_no")
     os.makedirs(output_dir, exist_ok=True)
-    report_path = os.path.join(output_dir, f"病歷補強報告_{case_record_no}.md")
-    tracking_path = os.path.join(output_dir, f"審核軌跡_{case_record_no}.json")
+    report_path = os.path.join(output_dir, f"病歷補強報告_{safe_no}.md")
+    tracking_path = os.path.join(output_dir, f"審核軌跡_{safe_no}.json")
 
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(render_report(comparison, timeline=timeline))

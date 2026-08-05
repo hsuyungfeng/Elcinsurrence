@@ -12,22 +12,26 @@ import json
 import re
 from typing import Callable
 
+from elc_audit_engine.prompt_safety import DATA_ISOLATION_NOTICE, fence
 from elc_audit_engine.rule_repository.mapping.llm_client import chat_completion
 
 from .models import CheckItem, Judgment, VERDICTS, VERDICT_MANUAL
 
 _SYSTEM_PROMPT = (
-    "你是病歷佐證判定助手。你會收到一個「檢核項」（健保規則要求）與"
-    "「病歷段落」。請判定病歷是否支持該檢核項，只輸出一個 JSON 物件，"
+    "你是病歷佐證判定助手。你會收到一個「檢核項」（健保規則要求，在 <rule> "
+    "標籤內）與「病歷段落」（在 <record> 標籤內）。請判定病歷是否支持該檢核項，"
+    "只輸出一個 JSON 物件，"
     "格式：{\"verdict\": \"支持\" 或 \"部分支持\" 或 \"無記載\", "
     "\"quote\": \"病歷原文中支持判定的一句話（無記載時為空字串）\", "
-    "\"reason\": \"一句話理由\"}。不要輸出任何其他文字。"
+    "\"reason\": \"一句話理由\"}。不要輸出任何其他文字。\n"
+    + DATA_ISOLATION_NOTICE
 )
 
 _RETRY_SYSTEM_PROMPT = (
     "你上次的回覆不是有效 JSON。請只輸出一個 JSON 物件，不要有前言、"
     "結語或 Markdown 程式碼區塊，格式：{\"verdict\": \"支持\" 或 "
-    "\"部分支持\" 或 \"無記載\", \"quote\": \"...\", \"reason\": \"...\"}。"
+    "\"部分支持\" 或 \"無記載\", \"quote\": \"...\", \"reason\": \"...\"}。\n"
+    + DATA_ISOLATION_NOTICE
 )
 
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.S)
@@ -81,8 +85,13 @@ class LLMJudger:
         return chat_completion(system_prompt, user_prompt, max_tokens=self._max_tokens)
 
     def judge(self, check_item: CheckItem, evidence: str) -> Judgment:
+        # P1-2：rule_text（LLM 生成後回流）與病歷原文（使用者可控）皆為
+        # 不可信輸入，以標籤定界隔離，不與指令同層拼接。
         user_prompt = (
-            f"檢核項（規則要求）：{check_item.rule_text}\n\n病歷段落：\n{evidence}"
+            "檢核項（規則要求）：\n"
+            f"{fence(check_item.rule_text, 'rule')}\n\n"
+            "病歷段落：\n"
+            f"{fence(evidence, 'record')}"
         )
         try:
             raw = self._call(_SYSTEM_PROMPT, user_prompt)

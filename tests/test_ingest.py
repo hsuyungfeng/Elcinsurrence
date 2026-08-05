@@ -143,6 +143,49 @@ def api(monkeypatch, tmp_path):
     return server_mod.app.test_client(), tmp_path
 
 
+def test_security_headers_present_on_all_responses(api):
+    """P1-5 縱深防禦：CSP 等安全標頭須套用於頁面與 API 回應。"""
+    client, _ = api
+    for path in ("/", "/api/sampling/cases"):
+        r = client.get(path)
+        csp = r.headers.get("Content-Security-Policy", "")
+        assert "default-src 'self'" in csp, path
+        assert "frame-ancestors 'none'" in csp, path
+        assert r.headers.get("X-Content-Type-Options") == "nosniff", path
+        assert r.headers.get("Referrer-Policy") == "no-referrer", path
+
+
+def test_csp_has_no_external_host_allowance(api):
+    """外鏈字型已移除（D2）；CSP 不得再放行任何外部主機。"""
+    client, _ = api
+    csp = client.get("/").headers.get("Content-Security-Policy", "")
+    assert "http://" not in csp
+    assert "https://" not in csp
+
+
+def test_frontend_has_no_external_resource_links():
+    """回歸：static/index.html 不得重新引入外鏈資源（字型/CDN）。"""
+    from pathlib import Path
+
+    html = Path("static/index.html").read_text(encoding="utf-8")
+    assert "fonts.googleapis.com" not in html
+    assert "fonts.gstatic.com" not in html
+
+
+def test_frontend_case_list_does_not_use_innerhtml_templating():
+    """回歸：P1-5 修復後 renderCaseList 不得再以 innerHTML 拼接 API 欄位。"""
+    from pathlib import Path
+
+    import re
+
+    html = Path("static/index.html").read_text(encoding="utf-8")
+    # 只看「賦值」給 innerHTML 的位置（註解中提及 innerHTML 不算注入點）；
+    # 僅允許賦成空字串字面值（清空子節點）。
+    assignments = re.findall(r"\.innerHTML\s*=\s*(.+)", html)
+    for rhs in assignments:
+        assert rhs.strip().startswith(("''", '""')), f"疑似 HTML 注入點: {rhs.strip()}"
+
+
 def test_sampling_import_csv_endpoint(api):
     client, tmp_path = api
     r = client.post(

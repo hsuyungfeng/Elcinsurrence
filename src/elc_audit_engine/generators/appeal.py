@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from elc_audit_engine.parsers.models import DeductionRecord
+from elc_audit_engine.safe_paths import safe_filename
 from elc_audit_engine.record_aggregator.models import PatientTimeline
 
 from .tracking import STATUS_ADOPT, STATUS_ADOPT_EDITED
@@ -534,8 +535,10 @@ def write_appeal(
     Returns:
         (md 路徑, json 路徑)。
     """
+    # P1-3：stem 進檔名，未校驗會造成寫入型路徑穿越。校驗組合後的結果——
+    # `{case_seq}_{order_seq}` 的底線在白名單內，合法組合不受影響。
+    stem = safe_filename(file_stem or (case_seq or "unknown"), "file_stem/case_seq")
     os.makedirs(output_dir, exist_ok=True)
-    stem = file_stem or (case_seq or "unknown")
     md_path = os.path.join(output_dir, f"申復草稿_{stem}.md")
     json_path = os.path.join(output_dir, f"appeal_{stem}.json")
 

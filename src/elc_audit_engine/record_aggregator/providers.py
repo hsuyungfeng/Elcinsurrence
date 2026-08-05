@@ -19,6 +19,7 @@ from datetime import date
 from typing import Any
 
 from elc_audit_engine.rule_repository.loaders.dates import parse_flexible_date
+from elc_audit_engine.safe_paths import safe_filename
 
 from .models import ExamRecord, ImagingRecord, LabRecord, Record, VisitRecord
 
@@ -133,7 +134,9 @@ class LocalFileProvider(RecordProvider):
         return f"local:{self._root_dir}"
 
     def _records_path(self, patient_id: str) -> str:
-        return os.path.join(self._root_dir, patient_id, "records.json")
+        # P1-3：patient_id 來自申報 XML 欄位 d3，未校驗會造成讀取型路徑穿越。
+        safe_id = safe_filename(patient_id, "patient_id")
+        return os.path.join(self._root_dir, safe_id, "records.json")
 
     def fetch_records(self, patient_id: str) -> list[Record]:
         path = self._records_path(patient_id)

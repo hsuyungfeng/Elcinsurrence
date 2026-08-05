@@ -63,6 +63,36 @@ class UploadFileError(Exception):
     """上傳檔案不合法（副檔名／大小）。"""
 
 
+#: P1-5 縱深防禦：即使前端某處遺漏轉義，CSP 也擋掉外部腳本與資料外送。
+#  外鏈字型已移除（D2 個資不出本機），故 default-src 收斂到 'self'。
+#  inline style/script 暫留 'unsafe-inline'——頁面目前為單檔 inline 樣板，
+#  待拆出外部 .css/.js 後可移除此例外。
+_CSP = "; ".join(
+    (
+        "default-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "script-src 'self' 'unsafe-inline'",
+        "img-src 'self' data:",
+        "connect-src 'self'",
+        "font-src 'self'",
+        "object-src 'none'",
+        "frame-ancestors 'none'",
+        "base-uri 'none'",
+        "form-action 'self'",
+    )
+)
+
+
+@app.after_request
+def _security_headers(response):
+    """統一補安全標頭（P1-5）。"""
+    response.headers.setdefault("Content-Security-Policy", _CSP)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    return response
+
+
 @app.errorhandler(ApiError)
 def _handle_api_error(exc: ApiError):
     return jsonify({"status": "error", "message": exc.message}), exc.status
