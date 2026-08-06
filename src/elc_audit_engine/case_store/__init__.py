@@ -6,7 +6,7 @@
 並行執行。
 
 任務佇列採**同步版**：狀態欄位即佇列，以「查詢處於某狀態的案件」
-（`CaseStore.list_by_state`）實現，不引入 Celery／Redis（單機部署，
+（`CaseStore.list_by_state`）實現，不引入外部訊息佇列 broker（單機部署，
 09-CONTEXT.md 決策）。
 """
 
@@ -26,6 +26,15 @@ from elc_audit_engine.case_store.states import (
     can_transition,
     requires_reason,
 )
+from elc_audit_engine.case_store.store import (
+    CaseNotFoundError,
+    CaseRecord,
+    CaseStore,
+    CaseStoreError,
+    DuplicateCaseError,
+    MissingFailureReasonError,
+    TransitionRecord,
+)
 
 __all__ = [
     "ALL_STATES",
@@ -42,4 +51,11 @@ __all__ = [
     "can_transition",
     "assert_transition_allowed",
     "requires_reason",
+    "CaseStore",
+    "CaseRecord",
+    "TransitionRecord",
+    "CaseStoreError",
+    "DuplicateCaseError",
+    "CaseNotFoundError",
+    "MissingFailureReasonError",
 ]
