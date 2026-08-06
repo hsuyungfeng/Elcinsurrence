@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in_progress
-last_updated: "2026-08-05T00:00:00.000Z"
+status: unknown
+stopped_at: P1-4（CSV 內容 SHA-256 hash＋ChromaDB `source_version` 綁定與自動
+last_updated: "2026-08-06T05:48:29.035Z"
 progress:
   total_phases: 10
   completed_phases: 8
-  total_plans: 11
-  completed_plans: 11
-  percent: 80
+  total_plans: 15
+  completed_plans: 14
+  percent: 93
 ---
 
 # STATE.md — elc-audit-engine
@@ -48,6 +49,7 @@ ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (origi
 - **GSD Phase 2 Plan 06 (Wave 2: ChromaDB D-09 embeddings, non-blocking) executed and committed.** Delivered: `src/elc_audit_engine/rule_repository/embeddings/` package (`chroma_store.py` — `flatten_tree_nodes()` + `build_chroma_collection()`, wrapped in a broad non-blocking exception handler per D-09) and `scripts/build_chroma_index.py`. Real artifact produced: local persistent ChromaDB collection at `data/rag/` (165 chunks ingested from the 32-file docx tree corpus, default ONNX all-MiniLM-L6-v2 embedder). Low-priority/non-blocking infrastructure only — no query logic (deferred to Phase 5 per CONTEXT.md). See `.planning/phases/02-rule-repository/02-06-SUMMARY.md`.
 - **GSD Phase 2 Plan 04 (Wave 2: rule_mapping LLM-assisted build, D-04/D-05) executed and committed.** Delivered: `src/elc_audit_engine/rule_repository/mapping/` package (`llm_client.py` — llama.cpp chat_completion wrapper with mandatory smoke test; `prompts.py` — keyword-prefiltered candidate-matching prompts; `build_mapping.py` — CSV-reuse fast path + LLM-assisted fallback batch orchestrator) and `db.py` extended with the `rule_mapping` table schema. Real batch run completed for all 13,942 codes (2,669 payment + 11,273 drug): `{'csv_reuse_count': 6802, 'llm_matched_count': 558, 'no_match_count': 6582}` — the run took ~9.3h wall-clock (mostly LLM inference for the LLM-path codes) and survived an account spend-limit session interruption thanks to a periodic-commit resilience fix (every 100 rows) added during implementation. All 20 human spot-check fixture codes resolved via the CSV fast path with real, substantive article text. Discovered and fixed during batch testing: `chat_template_kwargs.enable_thinking=false` cuts the loaded model's per-call latency from ~30s to ~0.6s (default reasoning-trace mode was otherwise making the batch infeasible). The 46% LLM-path no-match rate is documented as an honest recall limitation of top-5 keyword prefiltering, not a bug — manually verified the LLM correctly declines to fabricate matches when no relevant candidate is found. See `.planning/phases/02-rule-repository/02-04-SUMMARY.md`.
 - **GSD Phase 2 Plan 05 (Wave 3: get_rule() single query interface + human spot-check) executed and committed — Phase 2 now COMPLETE.** Delivered: `get_rule(code)` in `src/elc_audit_engine/rule_repository/__init__.py`, the sole D-07/D-08 public entry point — combines `payment_rules`/`drug_rules` + `rule_mapping` lookups, zero LLM/network calls at query time, never raises (SQLite errors degrade to `not_found()`). Fixed a cross-plan integration gap: `rule_mapping` was missing from `db.py`'s `query_by_code` allowlist. Human 20-code spot-check conducted via a published Artifact review page (Traditional Chinese regulatory text, per user request over raw terminal output) — user confirmed **20/20 correct**. `tests/fixtures/rule_mapping_20_spotcheck.json` locked with real article data, `verified: true` for all entries. Full test suite green: 34 passed, 1 skipped. All 3 REQ-rule-repository acceptance criteria now automated-and-passing. See `.planning/phases/02-rule-repository/02-05-SUMMARY.md`.
+- **GSD Phase 9 Plan 02（案件狀態機＋SQLite 持久化）executed and committed.** Delivered: `src/elc_audit_engine/case_store/` 純資料層子套件（無 Flask／LLM 依賴）——`states.py` 七狀態顯式轉換表（六主線＋failed 旁支，submitted 為封閉終態，未知狀態一律拋 `UnknownStateError` 而非回 False）；`db.py`／`store.py`：`cases`／`case_transitions` 兩表，`CaseStore` 提供 create/get/transition/history/list_by_state（同步版任務佇列取件，無 Celery／Redis）/list_all/counts_by_state；狀態與轉換歷史於單一 SQLite 交易內原子寫入；`failure_reason` 獨立欄位與業務結論分離（P1-1 同源原則延伸）；case_id 沿用既有 `safe_filename()` 校驗後拒絕。65 新測試全綠，全套件由 277 passed / 2 skipped 增至 336 passed / 2 skipped（`test_ingest.py` 7 個 ERROR 屬平行執行的 09-01 `server.py` 未完成所致，非本 plan 範圍）。刻意未動 `server.py`／既有 `data/uploads/*.json`——端點接線與遷移留給 09-03 裁示。見 `.planning/phases/09-his-servicing/09-02-SUMMARY.md`。
 
 ## Not Yet Started
 
@@ -59,46 +61,57 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-08-05
-Stopped at: 安全清尾 P1-5／P1-2／P1-3 完成並 commit（`f6ac775`），測試
-277 passed / 1 skipped；ROADMAP 拆分 Phase 9（服務化）／Phase 10（實機門控）；
-下一步＝`/gsd-plan-phase 9`，首項工作認證授權
-Resume file: 無（HANDOFF.json 已於 2026-08-05 恢復後消費並刪除）
+Last session: 2026-08-06（本次 `/gsd-resume-work` 恢復）
+Stopped at: P1-4（CSV 內容 SHA-256 hash＋ChromaDB `source_version` 綁定與自動
+purge）完成並 commit（`5f1f38e`）；Phase 9 的 **09-01-PLAN.md（認證授權＋審計
+日誌）與 09-02-PLAN.md（案件狀態機＋SQLite 持久化）已寫好但尚未執行**——兩份
+PLAN 皆無對應 SUMMARY，且 `auth.py`／`audit_log.py`／`case_store/` 與其四個
+測試檔在 working tree 均不存在。下一步＝`/gsd-execute-phase 9`。
+Resume file: `.continue-here.md`（倉庫根，2026-08-05 15:42 寫入，status: paused）
 
 **2026-08-05 修復（詳見 `deepflash4improve.md` §7.6）：**
+
 - **P1-5 前端 XSS＋CSP**：`renderCaseList` 改 DOM API（`createElement`＋
   `textContent`）；移除 Google Fonts 外鏈（D2 個資不出本機）；`server.py`
   新增 `@app.after_request` 安全標頭。**此漏洞原為休眠，因 `56d9902` 匯入
   上線而活化——教訓：靜態安全清單需在功能上線時重新評級。**
+
 - **P1-3 路徑穿越**：新增 `safe_paths.py::safe_filename()`（校驗後拒絕，
   非清洗取代；白名單含 CJK）。實作期抓到自身 bug：初版先取 `basename()`
   會把 `../etc/passwd` 悄悄清洗成 `passwd` 而通過白名單。
+
 - **P1-2 prompt 注入**：新增 `prompt_safety.py::fence()`，三處 prompt 標籤
   定界；包夾前中和 payload 內閉合標籤防逃逸。**緩解非證明安全**，下游
   `VERDICTS` 白名單校驗仍是真正邊界。
 
 **2026-08-04 修復（詳見 `deepflash4improve.md` §7.5）：**
+
 - **P0-2 flask 依賴漂移**：`pyproject.toml` 加回 `flask>=3.0`＋`uv lock`。
 - **P1-1（升級為 P0）系統故障偽裝成業務結論**：`classify_support` 全「待人工」
   → `support_level=None`（待判定），不再歸「裸奔」；報告新增「⏳ 待判定」徽章，
   依 `rule_found` 與「查無規則」分辨。**與 D-06/P0-2「DB 故障 ≠ 查無規則」同源
   原則：系統故障必須與業務結論可區分。**
+
 - **P0-1 server.py 假邏輯**：新增 `run_presubmission_check()`（事前預審＝唯讀比對，
   不寫檔），`/api/sampling/audit` 與 `/api/appeal/generate` 改接真實引擎；
   安全預設 debug=False＋綁 127.0.0.1＋統一錯誤脫敏＋入參校驗。
 
 **Carry into Phase 9：**
+
 - `pipeline.py` 現有**兩個**入口，對應架構圖兩個服務：
   `run_presubmission_check`（Review Service，唯讀）／`run_case_pipeline`
   （Appeal Service，寫檔）。Phase 9 服務化拆分直接沿用此切分。
+
 - **P0-3 使用者決定暫緩**（倉庫稍後轉 private）：`data/output/*` 目前**未**被
   `.gitignore` 排除，跑 pipeline 後 `git add -A` 會把 PHI 入庫——轉 private 前
   務必人工確認暫存區。
+
 - ~~未處理：P1-2 prompt 注入、P1-3 路徑穿越、P1-5 前端 XSS~~ → **已於
   2026-08-05 完成（`f6ac775`）**。**仍未處理：P1-4 版本管理（CSV 內容 hash
   ＋ChromaDB 版本綁定）、P2 全部。**
 
 **Carry into planning:**
+
 - **E2E-01 已修正**：classify_support「部分支持（無無記載）」由充分改為薄弱（05-CONTEXT D-04 已同步加註記）；薄弱三級在單檢核項流程下已可達。
 - **run_case_pipeline 是 Phase 9/真實樣本回放的接入點**：換真解析器/Provider/rule_lookup/judge_fn 即可回放真實核減案（C6-5）；appeal 階段單筆規則庫故障降級查無規則不阻斷（C5 精神），比對階段故障依 P0-2 穿透。
 - **金標準回放**：`scripts/replay_gold_standard.py` 需 llama.cpp :8080 健康（換模型回歸基準，C6-3）；測試零 LLM 依賴（替身 judge_fn）。

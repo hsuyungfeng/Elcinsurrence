@@ -153,7 +153,8 @@ Plans:
 **Phase 9（現在可執行完）** 與 **Phase 10（外部依賴門控）**。
 
 Plans:
-- [ ] 09-01: TBD（首項＝認證授權，使用者裁示 2026-08-05）
+- [ ] 09-01: 認證授權＋審計日誌（API key 服務間認證，constant-time 比對；存取審計日誌，零 PHI）
+- [x] 09-02: 案件狀態機＋SQLite 持久化（`case_store` 子套件：七狀態顯式轉換表＋`CaseStore`；同步版任務佇列取件；狀態與轉換歷史原子寫入）— 見 `09-02-SUMMARY.md`
 
 ### Phase 10: VPN／實機串接（外部依賴門控）
 **Goal**: 接上 doctor-toolbox 雲端病歷與健保署 VPN 上傳鏈路（原 Phase 9 被阻塞的部分）
