@@ -145,7 +145,7 @@ Plans:
   2. 端點具備認證授權——不再是無認證即可存取病歷資料的服務
   3. 案件具備狀態機（取代目前 `data/uploads/*.json` 的無狀態落盤）＋任務佇列
   4. Package Builder：`appeal_{流水號}.json`（已含 p1-p9）序列化為申復 XML
-**Plans**: 待 /gsd-plan-phase 9 產出
+**Plans**: 4 plans
 
 **2026-08-05 切分理由**：原 Phase 9 的三項 criteria 中有兩項被外部依賴硬阻塞
 （雲端 Provider 需 doctor-toolbox 存取權、NHI_EIIAPI 需 Windows＋VPN＋SAM 實機），
@@ -153,8 +153,10 @@ Plans:
 **Phase 9（現在可執行完）** 與 **Phase 10（外部依賴門控）**。
 
 Plans:
-- [ ] 09-01: 認證授權＋審計日誌（API key 服務間認證，constant-time 比對；存取審計日誌，零 PHI）
+- [x] 09-01: 認證授權＋審計日誌（API key 服務間認證，constant-time 比對；存取審計日誌，零 PHI）— 見 `09-01-SUMMARY.md`
 - [x] 09-02: 案件狀態機＋SQLite 持久化（`case_store` 子套件：七狀態顯式轉換表＋`CaseStore`；同步版任務佇列取件；狀態與轉換歷史原子寫入）— 見 `09-02-SUMMARY.md`
+- [ ] 09-03: 端點接 CaseStore＋uploads 遷移（匯入即建案＋重複衝突拒絕；GET 端點改讀 CaseStore 為單一真實來源；啟動期一次性冪等遷移；audit/generate 選填 case_id 觸發狀態轉換）— 見 `09-03-PLAN.md`
+- [ ] 09-04: Package Builder（申復 XML 序列化，tdata+ddata+pdata，不含 edata；ElementTree 建構＋全形特殊字元轉換＋Big5 fail-fast 寫檔；背景腳本 `scripts/build_appeal_xml.py`，不涉及新端點）— 見 `09-04-PLAN.md`
 
 ### Phase 10: VPN／實機串接（外部依賴門控）
 **Goal**: 接上 doctor-toolbox 雲端病歷與健保署 VPN 上傳鏈路（原 Phase 9 被阻塞的部分）
