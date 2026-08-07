@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: 09-02 完成；下一步＝09-03（server.py 端點接 CaseStore＋uploads 遷移），PLAN 未撰寫
-last_updated: "2026-08-07T00:00:00.000Z"
+stopped_at: GSD Phase 9 (HIS 服務化) COMPLETE (4/4 plans done). Phase 10 外部依賴門控中。
+last_updated: "2026-08-07T03:37:07.354Z"
 progress:
   total_phases: 10
-  completed_phases: 8
-  total_plans: 17
-  completed_plans: 16
-  percent: 94
+  completed_phases: 9
+  total_plans: 19
+  completed_plans: 19
+  percent: 97
 ---
 
 # STATE.md — elc-audit-engine
@@ -31,7 +31,7 @@ ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (origi
 **GSD Phase 6 — 輸出一（病歷補強報告）— COMPLETE (2026-08-03)** — 06-01 單輪交付：render_report（Markdown checkbox 逐條審：標題/警告區/支持度徽章/候選補強/半年病史摘要）＋render_tracking（審核軌跡 JSON：D9 四狀態＋原文＋編輯後文＋時間）＋write_report（.md＋.json 薄包裝）。13 新測試全綠，全套件 152 passed / 5 skipped。
 **GSD Phase 7 — 輸出二（申復理由草稿）— COMPLETE (2026-08-03)** — 07-01 單輪交付：build_appeal_draft（D10 四段組裝：①案情摘要/②醫療必要性/③規則依據/④病歷佐證；每筆核減醫令獨立生成）＋字數控制器（官方問答集 Q15：每欄 1000／合計 2000、裁剪優先 ④→②、①③骨架不動）＋P6 不申覆強制填 0 硬檢查（C3/Q13）＋D-15 核減上界檢查（申復點數≤不予核銷金額）＋adopted_narratives_from_tracking（審核軌跡消費，D-08）＋render_appeal_markdown/render_appeal_json/write_appeal（C7：申復草稿_{流水號}.md＋appeal_{流水號}.json，含 p1-p9 醫令段欄位）。24 新測試全綠，全套件 176 passed / 5 skipped。
 **GSD Phase 8 — 端到端測試 — COMPLETE (2026-08-03)** — 08-01 單輪交付：LLM 判定金標準 30 組（tests/fixtures/llm_gold_standard_30.json：支持12/部分支持9/無記載9＋eval/gold_standard.py harness＋scripts/replay_gold_standard.py 真實 LLM 回放 CLI，health guard，C6-3）＋端到端 3 案例（充分/薄弱/裸奔，run_case_pipeline：compare→write_report→審核 decisions→build_appeal→write_appeal，C6-4）＋E2E-01 修正（classify_support 任一『部分支持』→ 薄弱，原歸充分使 D7 三級缺一角）＋真實樣本替換介面（注入層可換，C6-5）。21 新測試全綠，全套件 197 passed / 5 skipped。五層測試策略全數涵蓋並可執行（C6）。
-**GSD Phase 9 — HIS 服務化（本機可驗證）— 進行中（2026-08-05 開 phase）。** 前導碎片已落地並 commit（Flask API 接真實引擎 `b80cd08`、批次匯入 `56d9902`、PP-StructureV3 表格 OCR `8c38a19`、安全清尾 `f6ac775`），四者已於 09-01 在 README 追認納管。**09-01（認證授權＋審計日誌）與 09-02（案件狀態機＋SQLite 持久化）已 COMPLETE；剩 09-03（端點接 CaseStore＋uploads 遷移）未規劃。**
+**GSD Phase 9 — HIS 服務化（本機可驗證）— COMPLETE (2026-08-07)** — 四個 Plans 全數完成 (09-01 認證/審計、09-02 狀態機/CaseStore、09-03 server.py 接線/遷移、09-04 Package Builder 申復 XML)。全測試套件 363 passed / 2 skipped 驗證通過。
 **GSD Phase 10 — VPN／實機串接 — 阻塞中**（雲端 Provider 需 doctor-toolbox 存取權、NHI_EIIAPI.DLL 需 Windows＋VPN＋SAM 實機）。2026-08-05 自原 Phase 9 拆出：含阻塞項的 phase 永遠無法通過 verify，會汙染 phase 完成訊號。
 
 **Phase 3 context highlights (see `.planning/phases/03-parsers/03-CONTEXT.md`):** 使用者提供真實申報 XML `TOTFA.xml`（633 案 / 2,624 醫令 / Big5 / 348 位病患，已 gitignore）。實測推翻三項文件假設：(1) C11 欄位表為精選子集，真實檔多出 18 個 dbody 欄位，其中 `d20`-`d26` 為次診斷代碼（Phase 5 判斷醫療必要性的關鍵）；(2) C8 的 p8/p9 字數上限描述有誤，官方問答集 Q15 確認為**每欄 1000 中文字／合計 2000**——影響 Phase 7 字數控制器；(3) **`電子申復格式及填表說明門診.doc` 是申復「輸出」規格，不是核減「輸入」格式**（原 D-14 據此建模輸入檔屬誤判，已由 D-14a 修正）。
@@ -63,12 +63,8 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 ## Session Continuity
 
 Last session: 2026-08-07（本次 `/gsd-resume-work` 恢復）
-Stopped at: **09-01（認證授權＋存取審計）與 09-02（案件狀態機＋SQLite 持久化）
-皆已完成並 commit，兩份 SUMMARY 齊備。** 下一步＝**09-03：server.py 端點接
-`CaseStore`＋`data/uploads/*.json` 遷移**（09-02 刻意未動 server.py，接線留給
-09-03 裁示）。09-03-PLAN.md 尚未撰寫。
-Resume file: 無（`.continue-here.md` 標記 `status: superseded`，其
-「BLOCKING CONSTRAINTS」與「Critical Anti-Patterns」兩節仍有效，開工前須讀）
+Stopped at: **09-01 與 09-02 已完成；09-03-PLAN.md 與 09-04-PLAN.md 已撰寫完成，準備執行 Phase 9 Plan 03**
+Resume file: 無
 
 **⚠️ 2026-08-07 修正**：本節前一版聲稱 09-01/09-02「已寫好但尚未執行、
 `auth.py`／`case_store/` 不存在」——與 git 實況脫節（`25bf03a`、`c8602e5`、
