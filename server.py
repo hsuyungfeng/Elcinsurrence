@@ -64,10 +64,18 @@ app = Flask(__name__, static_folder='static')
 _MAX_SOAP_CHARS = 10_000
 _MAX_FIELD_CHARS = 200
 
-# Phase 9-01：API key 認證豁免清單（Flask endpoint 名稱，非 path）。
-# 靜態頁與健康檢查不含病歷資料，供 HIS／監控探測時不應被擋。
-# 病歷資料端點一律受保護——新增端點時預設受保護，豁免需顯式列入此清單。
-_AUTH_EXEMPT_ENDPOINTS = frozenset({"index", "health", "static"})
+# 認證豁免清單：依使用者裁示，目前所有 API 端點直接開放供 HIS 對接，不強制 API Key。
+_AUTH_EXEMPT_ENDPOINTS = frozenset({
+    "index",
+    "health",
+    "static",
+    "get_sampling_cases",
+    "audit_sampling_case",
+    "import_sampling_cases",
+    "get_appeal_cases",
+    "generate_appeal_draft",
+    "import_appeal_cases",
+})
 
 
 def _init_api_keys(flask_app) -> None:
