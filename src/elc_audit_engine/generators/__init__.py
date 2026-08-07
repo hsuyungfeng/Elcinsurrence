@@ -27,6 +27,12 @@ from .appeal import (
     validate_appeal_claim,
     write_appeal,
 )
+from .appeal_xml import (
+    AppealXmlEncodingError,
+    build_appeal_xml,
+    draft_json_to_appeal_xml_fields,
+    write_appeal_xml,
+)
 from .reinforcement_report import render_report, render_timeline_summary, write_report
 from .tracking import (
     STATUS_ADOPT,
@@ -47,9 +53,12 @@ __all__ = [
     "STATUS_PENDING",
     "AppealDraft",
     "AppealSection",
+    "AppealXmlEncodingError",
     "adopted_narratives_from_tracking",
     "build_appeal_draft",
+    "build_appeal_xml",
     "build_necessity",
+    "draft_json_to_appeal_xml_fields",
     "render_appeal_json",
     "render_appeal_markdown",
     "render_report",
@@ -58,5 +67,6 @@ __all__ = [
     "resolve_p6_points",
     "validate_appeal_claim",
     "write_appeal",
+    "write_appeal_xml",
     "write_report",
 ]

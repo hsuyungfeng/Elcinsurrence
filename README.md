@@ -188,9 +188,23 @@
   - CSV：自訂欄位契約（2026-08-04 裁示）— `流水號(case_seq)／病歷號(record_no)／病患姓名(patient_name)／醫令代碼(order_code, 必填)／醫令名稱(order_name)／就醫日期(visit_date)／科別(clinic)／SOAP(soap_text)`，表頭別名中英皆可、自動偵測，編碼 utf-8-sig→big5→cp950。
   - PDF／影像（紙本）：**優先 PP-StructureV3 表格結構化**（`source: "paddle"`，欄位級：表頭對齊 8 欄契約、日期正規化）；引擎不可用／無表格時**自動降級** tesseract 行解析（`source: "ocr"`，以醫令代碼為錨點結構化「代碼＋名稱」）。每筆保留原始辨識行供人工核對。
   - ⚠️ 表格結構化需 `uv sync --extra ocr`（paddlepaddle==3.2.2 釘版，見 deepflash4improve §8.2）；未裝則全程降級，功能不中斷。
-- **核減清單（`/api/appeal/import`）**：CSV 走 D-14d 18 欄 parser（編碼/分隔符/表頭自動偵測）；**PDF／影像誠實降級** — 18 欄結構無法由 OCR 可靠重建，回 `status: "partial"`＋OCR 文字預覽，提示改用 CSV 匯出。
-- **回傳**：`{status, media_type, source, imported, rejected, rejected_rows:[{row,reason,raw}], saved_to}`；匯入成功後案例清單端點（GET）優先回傳導入資料，並落盤 `data/uploads/*.json`（gitignore，server 重啟自動載入最新一份）。
+- **核減清單（`/api/appeal/import`）**：CSV 走 D-14d 18 欄 parser（編碼/分隔符/表頭自動偵測）；**PDF／影像誠實降級- CaseStore 整合 (Phase 9-03)**：匯入解析成功後逐筆持久化至 `CaseStore` (state=`imported`)。若出現同名 `case_id` 重複匯入，不會靜默覆寫，而是明確於 `case_store_conflicts` 回報。
+- **回傳**：`{status, media_type, source, imported, rejected, rejected_rows:[{row,reason,raw}], saved_to, case_store_persisted, case_store_conflicts}`；GET 案例端點優先讀取 CaseStore，並於伺服器啟動時一次性、冪等地將舊 `data/uploads/*.json` 遷移至 CaseStore。
 - **狀態碼**：`400` 缺檔／不支援類型／超過 10MB／未匯入任何案件（含原因）；`500` 其他（已脫敏）。
+
+#### 🔹 [CLI 工具] `scripts/build_appeal_xml.py` — Package Builder (申復 XML 序列化，Phase 9-04)
+
+將 Phase 7 產出的 `appeal_{流水號}.json`（含 p1-p9 醫令段欄位）序列化為符合健保署申復格式之 XML 檔案。
+
+- **用法**：
+  ```bash
+  python scripts/build_appeal_xml.py <appeal_json路徑> [輸出XML路徑]
+  # 範例:
+  python scripts/build_appeal_xml.py data/output/appeal_18.json data/output/appeal_18.xml
+  ```
+- **範圍聲明**：本次僅支援 **tdata + ddata + pdata**（單筆醫令申復），**不含** `edata`（統扣明細段）。若案件分類為統扣類（`0`），需待後續擴充。
+- **tdata 加總欄位聲明**：單一案件情境下 `t6-t37` 加總欄位依官方規則無資料不輸出標籤。
+- **編碼與特殊字元處理**：檔案固定以 `Big5` 編碼寫出；若遭遇 Big5 無法編碼之字元會 fail-fast 報錯。p8/p9 申復理由內之半形特殊字元 (`< > & ' "`) 會自動轉換為全形字元 (`＜ ＞ ＆ ＇ ＂`)。
 
 #### 🔹 [Python 代碼直接對接]
 HIS 後端若為 Python 架構，可直接呼叫 [`pipeline.py`](src/elc_audit_engine/pipeline.py) 的兩個入口：
