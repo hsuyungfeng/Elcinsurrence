@@ -38,16 +38,17 @@
 
 `elc-audit-engine` 提供標準 RESTful API 與 Python Package 雙重整合介面，方便嵌入 `doctor-toolbox`、Emr / HIS 門診系統或院內 VPN 上傳服務。
 
-### 1. 系統對接架構圖 (Integration Flow)
+### 1. 系統對接架構與串接流程 (Architecture & Integration Steps)
 
-```
-+----------------------------+      HTTP REST API / Python API      +-----------------------------------+
+```text
++----------------------------+      HTTP REST API (X-API-Key)       +-----------------------------------+
 |  院方 HIS / EMR 門診系統   |  =================================>  |    Elcinsurrence Core Engine      |
-|  (doctor-toolbox / 門診端)  |                                      |       (elc-audit-engine API)      |
+|  (doctor-toolbox / 門診端)  |                                      |       (Flask / CaseStore)         |
 +----------------------------+                                      +-----------------------------------+
                                                                                       |
                                        +----------------------------------------------+
                                        |                                              |
+                        [事前預審 Review Service]                       [事後申復 Appeal Service]
                         run_presubmission_check()                        run_case_pipeline()
                         事前預審 · 唯讀 · 不寫檔                     事後申復 · 產出報告與草稿
                                        |                                              |
@@ -60,6 +61,24 @@
                   [Phase 2 規則庫 SQLite]        [Phase 3 解析器 XML/核減/SOAP]     [Phase 4 病歷彙整器]
                   [docx 樹狀索引 + ChromaDB]                                        [半年病史 Provider]
 ```
+
+#### 💡 完整 HIS 串接四步驟 (End-to-End Workflow)
+
+1. **環境設定與健康檢查 (Step 1: Auth & Healthcheck)**
+   - HIS 發送探測請求：`GET /api/health`（不含病歷資料，豁免 API Key）。
+   - 設定 Header `X-API-Key: <key>` 存取所有業務 API（於環境變數 `ELC_API_KEYS` 預先設定）。
+
+2. **案件匯入與初始化 (Step 2: Ingest & Case Initialization)**
+   - **抽審預審**：HIS 呼叫 `POST /api/sampling/import` 上傳 CSV/PDF。系統解析後寫入 `CaseStore` 持久化，狀態標記為 `imported`。
+   - **核減申復**：HIS 呼叫 `POST /api/appeal/import` 上傳 D-14d 明細。系統建案並持久化 (狀態 `imported`)。
+   - **案件查詢**：HIS 發送 `GET /api/sampling/cases` 或 `GET /api/appeal/cases` 取得目前儲存庫中的全數案件與最新狀態。
+
+3. **預審比對與狀態推進 (Step 3: Audit & Workflow State Machine)**
+   - **事前預審**：HIS 帶入 `case_id` 呼叫 `POST /api/sampling/audit`。系統進行 SOAP 分段與 LLM 三方比對，完成後案件狀態自動由 `imported` 推進至 `parsed` ➔ `reviewing` ➔ `reviewed`。
+   - **事後申復**：HIS 帶入 `case_id` 呼叫 `POST /api/appeal/generate`。系統依 D10 四段式結構產出草稿，案件狀態自動推進至 `appealed`。
+
+4. **申復 XML 匯出 (Step 4: XML Export / Package Builder)**
+   - 呼叫 CLI 工具 `scripts/build_appeal_xml.py` 讀取 `appeal_{流水號}.json`，生成 Big5 編碼、特殊字元全形轉義之健保署標準申復 XML 檔 (tdata + ddata + pdata)。
 
 ### 2. 核心 REST API 規格
 
