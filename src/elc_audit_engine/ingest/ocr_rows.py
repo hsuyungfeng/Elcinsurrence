@@ -62,8 +62,9 @@ def parse_sampling_ocr_text(text: str) -> SamplingImportResult:
             )
             continue
         seen.add(order_code)
-        idx_pos = line.find(order_code)
-        rest = line[idx_pos + len(order_code) :].strip() if idx_pos != -1 else line[match.end() :].strip()
+        # 尋找 order_code（忽略大小寫）在行內的位置
+        m_lower = re.search(re.escape(order_code), line, re.IGNORECASE)
+        rest = line[m_lower.end() :].strip() if m_lower else ""
         # 清除行尾雜訊（日期/金額數字群），保留中英文名稱。
         name = re.sub(r"\s{2,}.*$", "", rest)[:_MAX_ORDER_NAME_CHARS].strip()
         records.append(
