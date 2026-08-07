@@ -20,8 +20,8 @@ from .sampling import (
     SamplingRejectedRow,
 )
 
-# 醫令代碼：5 位數字 + 1 位英文字（前後不可接數字，避免吃到長數字）。
-ORDER_CODE_RE = re.compile(r"(?<!\d)(\d{5}[A-Za-z])(?!\d)")
+# 醫令代碼：健保標準 6 碼（5位數字+1位英文字，如 14050B/64140C/01015C），或 5-6 位英數代碼。
+ORDER_CODE_RE = re.compile(r"(?<![A-Za-z0-9])([A-Za-z0-9]{5,6})(?![A-Za-z0-9])")
 
 # 單筆醫令名稱的字數上限（OCR 行其餘文字可能夾帶表頭/頁碼雜訊）。
 _MAX_ORDER_NAME_CHARS = 60
@@ -38,10 +38,19 @@ def parse_sampling_ocr_text(text: str) -> SamplingImportResult:
     seen: set[str] = set()
 
     for idx, line in enumerate(text.splitlines(), start=1):
-        match = ORDER_CODE_RE.search(line)
-        if not match:
+        # 尋找所有 5-6 碼候選
+        candidates = ORDER_CODE_RE.findall(line)
+        if not candidates:
             continue
-        order_code = match.group(1).upper()
+        # 優先挑選符合 5數字+1英文字 之標準健保碼
+        order_code = None
+        for cand in candidates:
+            c_upper = cand.upper()
+            if len(c_upper) == 6 and c_upper[:5].isdigit() and c_upper[5].isalpha():
+                order_code = c_upper
+                break
+        if not order_code:
+            order_code = candidates[0].upper()
         # 同名代碼重複行（表頭範例／分頁重複）只取第一筆，其餘列 rejected。
         if order_code in seen:
             rejected.append(
@@ -53,7 +62,8 @@ def parse_sampling_ocr_text(text: str) -> SamplingImportResult:
             )
             continue
         seen.add(order_code)
-        rest = line[match.end() :].strip()
+        idx_pos = line.find(order_code)
+        rest = line[idx_pos + len(order_code) :].strip() if idx_pos != -1 else line[match.end() :].strip()
         # 清除行尾雜訊（日期/金額數字群），保留中英文名稱。
         name = re.sub(r"\s{2,}.*$", "", rest)[:_MAX_ORDER_NAME_CHARS].strip()
         records.append(
