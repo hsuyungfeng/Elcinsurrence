@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-stopped_at: P1-4（CSV 內容 SHA-256 hash＋ChromaDB `source_version` 綁定與自動
-last_updated: "2026-08-06T05:48:29.035Z"
+status: in_progress
+stopped_at: 09-02 完成；下一步＝09-03（server.py 端點接 CaseStore＋uploads 遷移），PLAN 未撰寫
+last_updated: "2026-08-07T00:00:00.000Z"
 progress:
   total_phases: 10
   completed_phases: 8
-  total_plans: 15
-  completed_plans: 14
-  percent: 93
+  total_plans: 17
+  completed_plans: 16
+  percent: 94
 ---
 
 # STATE.md — elc-audit-engine
@@ -31,7 +31,7 @@ ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (origi
 **GSD Phase 6 — 輸出一（病歷補強報告）— COMPLETE (2026-08-03)** — 06-01 單輪交付：render_report（Markdown checkbox 逐條審：標題/警告區/支持度徽章/候選補強/半年病史摘要）＋render_tracking（審核軌跡 JSON：D9 四狀態＋原文＋編輯後文＋時間）＋write_report（.md＋.json 薄包裝）。13 新測試全綠，全套件 152 passed / 5 skipped。
 **GSD Phase 7 — 輸出二（申復理由草稿）— COMPLETE (2026-08-03)** — 07-01 單輪交付：build_appeal_draft（D10 四段組裝：①案情摘要/②醫療必要性/③規則依據/④病歷佐證；每筆核減醫令獨立生成）＋字數控制器（官方問答集 Q15：每欄 1000／合計 2000、裁剪優先 ④→②、①③骨架不動）＋P6 不申覆強制填 0 硬檢查（C3/Q13）＋D-15 核減上界檢查（申復點數≤不予核銷金額）＋adopted_narratives_from_tracking（審核軌跡消費，D-08）＋render_appeal_markdown/render_appeal_json/write_appeal（C7：申復草稿_{流水號}.md＋appeal_{流水號}.json，含 p1-p9 醫令段欄位）。24 新測試全綠，全套件 176 passed / 5 skipped。
 **GSD Phase 8 — 端到端測試 — COMPLETE (2026-08-03)** — 08-01 單輪交付：LLM 判定金標準 30 組（tests/fixtures/llm_gold_standard_30.json：支持12/部分支持9/無記載9＋eval/gold_standard.py harness＋scripts/replay_gold_standard.py 真實 LLM 回放 CLI，health guard，C6-3）＋端到端 3 案例（充分/薄弱/裸奔，run_case_pipeline：compare→write_report→審核 decisions→build_appeal→write_appeal，C6-4）＋E2E-01 修正（classify_support 任一『部分支持』→ 薄弱，原歸充分使 D7 三級缺一角）＋真實樣本替換介面（注入層可換，C6-5）。21 新測試全綠，全套件 197 passed / 5 skipped。五層測試策略全數涵蓋並可執行（C6）。
-**GSD Phase 9 — HIS 服務化（本機可驗證）— 規劃中（2026-08-05 開 phase）。** 前導碎片已落地並 commit（Flask API 接真實引擎 `b80cd08`、批次匯入 `56d9902`、PP-StructureV3 表格 OCR `8c38a19`、安全清尾 `f6ac775`）。首項工作＝認證授權（使用者裁示）。
+**GSD Phase 9 — HIS 服務化（本機可驗證）— 進行中（2026-08-05 開 phase）。** 前導碎片已落地並 commit（Flask API 接真實引擎 `b80cd08`、批次匯入 `56d9902`、PP-StructureV3 表格 OCR `8c38a19`、安全清尾 `f6ac775`），四者已於 09-01 在 README 追認納管。**09-01（認證授權＋審計日誌）與 09-02（案件狀態機＋SQLite 持久化）已 COMPLETE；剩 09-03（端點接 CaseStore＋uploads 遷移）未規劃。**
 **GSD Phase 10 — VPN／實機串接 — 阻塞中**（雲端 Provider 需 doctor-toolbox 存取權、NHI_EIIAPI.DLL 需 Windows＋VPN＋SAM 實機）。2026-08-05 自原 Phase 9 拆出：含阻塞項的 phase 永遠無法通過 verify，會汙染 phase 完成訊號。
 
 **Phase 3 context highlights (see `.planning/phases/03-parsers/03-CONTEXT.md`):** 使用者提供真實申報 XML `TOTFA.xml`（633 案 / 2,624 醫令 / Big5 / 348 位病患，已 gitignore）。實測推翻三項文件假設：(1) C11 欄位表為精選子集，真實檔多出 18 個 dbody 欄位，其中 `d20`-`d26` 為次診斷代碼（Phase 5 判斷醫療必要性的關鍵）；(2) C8 的 p8/p9 字數上限描述有誤，官方問答集 Q15 確認為**每欄 1000 中文字／合計 2000**——影響 Phase 7 字數控制器；(3) **`電子申復格式及填表說明門診.doc` 是申復「輸出」規格，不是核減「輸入」格式**（原 D-14 據此建模輸入檔屬誤判，已由 D-14a 修正）。
@@ -49,6 +49,7 @@ ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (origi
 - **GSD Phase 2 Plan 06 (Wave 2: ChromaDB D-09 embeddings, non-blocking) executed and committed.** Delivered: `src/elc_audit_engine/rule_repository/embeddings/` package (`chroma_store.py` — `flatten_tree_nodes()` + `build_chroma_collection()`, wrapped in a broad non-blocking exception handler per D-09) and `scripts/build_chroma_index.py`. Real artifact produced: local persistent ChromaDB collection at `data/rag/` (165 chunks ingested from the 32-file docx tree corpus, default ONNX all-MiniLM-L6-v2 embedder). Low-priority/non-blocking infrastructure only — no query logic (deferred to Phase 5 per CONTEXT.md). See `.planning/phases/02-rule-repository/02-06-SUMMARY.md`.
 - **GSD Phase 2 Plan 04 (Wave 2: rule_mapping LLM-assisted build, D-04/D-05) executed and committed.** Delivered: `src/elc_audit_engine/rule_repository/mapping/` package (`llm_client.py` — llama.cpp chat_completion wrapper with mandatory smoke test; `prompts.py` — keyword-prefiltered candidate-matching prompts; `build_mapping.py` — CSV-reuse fast path + LLM-assisted fallback batch orchestrator) and `db.py` extended with the `rule_mapping` table schema. Real batch run completed for all 13,942 codes (2,669 payment + 11,273 drug): `{'csv_reuse_count': 6802, 'llm_matched_count': 558, 'no_match_count': 6582}` — the run took ~9.3h wall-clock (mostly LLM inference for the LLM-path codes) and survived an account spend-limit session interruption thanks to a periodic-commit resilience fix (every 100 rows) added during implementation. All 20 human spot-check fixture codes resolved via the CSV fast path with real, substantive article text. Discovered and fixed during batch testing: `chat_template_kwargs.enable_thinking=false` cuts the loaded model's per-call latency from ~30s to ~0.6s (default reasoning-trace mode was otherwise making the batch infeasible). The 46% LLM-path no-match rate is documented as an honest recall limitation of top-5 keyword prefiltering, not a bug — manually verified the LLM correctly declines to fabricate matches when no relevant candidate is found. See `.planning/phases/02-rule-repository/02-04-SUMMARY.md`.
 - **GSD Phase 2 Plan 05 (Wave 3: get_rule() single query interface + human spot-check) executed and committed — Phase 2 now COMPLETE.** Delivered: `get_rule(code)` in `src/elc_audit_engine/rule_repository/__init__.py`, the sole D-07/D-08 public entry point — combines `payment_rules`/`drug_rules` + `rule_mapping` lookups, zero LLM/network calls at query time, never raises (SQLite errors degrade to `not_found()`). Fixed a cross-plan integration gap: `rule_mapping` was missing from `db.py`'s `query_by_code` allowlist. Human 20-code spot-check conducted via a published Artifact review page (Traditional Chinese regulatory text, per user request over raw terminal output) — user confirmed **20/20 correct**. `tests/fixtures/rule_mapping_20_spotcheck.json` locked with real article data, `verified: true` for all entries. Full test suite green: 34 passed, 1 skipped. All 3 REQ-rule-repository acceptance criteria now automated-and-passing. See `.planning/phases/02-rule-repository/02-05-SUMMARY.md`.
+- **GSD Phase 9 Plan 01（認證授權＋存取審計日誌）executed and committed.** Delivered: `auth.py`（`load_api_keys()` 解析 `ELC_API_KEYS` 的 `caller:key` 表、`resolve_caller()` 以 `hmac.compare_digest` constant-time 比對並回傳多呼叫方識別、`require_api_key` decorator 保留供未來 blueprint）；`audit_log.py`（`record_access()` JSON Lines 六欄位追加寫入，路徑取自 `AUDIT_LOG_PATH`，**零 PHI**——只記「誰在何時存取哪個端點」，不記請求主體）；`server.py` 以 **`before_request` 統一強制**而非逐端點 decorator（**新增端點預設受保護**，豁免需顯式列入 `_AUTH_EXEMPT_ENDPOINTS`＝`index`/`health`/`static`，避免「忘記加 decorator 就等於裸奔」的失敗模式），`_init_api_keys()` 啟動期 fail-fast 重拋 `AuthConfigError`（設定缺失時繼續啟動＝無認證對外開放，比啟動失敗更危險），`errorhandler(AuthenticationError)` 回 **401 而非 404**，`after_request` 寫審計且 `OSError` 只記 application log 不讓已完成業務回應變 500，新增 `GET /api/health` 供 HIS/監控探測。README 同步認證/審計契約並追認四筆既有 commit。**認證先於業務邏輯**：未帶 key 時 `run_presubmission_check` 替身呼叫次數斷言為 0。38 新測試（test_auth.py 30＋test_audit_log.py 8），全套件 354 passed / 2 skipped。**401 而非 404 與 P0-2／P1-1 同源：系統／授權故障必須與業務結論可區分。** 見 `.planning/phases/09-his-servicing/09-01-SUMMARY.md`。
 - **GSD Phase 9 Plan 02（案件狀態機＋SQLite 持久化）executed and committed.** Delivered: `src/elc_audit_engine/case_store/` 純資料層子套件（無 Flask／LLM 依賴）——`states.py` 七狀態顯式轉換表（六主線＋failed 旁支，submitted 為封閉終態，未知狀態一律拋 `UnknownStateError` 而非回 False）；`db.py`／`store.py`：`cases`／`case_transitions` 兩表，`CaseStore` 提供 create/get/transition/history/list_by_state（同步版任務佇列取件，無 Celery／Redis）/list_all/counts_by_state；狀態與轉換歷史於單一 SQLite 交易內原子寫入；`failure_reason` 獨立欄位與業務結論分離（P1-1 同源原則延伸）；case_id 沿用既有 `safe_filename()` 校驗後拒絕。65 新測試全綠，全套件由 277 passed / 2 skipped 增至 336 passed / 2 skipped（`test_ingest.py` 7 個 ERROR 屬平行執行的 09-01 `server.py` 未完成所致，非本 plan 範圍）。刻意未動 `server.py`／既有 `data/uploads/*.json`——端點接線與遷移留給 09-03 裁示。見 `.planning/phases/09-his-servicing/09-02-SUMMARY.md`。
 
 ## Not Yet Started
@@ -61,13 +62,26 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-08-06（本次 `/gsd-resume-work` 恢復）
-Stopped at: P1-4（CSV 內容 SHA-256 hash＋ChromaDB `source_version` 綁定與自動
-purge）完成並 commit（`5f1f38e`）；Phase 9 的 **09-01-PLAN.md（認證授權＋審計
-日誌）與 09-02-PLAN.md（案件狀態機＋SQLite 持久化）已寫好但尚未執行**——兩份
-PLAN 皆無對應 SUMMARY，且 `auth.py`／`audit_log.py`／`case_store/` 與其四個
-測試檔在 working tree 均不存在。下一步＝`/gsd-execute-phase 9`。
-Resume file: `.continue-here.md`（倉庫根，2026-08-05 15:42 寫入，status: paused）
+Last session: 2026-08-07（本次 `/gsd-resume-work` 恢復）
+Stopped at: **09-01（認證授權＋存取審計）與 09-02（案件狀態機＋SQLite 持久化）
+皆已完成並 commit，兩份 SUMMARY 齊備。** 下一步＝**09-03：server.py 端點接
+`CaseStore`＋`data/uploads/*.json` 遷移**（09-02 刻意未動 server.py，接線留給
+09-03 裁示）。09-03-PLAN.md 尚未撰寫。
+Resume file: 無（`.continue-here.md` 標記 `status: superseded`，其
+「BLOCKING CONSTRAINTS」與「Critical Anti-Patterns」兩節仍有效，開工前須讀）
+
+**⚠️ 2026-08-07 修正**：本節前一版聲稱 09-01/09-02「已寫好但尚未執行、
+`auth.py`／`case_store/` 不存在」——與 git 實況脫節（`25bf03a`、`c8602e5`、
+`e537c02`、`f8d5dd6` 四個 commit 早已落地）。**教訓：STATE.md 的敘述性欄位
+會與 git 脫節，恢復時一律以 `git log` 與檔案系統實況為準覆核。**
+
+**Phase 9 進度：**
+
+| Plan | 範圍 | 狀態 |
+|---|---|---|
+| 09-01 | 認證授權＋審計日誌 | ✅ COMPLETE（`25bf03a`／`e537c02`／`a2022f8`） |
+| 09-02 | 案件狀態機＋SQLite 持久化 | ✅ COMPLETE（`c8602e5`／`f8d5dd6`／`1c298d4`） |
+| 09-03 | 端點接 CaseStore＋uploads 遷移 | ⬜ 未規劃 |
 
 **2026-08-05 修復（詳見 `deepflash4improve.md` §7.6）：**
 
