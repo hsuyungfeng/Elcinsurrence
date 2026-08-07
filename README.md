@@ -99,15 +99,18 @@
 
 呼叫真實引擎（`run_presubmission_check`）：查規則庫 ➔ Phase 3 `parse_soap_text` 分段 ➔ LLM 逐檢核項判定 ➔ 三級分類 ➔ 缺口候選補強。**需 llama.cpp server 可用**。
 
-- **請求參數 (JSON)**：`order_code` 為必填；字串欄位上限 200 字，`soap_text` 上限 10,000 字，超出回 400。
+- **請求內容 (JSON)**：
   ```json
   {
     "order_code": "14050B",
     "order_name": "糖化血色素檢驗 HbA1c",
-    "soap_text": "S: 糖尿病追蹤，無發燒不適。\nO: BP 120/80\nA: DM Type 2\nP: 開立 HbA1c 抽血追蹤",
-    "record_no": "M1001"
+    "soap_text": "S: DM O: BP 120/80 A: DM P: HbA1c",
+    "record_no": "M1001",
+    "case_id": "SAMP-0001"
   }
   ```
+  * `case_id`（選填）：提供時會嘗試觸發案件狀態機轉入 `reviewed` 狀態；未提供則維持無狀態行為（向後相容）。
+
 - **回傳內容 (JSON)**:
   ```json
   {
@@ -133,7 +136,6 @@
 - ⚠️ `support_level` 可為 `null` — 請依上方「三種非結論狀態」表以 `undetermined` / `rule_found` 分辨，不可逕自視為「裸奔」。
 
 #### 🔹 [POST] `/api/appeal/generate` — 核減多源證據申復草稿生成
-
 呼叫真實產生器（`build_appeal_draft`）組裝 D10 四段。**「③ 規則依據」的條文全文一律取自規則庫 `get_rule`**；查無時回 `rule_found: false` 並誠實標示，不得自行拼造法規依據。
 
 - **請求參數 (JSON)**：`case_seq`、`order_code` 為必填；`evidence` 為**字串陣列**（醫師採用的補強敘述，來自 Phase 6 審核軌跡）。

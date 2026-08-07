@@ -29,6 +29,12 @@ from elc_audit_engine.auth import (
     resolve_caller,
 )
 from elc_audit_engine.audit_log import record_access
+from elc_audit_engine.case_store import (
+    CaseNotFoundError,
+    CaseStore,
+    DuplicateCaseError,
+    IllegalTransitionError,
+)
 from elc_audit_engine.generators import build_appeal_draft
 from elc_audit_engine.ingest import (
     MediaExtractError,
@@ -277,6 +283,59 @@ def _load_latest_cases(kind: str) -> list[dict] | None:
 _sampling_cases = _load_latest_cases("sampling")
 _appeal_cases = _load_latest_cases("appeal")
 
+_case_store = CaseStore()
+
+
+def _persist_cases(kind: str, cases: list[dict], actor: str | None) -> tuple[int, list[str]]:
+    """將解析後的案件逐筆持久化至 CaseStore (state=imported)。
+
+    重複的 case_id 會被記錄在 conflicts 清單中並被拒絕建案，
+    但其餘非重複案件仍會正常建案。非 DuplicateCaseError (如 UnsafeIdentifierError)
+    則不捕捉，直接向上傳播。
+    """
+    persisted = 0
+    conflicts: list[str] = []
+    for case in cases:
+        try:
+            _case_store.create(
+                case_id=case["id"],
+                kind=kind,
+                case_seq=case.get("case_seq"),
+                order_code=case.get("order_code"),
+                payload=case,
+                actor=actor,
+            )
+            persisted += 1
+        except DuplicateCaseError:
+            conflicts.append(case["id"])
+    return persisted, conflicts
+
+
+def _migrate_legacy_uploads(store: CaseStore) -> dict[str, int]:
+    """伺服器啟動時，一次性且冪等地將 data/uploads/*.json 內尚未入庫的案件遷移進 CaseStore。"""
+    migrated_counts = {"sampling": 0, "appeal": 0}
+    for kind in ("sampling", "appeal"):
+        cases = _load_latest_cases(kind)
+        if not cases:
+            continue
+        for case in cases:
+            try:
+                store.create(
+                    case_id=case["id"],
+                    kind=kind,
+                    case_seq=case.get("case_seq"),
+                    order_code=case.get("order_code"),
+                    payload=case,
+                )
+                migrated_counts[kind] += 1
+            except DuplicateCaseError:
+                pass
+    return migrated_counts
+
+
+_migration_result = _migrate_legacy_uploads(_case_store)
+app.logger.info("啟動期遷移 data/uploads/*.json → CaseStore：%s", _migration_result)
+
 
 def _to_sampling_case(idx: int, rec) -> dict:
     """SamplingCaseRecord → 前端列表契約 dict。"""
@@ -340,15 +399,14 @@ def health():
 # ==============================================================================
 @app.route('/api/sampling/cases', methods=['GET'])
 def get_sampling_cases():
-    """回傳門診抽樣事前預審案例（示範資料）。
+    """回傳門診抽樣事前預審案例。
 
-    demo=true：無真實資料源（CSV 匯入）前的 UI 展示用；
-    support_level 欄位僅為版面初始值，判定一律以 /api/sampling/audit
-    引擎結果為準（前端已不直接顯示此欄位，P1-1/P0-1 教訓）。
-    已有導入清單（POST /api/sampling/import）時優先回傳導入資料。
+    優先改讀 CaseStore.list_all(kind='sampling') 為單一真實來源；
+    若 CaseStore 中無案件，才 fallback 至示範資料。
     """
-    if _sampling_cases is not None:
-        return jsonify(_sampling_cases)
+    records = _case_store.list_all(kind="sampling")
+    if records:
+        return jsonify([r.payload for r in records if r.payload is not None])
     return jsonify([
         {
             "id": "SAMP-001",
@@ -402,6 +460,7 @@ def audit_sampling_case():
     order_name = _clean_str(data, 'order_name')
     soap_text = _clean_str(data, 'soap_text', max_len=_MAX_SOAP_CHARS)
     record_no = _clean_str(data, 'record_no')
+    case_id = _clean_str(data, 'case_id')
 
     case = SubmissionCase(
         record_no=record_no,
@@ -416,6 +475,15 @@ def audit_sampling_case():
         # D-06/P0-2：規則庫故障不得偽裝成「查無規則」或「裸奔」。
         app.logger.error("rule repository failure during presubmission: %s", exc)
         raise ApiError("規則庫暫時無法查詢，請稍後再試或聯繫系統管理員", status=503)
+
+    if case_id:
+        actor = getattr(g, "caller_id", None)
+        try:
+            _case_store.transition(case_id, "parsed", actor=actor)
+            _case_store.transition(case_id, "reviewing", actor=actor)
+            _case_store.transition(case_id, "reviewed", actor=actor)
+        except (CaseNotFoundError, IllegalTransitionError) as exc:
+            app.logger.warning("sampling case_id=%s 狀態轉換失敗（不阻斷回應）：%s", case_id, exc)
 
     judgments = result.comparison.order_judgments
     if not judgments:
@@ -433,6 +501,7 @@ def audit_sampling_case():
 
     return jsonify({
         "status": "success",
+        "case_id": case_id or None,
         "order_code": order_code,
         "order_name": order_name,
         # support_level=null 代表「待判定」（系統未能判定），前端須與
@@ -532,6 +601,7 @@ def import_sampling_cases():
 
     saved = _save_cases_json('sampling', cases)
     _sampling_cases = cases
+    persisted, conflicts = _persist_cases('sampling', cases, getattr(g, "caller_id", None))
     return jsonify({
         'status': 'success',
         'media_type': media_type,
@@ -540,6 +610,8 @@ def import_sampling_cases():
         'rejected': len(rejected),
         'rejected_rows': rejected,
         'saved_to': saved,
+        'case_store_persisted': persisted,
+        'case_store_conflicts': conflicts,
     })
 
 
@@ -548,15 +620,14 @@ def import_sampling_cases():
 # ==============================================================================
 @app.route('/api/appeal/cases', methods=['GET'])
 def get_appeal_cases():
-    """回傳核減需申復案件清單 (示範資料，多源證據已載入)。
+    """回傳核減需申復案件清單。
 
-    demo=true：無真實資料源（核減明細 CSV 匯入）前的 UI 展示用。
-    醫令名稱一律以規則庫為準（64140C＝甲床與手指重建術；原示範資料
-    誤標為「手腕韌帶縫合術」，progress.md 2026-08-04 已記錄此教訓）。
-    已有導入清單（POST /api/appeal/import）時優先回傳導入資料。
+    優先改讀 CaseStore.list_all(kind='appeal') 為單一真實來源；
+    若 CaseStore 中無案件，才 fallback 至示範資料。
     """
-    if _appeal_cases is not None:
-        return jsonify(_appeal_cases)
+    records = _case_store.list_all(kind="appeal")
+    if records:
+        return jsonify([r.payload for r in records if r.payload is not None])
     return jsonify([
         {
             "id": "APP-001",
@@ -624,6 +695,7 @@ def generate_appeal_draft():
     order_code = _clean_str(data, 'order_code', required=True)
     deduction_reason = _clean_str(data, 'deduction_reason', max_len=_MAX_SOAP_CHARS)
     record_no = _clean_str(data, 'record_no')
+    case_id = _clean_str(data, 'case_id')
 
     is_appealing = data.get('is_appealing', True)
     if not isinstance(is_appealing, bool):
@@ -678,8 +750,16 @@ def generate_appeal_draft():
         has_attachment=bool(data.get('has_attachment', False)),
     )
 
+    if case_id:
+        actor = getattr(g, "caller_id", None)
+        try:
+            _case_store.transition(case_id, "appealed", actor=actor)
+        except (CaseNotFoundError, IllegalTransitionError) as exc:
+            app.logger.warning("appeal case_id=%s 狀態轉換至 appealed 失敗（不阻斷回應）：%s", case_id, exc)
+
     return jsonify({
         "status": "success",
+        "case_id": case_id or None,
         "case_seq": draft.case_seq,
         "order_code": draft.order_code,
         "record_no": record_no,
@@ -758,6 +838,7 @@ def import_appeal_cases():
 
     saved = _save_cases_json('appeal', cases)
     _appeal_cases = cases
+    persisted, conflicts = _persist_cases('appeal', cases, getattr(g, "caller_id", None))
     return jsonify({
         'status': 'success',
         'media_type': 'csv',
@@ -766,6 +847,8 @@ def import_appeal_cases():
         'rejected': len(rejected),
         'rejected_rows': rejected,
         'saved_to': saved,
+        'case_store_persisted': persisted,
+        'case_store_conflicts': conflicts,
     })
 
 
