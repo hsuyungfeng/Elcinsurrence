@@ -171,12 +171,6 @@
       <div class="brand-title">Elcinsurrence 雙軌自動化審核與申復工作台</div>
     </div>
 
-    <!-- API Key Input Field -->
-    <div style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.4); padding: 4px 10px; border-radius: 8px; border: 1px solid var(--panel-border);">
-      <span style="font-size: 12px; color: var(--text-muted);">🔑 API Key:</span>
-      <input type="password" id="apiKeyInput" placeholder="請輸入 API Key..." style="background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border); border-radius: 4px; color: #38bdf8; font-size: 12px; padding: 4px 8px; width: 140px;" onchange="localStorage.setItem('elc_api_key', this.value.trim()); loadCaseData();">
-    </div>
-
     <!-- Dual Mode Tabs -->
     <div class="mode-switcher">
       <button class="mode-btn active" id="tabMode1" onclick="switchWorkflowMode('sampling')">
