@@ -132,6 +132,11 @@ def test_missing_tool_raises_media_error(monkeypatch):
 # 匯入端點（test_client，落盤路徑導向 tmp_path 避免污染 data/uploads）
 # ---------------------------------------------------------------------------
 
+#: Phase 9-01：本檔測試的是匯入/清單端點的業務邏輯，非認證本身
+#: （認證測試在 tests/test_auth.py），故以固定測試 key 通過 before_request。
+_TEST_API_KEY = "0000000000TESTKEY0000"
+
+
 @pytest.fixture()
 def api(monkeypatch, tmp_path):
     import server as server_mod
@@ -140,7 +145,10 @@ def api(monkeypatch, tmp_path):
     monkeypatch.setattr(server_mod, "_RAW_DIR", str(tmp_path / "raw"))
     monkeypatch.setattr(server_mod, "_sampling_cases", None)
     monkeypatch.setattr(server_mod, "_appeal_cases", None)
-    return server_mod.app.test_client(), tmp_path
+    monkeypatch.setitem(server_mod.app.config, "ELC_API_KEYS", {_TEST_API_KEY: "test-suite"})
+    client = server_mod.app.test_client()
+    client.environ_base["HTTP_X_API_KEY"] = _TEST_API_KEY
+    return client, tmp_path
 
 
 def test_security_headers_present_on_all_responses(api):

@@ -65,6 +65,36 @@
 
 > **案例清單端點**（`GET /api/sampling/cases`、`GET /api/appeal/cases`）：未匯入資料時回傳**示範資料**（每個案例帶 `"demo": true`），供 UI 展示工作流；**匯入後優先回傳導入資料**（`source: "csv" / "paddle" / "ocr"`）。醫令名稱一律以規則庫為準（例：`64140C`＝甲床與手指重建術，曾誤標為「手腕韌帶縫合術」，2026-08-04 修正）。
 
+#### 🔐 認證（Phase 9-01：所有病歷資料端點皆需 API key）
+
+| 端點 | 是否需要 `X-API-Key` |
+|---|---|
+| `GET /` | 否（靜態頁） |
+| `GET /api/health` | 否（健康檢查，供 HIS／監控探測，不含案件資料） |
+| `GET /api/sampling/cases` | **是** |
+| `POST /api/sampling/audit` | **是** |
+| `POST /api/sampling/import` | **是** |
+| `GET /api/appeal/cases` | **是** |
+| `POST /api/appeal/generate` | **是** |
+| `POST /api/appeal/import` | **是** |
+
+- **機制**：服務間 API key（非 JWT／mTLS——呼叫方是 HIS 服務而非瀏覽器使用者，2026-08-05 使用者裁示）。
+- **Header**：`X-API-Key: <key>`。
+- **設定**：環境變數 `ELC_API_KEYS`，格式 `caller_id1:key1,caller_id2:key2`（多呼叫方，供審計日誌辨識「誰調閱了病歷」）；每組 key 須 >= 16 字元。**`ELC_API_KEYS` 未設定或格式錯誤時服務啟動即失敗**（fail-fast，不得以無認證狀態運行）。
+- **比對**：`hmac.compare_digest`（constant-time），不使用 `==`（時序側通道）。
+- **401 回應形狀**：`{"status": "error", "message": "認證失敗：缺少或無效的 API key"}`——與「查無資料」（200 + 空陣列）或 404 明確可區分，不得混淆。
+- **真實 key 不得進版控**（`.env` 已在 `.gitignore`；`.env.example` 僅提供格式範例）。
+- 新增端點時**預設受保護**（`before_request` 統一強制）；豁免需顯式列入 `server.py` 的 `_AUTH_EXEMPT_ENDPOINTS`。
+
+#### 📝 存取審計日誌（Phase 9-01：零 PHI）
+
+每次呼叫受保護端點（不含 `/` 與 `/api/health`）都會在審計日誌留下一列 JSON（JSON Lines 格式）：
+
+- **路徑**：`AUDIT_LOG_PATH`（環境變數可覆寫；預設 `data/audit/access.log`，已 `.gitignore`）。
+- **欄位（六個，固定）**：`ts`（UTC ISO 時間戳）、`caller_id`（呼叫方識別，或 `anonymous` 表示認證失敗前的請求）、`method`、`path`、`status`。
+- **明文聲明：不記錄 PHI。** 禁止欄位（`soap`／`soap_text`／`record_no`／`patient_name`／`id_number`／`birth_date`）與超長字串（>100 字）一律拒絕寫入（`AuditFieldError`），不會被靜默剔除——審計的目的是「誰在何時存取了什麼端點」，而非複製病歷內容。
+- 審計寫檔失敗不會讓業務回應變成 500，但會記錄於 application log（不靜默無痕）。
+
 #### 🔹 [POST] `/api/sampling/audit` — 抽樣事前預審支持度評估
 
 呼叫真實引擎（`run_presubmission_check`）：查規則庫 ➔ Phase 3 `parse_soap_text` 分段 ➔ LLM 逐檢核項判定 ➔ 三級分類 ➔ 缺口候選補強。**需 llama.cpp server 可用**。
@@ -211,13 +241,15 @@ uv run python server.py
 ```
 啟動後打開瀏覽器造訪 `http://127.0.0.1:5000` 即可操作預審與申復介面。
 
-**安全預設**：本服務會接觸病歷資料，故預設 **綁定 `127.0.0.1`、`debug=False`**，且不含認證機制。需對外提供時**務必置於反向代理／VPN 之後**，再以環境變數覆寫：
+**安全預設**：本服務會接觸病歷資料，故預設 **綁定 `127.0.0.1`、`debug=False`**，且需 `X-API-Key` 認證（見下方「認證」小節；`ELC_API_KEYS` 未設定時服務啟動即失敗）。需對外提供時**務必置於反向代理／VPN 之後**，再以環境變數覆寫：
 
 | 環境變數 | 預設 | 說明 |
 |---|---|---|
 | `ELC_SERVER_HOST` | `127.0.0.1` | 監聽位址 |
 | `ELC_SERVER_PORT` | `5000` | 連接埠 |
 | `ELC_SERVER_DEBUG` | 關閉 | 設為 `1`/`true` 開啟；**正式環境切勿開啟**（會回顯堆疊） |
+| `ELC_API_KEYS` | 無（**必填**） | 服務間認證 key 表，格式 `caller_id1:key1,caller_id2:key2`；未設定時服務啟動即失敗 |
+| `AUDIT_LOG_PATH` | `data/audit/access.log` | 存取審計日誌（JSON Lines，零 PHI）寫入路徑 |
 
 > 預審端點的 LLM 判定需 llama.cpp server（`localhost:8080`）可用；未啟動時判定會降級為「待判定」（`support_level: null` + `undetermined: true`），而非「裸奔」。
 
@@ -248,7 +280,20 @@ uv run python -m elc_audit_engine.rule_repository.mapping.build_mapping
 uv run pytest -q
 ```
 
-目前基線：**277 passed / 1 skipped**。測試零 LLM 依賴（判定與生成皆以替身注入），故不需啟動 llama.cpp 即可全數執行；OCR 表格結構化測試以替身覆蓋，不需 GPU。
+目前基線：**354 passed / 2 skipped**（Phase 9-01 執行後）。測試零 LLM 依賴（判定與生成皆以替身注入），故不需啟動 llama.cpp 即可全數執行；OCR 表格結構化測試以替身覆蓋，不需 GPU。
+
+---
+
+## ✅ Phase 9 追認：已完成範圍
+
+下列工作已於 Phase 9 之前 commit，但未納入 GSD phase 管理；本節依 Phase 9 Success Criteria 第 1 項要求追認記錄：
+
+| 範圍 | Commit | 內容 | 狀態 |
+|---|---|---|---|
+| Flask API 接真實引擎 | `b80cd08` | `/api/sampling/audit` → `run_presubmission_check`；`/api/appeal/generate` → `build_appeal_draft`；安全預設（綁 127.0.0.1／debug=False／錯誤脫敏／入參校驗） | 已完成，於 Phase 9 追認納管 |
+| 批次匯入 | `56d9902` | `ingest/` 模組（media/sampling/ocr_rows）＋ `/api/sampling/import`、`/api/appeal/import`；落盤 `data/uploads/*.json` | 已完成，於 Phase 9 追認納管 |
+| 紙本表格結構化 | `8c38a19` | `ingest/table_ocr.py` PP-StructureV3（可選依賴＋自動降級回 tesseract） | 已完成，於 Phase 9 追認納管 |
+| 安全清尾 | `f6ac775` | P1-5 前端 XSS＋CSP／P1-2 prompt 定界／P1-3 路徑穿越 | 已完成，於 Phase 9 追認納管 |
 
 ---
 

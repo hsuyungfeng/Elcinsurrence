@@ -144,3 +144,151 @@ def test_source_uses_compare_digest_not_equality():
         if stripped.startswith("#"):
             continue
         assert "presented_key ==" not in stripped
+
+
+# =============================================================================
+# Task 3: Flask 整合測試（before_request 強制認證／errorhandler／審計掛鉤）
+# =============================================================================
+
+from elc_audit_engine.audit_log import read_entries  # noqa: E402
+
+_APP_KEY_HIS1 = "0123456789abcdef0123"
+_APP_KEY_HIS2 = "fedcba9876543210fedc"
+
+
+@pytest.fixture()
+def app_client(monkeypatch):
+    """server.app test_client，以 his1/his2 兩把測試 key 覆寫認證表。
+
+    所有需要引擎的端點以替身注入（monkeypatch server 模組命名空間的
+    引用者符號，而非來源模組——from-import 後 patch 來源模組無效）。
+    """
+    import server as server_mod
+
+    monkeypatch.setitem(
+        server_mod.app.config,
+        "ELC_API_KEYS",
+        {_APP_KEY_HIS1: "his1", _APP_KEY_HIS2: "his2"},
+    )
+    monkeypatch.setattr(server_mod, "_sampling_cases", None)
+    monkeypatch.setattr(server_mod, "_appeal_cases", None)
+    return server_mod.app.test_client()
+
+
+def _auth_header(key: str) -> dict:
+    return {auth.API_KEY_HEADER: key}
+
+
+def test_no_header_get_sampling_cases_returns_401_without_case_fields(app_client):
+    r = app_client.get("/api/sampling/cases")
+    assert r.status_code == 401
+    body = r.get_json()
+    assert "order_code" not in str(body)
+
+
+def test_wrong_key_get_sampling_cases_returns_401(app_client):
+    r = app_client.get("/api/sampling/cases", headers=_auth_header("wrong-key-wrong-key-000"))
+    assert r.status_code == 401
+
+
+def test_correct_key_get_sampling_cases_returns_200(app_client):
+    r = app_client.get("/api/sampling/cases", headers=_auth_header(_APP_KEY_HIS1))
+    assert r.status_code == 200
+
+
+def test_no_header_post_sampling_audit_returns_401_and_engine_not_called(app_client, monkeypatch):
+    import server as server_mod
+
+    calls = []
+    monkeypatch.setattr(
+        server_mod, "run_presubmission_check", lambda *a, **k: calls.append((a, k))
+    )
+    r = app_client.post("/api/sampling/audit", json={"order_code": "14050B"})
+    assert r.status_code == 401
+    assert calls == []
+
+
+def test_no_header_post_appeal_generate_returns_401(app_client):
+    r = app_client.post(
+        "/api/appeal/generate", json={"case_seq": "201", "order_code": "64140C"}
+    )
+    assert r.status_code == 401
+
+
+def test_no_header_post_sampling_import_returns_401(app_client):
+    r = app_client.post("/api/sampling/import", data={})
+    assert r.status_code == 401
+
+
+def test_no_header_post_appeal_import_returns_401(app_client):
+    r = app_client.post("/api/appeal/import", data={})
+    assert r.status_code == 401
+
+
+def test_index_no_key_returns_200(app_client):
+    r = app_client.get("/")
+    assert r.status_code == 200
+
+
+def test_health_no_key_returns_200(app_client):
+    r = app_client.get("/api/health")
+    assert r.status_code == 200
+    assert r.get_json() == {"status": "ok"}
+
+
+def test_audit_log_records_correct_caller_id(app_client, tmp_path, monkeypatch):
+    import server as server_mod
+
+    log_path = str(tmp_path / "access.log")
+    monkeypatch.setattr(
+        "config.settings.AUDIT_LOG_PATH", log_path
+    )
+    monkeypatch.setattr(server_mod, "AUDIT_LOG_PATH", log_path, raising=False)
+
+    calls = []
+
+    def fake_record_access(**kwargs):
+        calls.append(kwargs)
+        return "line"
+
+    monkeypatch.setattr(server_mod, "record_access", fake_record_access)
+
+    r = app_client.get("/api/sampling/cases", headers=_auth_header(_APP_KEY_HIS2))
+    assert r.status_code == 200
+    assert len(calls) == 1
+    assert calls[0]["caller_id"] == "his2"
+    assert calls[0]["method"] == "GET"
+    assert calls[0]["path"] == "/api/sampling/cases"
+    assert calls[0]["status"] == 200
+
+
+def test_audit_log_entry_excludes_soap_content(app_client, tmp_path, monkeypatch):
+    import server as server_mod
+
+    log_path = str(tmp_path / "access.log")
+
+    def fake_record_access(**kwargs):
+        # 呼叫端不得把 request.json 塞進 detail；此處僅驗證真實
+        # record_access 的行為在端點串接後仍成立（零 PHI）。
+        from elc_audit_engine.audit_log import record_access as real_record_access
+
+        return real_record_access(**{**kwargs, "log_path": log_path})
+
+    monkeypatch.setattr(server_mod, "record_access", fake_record_access)
+    monkeypatch.setattr(
+        server_mod,
+        "run_presubmission_check",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("engine not needed for this test")),
+    )
+
+    app_client.post(
+        "/api/sampling/audit",
+        json={
+            "order_code": "14050B",
+            "soap_text": "S: 機密內容 SECRET_SOAP_MARKER",
+        },
+        headers=_auth_header(_APP_KEY_HIS1),
+    )
+    entries = read_entries(log_path)
+    serialized = str(entries)
+    assert "SECRET_SOAP_MARKER" not in serialized

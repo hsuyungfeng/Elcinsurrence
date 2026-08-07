@@ -18,8 +18,17 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, g, jsonify, request, send_from_directory
 
+from elc_audit_engine.auth import (
+    API_KEY_HEADER,
+    AuthConfigError,
+    AuthenticationError,
+    load_api_keys,
+    require_api_key,
+    resolve_caller,
+)
+from elc_audit_engine.audit_log import record_access
 from elc_audit_engine.generators import build_appeal_draft
 from elc_audit_engine.ingest import (
     MediaExtractError,
@@ -48,6 +57,38 @@ app = Flask(__name__, static_folder='static')
 # 其餘識別欄位取短上限——正常值都是代碼/流水號等級的長度。
 _MAX_SOAP_CHARS = 10_000
 _MAX_FIELD_CHARS = 200
+
+# Phase 9-01：API key 認證豁免清單（Flask endpoint 名稱，非 path）。
+# 靜態頁與健康檢查不含病歷資料，供 HIS／監控探測時不應被擋。
+# 病歷資料端點一律受保護——新增端點時預設受保護，豁免需顯式列入此清單。
+_AUTH_EXEMPT_ENDPOINTS = frozenset({"index", "health", "static"})
+
+
+def _init_api_keys(flask_app) -> None:
+    """啟動期載入 ELC_API_KEYS 並注入 app.config（fail-fast，不降級）。
+
+    正常路徑：AuthConfigError 直接重新拋出，服務啟動即失敗——本服務
+    會接觸病歷資料，設定缺失／格式錯誤時繼續啟動等同於「無認證對外
+    開放」，比啟動失敗更危險。
+
+    測試環境相容：僅在環境變數 ELC_ALLOW_NO_AUTH_FOR_TESTS == "1" 時
+    允許以空 dict 啟動（並大聲警告）。**此旗標只准測試使用**——
+    正式環境設定此旗標等同於關閉認證，絕不可用於生產部署。
+    """
+    try:
+        flask_app.config["ELC_API_KEYS"] = load_api_keys()
+    except AuthConfigError:
+        if os.environ.get("ELC_ALLOW_NO_AUTH_FOR_TESTS") == "1":
+            flask_app.logger.warning(
+                "ELC_ALLOW_NO_AUTH_FOR_TESTS=1：以空 API key 表啟動（僅限測試環境！"
+                "正式環境設定此旗標等同於關閉認證，絕不可用於生產部署）"
+            )
+            flask_app.config["ELC_API_KEYS"] = {}
+        else:
+            raise
+
+
+_init_api_keys(app)
 
 
 class ApiError(Exception):
@@ -83,6 +124,26 @@ _CSP = "; ".join(
 )
 
 
+@app.before_request
+def _enforce_api_key():
+    """Phase 9-01：統一強制 X-API-Key 認證（豁免需顯式列入白名單）。
+
+    採 before_request 而非逐一端點 decorator：**新增端點時預設受保護**，
+    避免「忘記加 decorator 就等於裸奔」的失敗模式——豁免必須顯式列入
+    `_AUTH_EXEMPT_ENDPOINTS`，而非預設放行。`require_api_key` decorator
+    仍保留供未來 blueprint 使用。
+    """
+    if request.endpoint in _AUTH_EXEMPT_ENDPOINTS:
+        return None
+    if request.endpoint is None:
+        # 未匹配任何路由（404），交給 Flask 內建處理，不在此攔截。
+        return None
+    presented_key = request.headers.get(API_KEY_HEADER)
+    keys = app.config["ELC_API_KEYS"]
+    g.caller_id = resolve_caller(presented_key, keys)
+    return None
+
+
 @app.after_request
 def _security_headers(response):
     """統一補安全標頭（P1-5）。"""
@@ -91,6 +152,34 @@ def _security_headers(response):
     response.headers.setdefault("Referrer-Policy", "no-referrer")
     response.headers.setdefault("X-Frame-Options", "DENY")
     return response
+
+
+@app.after_request
+def _record_access_audit(response):
+    """Phase 9-01：受保護端點每次呼叫留下無 PHI 審計列。
+
+    只在非豁免端點記錄——靜態頁與健康檢查不含病歷存取，記錄會被
+    探測流量淹沒。審計寫檔失敗不得讓已完成的業務回應變成 500，但
+    必須在 application log 留痕（不靜默無痕）。
+    不得把 request.json／request.form 內容放進 detail（PHI 風險）。
+    """
+    if request.endpoint not in _AUTH_EXEMPT_ENDPOINTS:
+        try:
+            record_access(
+                caller_id=getattr(g, "caller_id", "anonymous"),
+                method=request.method,
+                path=request.path,
+                status=response.status_code,
+            )
+        except OSError as exc:
+            app.logger.error("寫入審計日誌失敗，但業務回應照常回傳：%s", exc)
+    return response
+
+
+@app.errorhandler(AuthenticationError)
+def _handle_authentication_error(exc: AuthenticationError):
+    """認證失敗一律回 401，且必須與「查無資料」可區分（P0-2／P1-1 同源原則）。"""
+    return jsonify({"status": "error", "message": exc.message}), 401
 
 
 @app.errorhandler(ApiError)
@@ -238,6 +327,12 @@ def _to_appeal_case(idx: int, rec) -> dict:
 @app.route('/')
 def index():
     return send_from_directory('static', 'index.html')
+
+
+@app.route('/api/health', methods=['GET'])
+def health():
+    """健康檢查（供 HIS 與監控探測，豁免 API key，不含任何案件資料）。"""
+    return jsonify({"status": "ok"})
 
 
 # ==============================================================================
@@ -681,6 +776,8 @@ if __name__ == '__main__':
     # 例外會回顯堆疊；本服務會接觸病歷資料，不得如此。
     # 需對外提供時請置於反向代理／VPN 後，並以環境變數覆寫：
     #   ELC_SERVER_HOST=0.0.0.0 ELC_SERVER_PORT=5000 python server.py
+    # Phase 9-01：認證已由 before_request 強制，除 / 與 /api/health 外
+    # 一律需帶 X-API-Key；ELC_API_KEYS 未設定時服務啟動即失敗（fail-fast）。
     host = os.getenv('ELC_SERVER_HOST', '127.0.0.1')
     port = int(os.getenv('ELC_SERVER_PORT', '5000'))
     debug = os.getenv('ELC_SERVER_DEBUG', '').lower() in ('1', 'true', 'yes')
