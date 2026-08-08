@@ -548,17 +548,21 @@
         return;
       }
 
-      // appeal_sections 為 [{key,title,text}]，依 D10 四段順序回傳。
+      // sections 為 render_appeal_json 標準契約 [{key,title,text,trimmed}]，
+      // 依 D10 四段順序回傳；僅取 text，sec 可能為 undefined 時維持防呆。
       const boxes = ['aSec1', 'aSec2', 'aSec3', 'aSec4'];
       boxes.forEach((id, i) => {
-        const sec = data.appeal_sections[i];
+        const sec = data.sections[i];
         document.getElementById(id).value = sec ? sec.text : '';
       });
 
-      // 官方問答集 Q15：p8/p9 各 ≤1000（非合計 2000）。
-      const warn = data.xml_p8_p9_valid ? '' : '　⚠️ 超過欄位字數上限';
+      // 官方問答集 Q15：p8/p9 各 ≤1000（非合計 2000）；長度以 p8_reason1/
+      // p9_reason2 本地計算，超限警告改由本地判斷。
+      const p8Len = (data.p8_reason1 || '').length;
+      const p9Len = (data.p9_reason2 || '').length;
+      const warn = (p8Len <= 1000 && p9Len <= 1000) ? '' : '　⚠️ 超過欄位字數上限';
       document.getElementById('aCharCount').innerText =
-        `p8 ${(data.reason1 || '').length} / 1000　p9 ${(data.reason2 || '').length} / 1000${warn}`;
+        `p8 ${p8Len} / 1000　p9 ${p9Len} / 1000${warn}`;
       if (!data.rule_found) {
         document.getElementById('aSec3').value =
           '（規則庫查無此醫令條文，請人工補充依據）\n' +
