@@ -188,7 +188,7 @@ Plans:
 
 Plans:
 - [x] 11-01-PLAN.md — 欄位組裝（官方 14 主表欄＋7 頭表欄，實測 ODT 契約）＋content.xml 注入＋15 行/頁分頁＋Wave 0 測試脚手架（D-03 checkpoint 已裁示：以官方模板第二聯為準）
-- [ ] 11-02-PLAN.md — 壓縮基準模板（官方 ODT 9 頁→3 頁收斂，Golden＝30396_4）＋render/write_appeal_print＋soffice 端到端與三聯版式差異驗證
+- [x] 11-02-PLAN.md — 壓縮基準模板（官方 ODT 9 頁→3 頁收斂成功，6 輪，Golden＝30396_4）＋render/write_appeal_print＋soffice 端到端與三聯版式差異驗證
 - [ ] 11-03-PLAN.md — config/facility.json＋scripts/build_appeal_print.py CLI＋PHI 安全防線＋全套件回歸
 
 **Wave dependencies:**
@@ -219,7 +219,7 @@ Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 
 | 8. 端到端測試 | 0/TBD | Not started | - |
 | 9. doctor-toolbox HIS 整合（佔位） | 0/TBD | Not started | - |
 | 10. VPN／實機串接 | 0/1 | Blocked（外部依賴） | - |
-| 11. 紙本申復清單列印 | 1/3 | In progress | - |
+| 11. 紙本申復清單列印 | 2/3 | In progress | - |
 
 > ⚠️ **本表格為快照，與 STATE.md 記載的實況已脫節**（Phase 7/8/9 於本表仍顯示 Not started，
 > 但 STATE.md 記載三者皆已於 2026-08-03～2026-08-07 完成）。修 Phase 11 時未一併回填，
