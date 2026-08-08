@@ -334,9 +334,37 @@ uv run pytest -q
 
 ---
 
-## 🖨️ 紙本申復清單列印（規劃中，Phase 11）
+## 🖨️ 紙本申復清單列印（Phase 11）
 
-除上述 HIS 電子對接外，系統也支援**未串接 HIS 或選擇紙本作業**的院所：PDF／JPEG／BMP 掃描件的辨識輸入（`/api/sampling/import`、`/api/appeal/import`）與內部資料處理（`CaseStore`／`AppealDraft`）已與電子流程共用同一套引擎，但目前輸出端僅有 Markdown／JSON／申復 XML，尚無可列印 PDF。Phase 11 將依官方三聯式「門診醫療費用點數申復清單」版式（105.04.01 修訂版，`officialdocument/電子申復文件格式/30396_*`）新增列印輸出通道，依賴 Phase 7（`AppealDraft` 資料契約）、不依賴 Phase 10（VPN/實機門控）。詳見 `.planning/ROADMAP.md` Phase 11、`.planning/phases/11-paper-appeal-print/11-CONTEXT.md`。
+未串接 HIS 或選擇紙本作業的院所，可由 `appeal_{流水號}.json` 產出官方三聯式「門診醫療費用點數申復清單」可列印 PDF——與 Markdown／JSON／申復 XML **並行的輸出通道，不互相取代**。版式依官方 30396_1 模板（105.04.01 修訂版），輸出經 `config/facility.json` 院所層設定與（可選）case payload join 患者層欄位。
+
+### 前置條件
+
+- **本機 LibreOffice（soffice，D-01）**：CLI 以 headless 模式呼叫 `soffice --convert-to pdf` 將 filled ODT 轉成 PDF；soffice 缺席時轉檔階段會明確失敗（不靜默）。
+- **`config/facility.json` 已填院所欄位**：`code`（代號字碼）／`name`（醫療院所名稱）為必填，另有 `address`（地址）、`physician_name`（負責醫師）。缺檔或缺必填欄位時 CLI fail-fast（`FileNotFoundError`／`ValueError`），不會以空值默默產出看似正常的 PDF；路徑可經環境變數 **`FACILITY_CONFIG_PATH`** 覆寫。
+
+### 指令範例
+
+```bash
+# 基本：單一 appeal JSON → data/output/申復清單_{case_seq}_{order_seq}.pdf
+python scripts/build_appeal_print.py data/output/appeal_001.json
+
+# 帶 case payload join 患者層欄位（身份證字號/姓名/傷病名稱/審查科別/數量/金額）
+python scripts/build_appeal_print.py data/output/appeal_001.json data/cases_payload.json
+
+# 指定輸出 PDF 路徑（第三參數）
+python scripts/build_appeal_print.py data/output/appeal_001.json data/cases_payload.json data/output/appeal_001.pdf
+```
+
+### 行為說明
+
+- **三聯一次列印**：每聯 1 頁；醫令 >15 行時自動分頁為 3×N 頁（D-06）。
+- **患者層欄位**：身份證字號照印遮罩值（`submission.id_number`）；join 不到的欄位（身份證字號／姓名／傷病名稱／審查科別／數量／金額）留空且**不捏造**，CLI 會於成功訊息後以「警告：」逐條列出缺欄欄位名（只印欄位名，不印值全文，T-11-03）。
+- **第二聯「中央健康保險署填列」**：核定／複核／初核／審查委員欄留空，供健保署填寫（系統不產出健保署複核結果）。
+
+### PHI 注意（P0-3）
+
+PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 
 ---
 
