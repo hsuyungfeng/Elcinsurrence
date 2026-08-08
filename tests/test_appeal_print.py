@@ -898,3 +898,263 @@ def test_copies_total_row_and_diagnosis_cell():
         assert _cell_full_text(total[4]) == ""  # 理由
         assert _cell_full_text(total[5]) == ""  # 審核意見
         assert _cell_full_text(total[7]) == ""  # 補付金額值
+
+
+# ── Task 1 (11-03): -k config（facility.json＋load_facility_config，D-04）──
+
+
+def test_config_load_facility_config_missing_file_raises(monkeypatch):
+    """Test 1（config）：FACILITY_CONFIG_PATH 指向不存在的路徑 → FileNotFoundError（fail-fast）。"""
+    from config import settings
+
+    monkeypatch.setattr(
+        settings, "FACILITY_CONFIG_PATH", "/nonexistent/path/facility.json"
+    )
+    with pytest.raises(FileNotFoundError):
+        settings.load_facility_config()
+
+
+def test_config_load_facility_config_missing_required_field_raises(tmp_path, monkeypatch):
+    """Test 2（config）：facility.json 缺必填欄（code）→ ValueError（訊息含欄位名）。"""
+    import json as _json
+
+    from config import settings
+
+    bad = tmp_path / "facility_missing_code.json"
+    bad.write_text(_json.dumps({"name": "測試醫療院所"}), encoding="utf-8")
+    monkeypatch.setattr(settings, "FACILITY_CONFIG_PATH", str(bad))
+    with pytest.raises(ValueError, match="code"):
+        settings.load_facility_config()
+
+
+def test_config_load_facility_config_valid_returns_dict(tmp_path, monkeypatch):
+    """Test 3（config）：合法 facility.json → 回傳 dict 且含全部鍵（含 code/name）。"""
+    import json as _json
+
+    from config import settings
+
+    good = tmp_path / "facility.json"
+    good.write_text(
+        _json.dumps(
+            {
+                "code": "01015C",
+                "name": "測試醫療院所",
+                "address": "測試市測試區測試路1號",
+                "physician_name": "測試醫師",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "FACILITY_CONFIG_PATH", str(good))
+    cfg = settings.load_facility_config()
+    assert cfg["code"] == "01015C"
+    assert cfg["name"] == "測試醫療院所"
+    for key in ("code", "name", "address", "physician_name"):
+        assert key in cfg
+
+
+def test_config_load_facility_config_invalid_json_raises(tmp_path, monkeypatch):
+    """facility.json 內容非合法 JSON → ValueError（fail-fast，不靜默回傳空 dict）。"""
+    from config import settings
+
+    bad = tmp_path / "facility_bad.json"
+    bad.write_text("not json", encoding="utf-8")
+    monkeypatch.setattr(settings, "FACILITY_CONFIG_PATH", str(bad))
+    with pytest.raises(ValueError):
+        settings.load_facility_config()
+
+
+# ── Task 2 (11-03): -k cli（scripts/build_appeal_print.py 入口）────────────
+
+
+def test_cli_build_appeal_print_missing_args():
+    """0 個或過多參數 → 印 usage 且 return 1。"""
+    from scripts.build_appeal_print import main
+
+    assert main([]) == 1
+    assert main(["a", "b", "c", "d"]) == 1
+
+
+def test_cli_build_appeal_print_nonexistent_file():
+    """缺檔案路徑 → return 1。"""
+    from scripts.build_appeal_print import main
+
+    assert main(["nonexistent.json"]) == 1
+
+
+def test_cli_build_appeal_print_invalid_json(tmp_path):
+    """appeal JSON 內容非合法 JSON → return 1。"""
+    from scripts.build_appeal_print import main
+
+    bad = tmp_path / "bad.json"
+    bad.write_text("not json", encoding="utf-8")
+    assert main([str(bad)]) == 1
+
+
+def test_cli_build_appeal_print_unsafe_stem_rejected(tmp_path, monkeypatch, capsys, facility_config):
+    """case_seq 含 `../` → return 1 且輸出目錄未被寫入（safe_filename 校驗後拒絕，T-11-04）。"""
+    import json as _json
+
+    from config import settings
+    from scripts.build_appeal_print import main
+
+    appeal_file = tmp_path / "appeal_evil.json"
+    appeal_file.write_text(
+        _json.dumps(_payload(case_seq="../evil")), encoding="utf-8"
+    )
+    out_dir = tmp_path / "out"
+    monkeypatch.setattr(settings, "OUTPUT_DIR", str(out_dir))
+
+    ret = main([str(appeal_file)])
+    assert ret == 1
+    assert "不安全的檔名" in capsys.readouterr().err
+    assert not out_dir.exists()  # 外部目錄未被寫入
+
+
+def test_cli_build_appeal_print_warnings_presented(tmp_path, monkeypatch, capsys, facility_config):
+    """不帶 case payload → return 0 且 stdout 含「警告：」行（fake_write 隔離 soffice）。
+
+    soffice 隔離：以 monkeypatch 替換模組內 write_appeal_print 為 fake_write
+    （回傳 (tmp_path/fake.pdf, warnings)，不實際轉檔、不回寫 data/output），
+    故本測試不標 @requires_soffice、不觸 soffice。
+    """
+    import json as _json
+
+    from config import settings
+    from scripts import build_appeal_print
+
+    appeal_file = tmp_path / "appeal_18.json"
+    appeal_file.write_text(_json.dumps(_payload()), encoding="utf-8")
+    monkeypatch.setattr(settings, "OUTPUT_DIR", str(tmp_path / "out"))
+
+    fake_pdf = tmp_path / "fake.pdf"
+
+    def fake_write(
+        output_dir,
+        file_stem,
+        payload,
+        facility,
+        *,
+        template_odt_path,
+        submission=None,
+        soffice_timeout=120,
+    ):
+        return str(fake_pdf), ["身份證字號", "姓名", "數量", "金額"]
+
+    monkeypatch.setattr(build_appeal_print, "write_appeal_print", fake_write)
+
+    ret = build_appeal_print.main([str(appeal_file)])
+    assert ret == 0
+    out = capsys.readouterr().out
+    assert "已成功輸出申復清單 PDF" in out
+    # 缺欄 warnings 於成功訊息後逐條以「警告：」列印（不隱藏、不 raise）
+    for w in ("身份證字號", "姓名", "數量", "金額"):
+        assert f"警告：{w}" in out
+    # fake 未實際轉檔：fake.pdf 不存在、未回寫 data/output
+    assert not fake_pdf.exists()
+
+
+def test_cli_build_appeal_print_two_args_output_path(tmp_path, monkeypatch, facility_config):
+    """長度 2：第 2 個參數視為 output_pdf_path（後向兼容 build_appeal_xml 習慣）。"""
+    import json as _json
+
+    from scripts import build_appeal_print
+
+    appeal_file = tmp_path / "appeal_18.json"
+    appeal_file.write_text(_json.dumps(_payload()), encoding="utf-8")
+
+    captured = {}
+
+    def fake_write(
+        output_dir,
+        file_stem,
+        payload,
+        facility,
+        *,
+        template_odt_path,
+        submission=None,
+        soffice_timeout=120,
+    ):
+        captured["output_dir"] = output_dir
+        captured["stem"] = file_stem
+        captured["submission"] = submission
+        return str(tmp_path / "fake.pdf"), []
+
+    monkeypatch.setattr(build_appeal_print, "write_appeal_print", fake_write)
+
+    out_pdf = str(tmp_path / "custom" / "out.pdf")
+    ret = build_appeal_print.main([str(appeal_file), out_pdf])
+    assert ret == 0
+    # output_dir＝output_pdf 的 dirname；stem＝去「申復清單_」前綴與 .pdf 之基底
+    assert captured["output_dir"] == str(tmp_path / "custom")
+    assert captured["stem"] == "out"
+    assert captured["submission"] is None
+
+
+def test_cli_build_appeal_print_three_args_submission(tmp_path, monkeypatch, facility_config):
+    """長度 3：第 2 個為 case_payload_json_path、第 3 個為 output_pdf_path；submission 透傳。"""
+    import json as _json
+
+    from scripts import build_appeal_print
+
+    appeal_file = tmp_path / "appeal_18.json"
+    appeal_file.write_text(_json.dumps(_payload()), encoding="utf-8")
+    case_payload = _submission()
+    case_file = tmp_path / "case_payload.json"
+    case_file.write_text(
+        _json.dumps(case_payload, ensure_ascii=False), encoding="utf-8"
+    )
+
+    captured = {}
+
+    def fake_write(
+        output_dir,
+        file_stem,
+        payload,
+        facility,
+        *,
+        template_odt_path,
+        submission=None,
+        soffice_timeout=120,
+    ):
+        captured["submission"] = submission
+        captured["stem"] = file_stem
+        return str(tmp_path / "fake.pdf"), []
+
+    monkeypatch.setattr(build_appeal_print, "write_appeal_print", fake_write)
+
+    out_pdf = str(tmp_path / "out" / "appeal.pdf")
+    ret = build_appeal_print.main([str(appeal_file), str(case_file), out_pdf])
+    assert ret == 0
+    assert captured["submission"] == case_payload
+    assert captured["stem"] == "appeal"
+
+
+@requires_soffice
+def test_cli_build_appeal_print_success_soffice(tmp_path, monkeypatch, facility_config):
+    """完整流程（appeal JSON＋case payload）→ return 0 且輸出 PDF 存在、pypdf 頁數=3。"""
+    import json as _json
+
+    from config import settings
+    from scripts.build_appeal_print import main
+
+    appeal_file = tmp_path / "appeal_18.json"
+    appeal_file.write_text(_json.dumps(_payload()), encoding="utf-8")
+    case_file = tmp_path / "case_payload.json"
+    case_file.write_text(
+        _json.dumps(_submission(), ensure_ascii=False), encoding="utf-8"
+    )
+
+    out_dir = tmp_path / "out"
+    monkeypatch.setattr(settings, "OUTPUT_DIR", str(out_dir))
+
+    # 3 參數：appeal JSON、case payload JSON、輸出 PDF 路徑
+    ret = main([str(appeal_file), str(case_file), str(out_dir / "appeal.pdf")])
+    assert ret == 0
+
+    pdf = out_dir / "申復清單_appeal.pdf"
+    assert pdf.is_file()
+    from pypdf import PdfReader
+
+    assert len(PdfReader(pdf).pages) == 3
