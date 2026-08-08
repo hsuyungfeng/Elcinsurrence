@@ -32,6 +32,9 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 from elc_audit_engine.generators import write_appeal_print
+from elc_audit_engine.generators.appeal_print.case_to_submission import (
+    build_submission_from_case,
+)
 from elc_audit_engine.generators.appeal_print.odt_fill import AppealPrintFillError
 from elc_audit_engine.safe_paths import UnsafeIdentifierError, safe_filename
 from config import settings
@@ -81,25 +84,30 @@ def main(argv: list[str] | None = None) -> int:
     output_pdf_path = argv[1] if len(argv) == 2 else (argv[2] if len(argv) == 3 else None)
 
     submission = None
+    case_warnings: list[str] = []
     if case_payload_json_path:
         if not os.path.exists(case_payload_json_path):
             print(f"錯誤：找不到檔案 '{case_payload_json_path}'", file=sys.stderr)
             return 1
         try:
             with open(case_payload_json_path, "r", encoding="utf-8") as f:
-                submission = json.load(f)
+                raw_case_payload = json.load(f)
         except (OSError, json.JSONDecodeError) as exc:
             print(
                 f"錯誤：無法解析 case payload JSON 檔案 '{case_payload_json_path}': {exc}",
                 file=sys.stderr,
             )
             return 1
-        if not isinstance(submission, dict):
+        if not isinstance(raw_case_payload, dict):
             print(
                 "錯誤：case payload JSON 內容需為物件（CaseStore payload / SubmissionCase dict）",
                 file=sys.stderr,
             )
             return 1
+        # 09.1-03（D-05）：raw CaseStore payload → submission 契約 dict
+        # （缺欄誠實留空＋warnings 欄名，不捏造）；取代以往直接把 raw
+        # payload 當 submission 傳的語義錯誤做法。
+        submission, case_warnings = build_submission_from_case(raw_case_payload)
 
     try:
         facility = settings.load_facility_config()
@@ -158,8 +166,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(f"已成功輸出申復清單 PDF：{pdf_path}")
-    if warnings:
-        for w in warnings:
+    if case_warnings or warnings:
+        for w in case_warnings + warnings:
             print(f"警告：{w}")
     return 0
 
