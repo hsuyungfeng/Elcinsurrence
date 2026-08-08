@@ -163,12 +163,12 @@ Plans:
 **Goal:** 修正 Phase 9 交付物的三處整合缺陷（milestone audit W1/W4/W5）：(1) `imported→appealed` 狀態轉換合法化（D-01）；(2) `/api/appeal/generate` 改回 `render_appeal_json` 標準契約（D-03）＋前端 index.html 一併適配（D-04）；(3) CaseStore appeal payload → submission 標準轉換 `build_submission_from_case`（D-05，缺欄誠實留空＋warning，不捏造）。`appealed→submitted` deferred 至 Phase 10。
 **Requirements**: W1（狀態機語義）、W4（契約橋）、W5（submission 契約）
 **Depends on:** Phase 9
-**Plans:** 3 plans — 已規劃（2026-08-08，1 wave）
+**Plans:** 3 plans — 已規劃（2026-08-08，1 wave）**— 3/3 COMPLETE（2026-08-08，VERIFICATION 5/5）**
 
 Plans:
-- [ ] 09.1-01-PLAN.md — W1 狀態機合法邊（states.py）＋W4 generate 回標準契約（server.py）＋`_to_appeal_case` 透傳 rec.id_number（W5 數據流補全）
-- [ ] 09.1-02-PLAN.md — W4 前端 index.html 消費適配標準契約欄位＋前端契約回歸測試
-- [ ] 09.1-03-PLAN.md — W5 `build_submission_from_case` 轉換層（新檔）＋CLI 接入＋端到端測試
+- [x] 09.1-01-PLAN.md — W1 狀態機合法邊（states.py）＋W4 generate 回標準契約（server.py）＋`_to_appeal_case` 透傳 rec.id_number（W5 數據流補全）
+- [x] 09.1-02-PLAN.md — W4 前端 index.html 消費適配標準契約欄位＋前端契約回歸測試
+- [x] 09.1-03-PLAN.md — W5 `build_submission_from_case` 轉換層（新檔）＋CLI 接入＋端到端測試
 
 **Wave dependencies:**
 - Wave 1：三 plan 全並行（files_modified 零重疊；plan 03 數據流依賴 plan 01 Task 3 的 id_number 透傳，於 interfaces 註明）

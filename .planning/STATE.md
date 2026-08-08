@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 status: unknown
 stopped_at: Phase 09.1 context gathered
-last_updated: "2026-08-08T06:06:46.712Z"
+last_updated: "2026-08-08T06:09:22.080Z"
 progress:
   total_phases: 12
   completed_phases: 10
@@ -69,21 +69,17 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: --stopped-at
-Stopped at: Phase 09.1 context gathered
-Resume file: --resume-file
+Last session: 2026-08-08（`/gsd-execute-phase 09.1` 完成）
+Stopped at: **Phase 09.1 執行完成（3/3 plans，VERIFICATION 5/5 passed）**
+Resume file: `.planning/phases/09.1-address-tech-debt-09-w4/09.1-VERIFICATION.md`
 
-**Phase 11 執行摘要（2026-08-08）：**
-
-- 11-01 欄位組裝＋ODT 注入＋分頁＋Wave 0（commit 7d973a5..07d54f8）；D-03 checkpoint 裁示：
-  以官方模板**第二聯**為準（docs ba1f211 更新 ROADMAP SC3/REQ 措辭）
-
-- 11-02 壓縮基準模板 9 頁→3 頁收斂成功（6 輪，layout-grid-mode=none 為主因；Golden＝30396_4）；
-  render/write_appeal_print＋e2e/copies/security（fa12afa..d00c153）
-
-- 11-03 facility config＋CLI＋README（4849675..ff84526）；code-review should-fixes 3 項（8e8924d）
-- 全套件 408→411 passed / 2 skipped；11-VERIFICATION.md passed 3/3（SC1 逐欄/SC2 資料流/SC3 第二聯）
-- 唯一阻塞：**Phase 10（HIS 串接，需 VPN/實機）**——外部依賴，milestone 無法 100% 收官
+**Phase 09.1 執行摘要（2026-08-08，tech-debt 清理）：**
+- 09.1-01 W1 狀態機合法化（`imported→appealed`，171f85c）＋W4 generate 回 `render_appeal_json`
+  標準契約（679b6dc）＋`_to_appeal_case` 透傳 `rec.id_number`（含於 679b6dc）
+- 09.1-02 前端 index.html 消費適配標準契約（cd07f39/338b95b）
+- 09.1-03 `build_submission_from_case` 轉換層（d0b77ea/46aada3）＋CLI 接入
+- 全套件 424 passed / 2 skipped；VERIFICATION 5/5（D-01/D-03/D-04/D-05 實證、D-02 無實作）
+- milestone audit W1/W4/W5 全數閉合
 
 **⚠️ 2026-08-08 修正**：本節前一版（2026-08-07 寫）聲稱「09-03/09-04 尚未執行、
 準備開始 Plan 03」——與 git 實況脫節。實際上 09-03、09-04 皆已完成並 commit
