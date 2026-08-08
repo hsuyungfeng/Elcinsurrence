@@ -230,7 +230,12 @@ docx 樹把表格全部丟進 `table_refs`（實測 **213 個表格區塊**）�
 | P1-5 | ✅ 已修 | 前端 XSS＋CSP＋移除外鏈字型 |
 | P1-2 | ✅ 已修 | prompt 標籤定界隔離（3 處） |
 | P1-3 | ✅ 已修 | `safe_filename()` 統一防線（3 處） |
-| P1-4 | ⬜ 未處理 | CSV 內容 hash＋ChromaDB 版本綁定（下一項） |
+| P1-4 | ✅ 已修 | CSV 內容 hash＋ChromaDB 版本綁定——**已於 `5f1f38e`（2026-08-05）完成，本表格當時未同步更新，2026-08-08 覆核 git 後補記** |
+
+**⚠️ 2026-08-08 追溯修正**：本節表格曾長期誤植 P1-4「未處理」，實際上 P1-4 已於同日稍晚的 `5f1f38e`
+（"wip: complete P1-4 ... pause work handoff"）完成並測試通過，只是該次 session 以 wip/pause-work
+方式收尾，沒有回頭更新本檔追蹤表。**教訓（與 STATE.md 同型）：pause-work handoff 完成的工作，
+必須回填進原始追蹤文件，否則下次恢復會誤判為未完成而重工。**
 
 **P1-3（路徑穿越）— 採「校驗後拒絕」而非「清洗取代」**
 - 新增 `src/elc_audit_engine/safe_paths.py`：`safe_filename(value, field_name)`＋`UnsafeIdentifierError`。
@@ -253,6 +258,43 @@ docx 樹把表格全部丟進 `table_refs`（實測 **213 個表格區塊**）�
 - 移除 Google Fonts 外鏈（`preconnect` ×2＋`stylesheet`）：本服務接觸病歷資料，外鏈字型會把使用者 IP 與瀏覽行為送到第三方，與 D2「個資不出本機」相衝，且離線／VPN 環境下載入失敗。改用系統字型堆疊（保留 `'Noto Sans TC'` 等作本機優先，僅去掉網路取用）。
 - `server.py` 新增 `@app.after_request` 安全標頭：CSP（`default-src 'self'`、`object-src 'none'`、`frame-ancestors 'none'`、`base-uri 'none'`、`form-action 'self'`）＋`X-Content-Type-Options: nosniff`＋`Referrer-Policy: no-referrer`＋`X-Frame-Options: DENY`。inline `style`/`script` 暫留 `'unsafe-inline'`（頁面為單檔 inline 樣板），待拆出外部 `.css`/`.js` 後可移除此例外。
 - 回歸測試含**負向控制**：刻意重新植入 `innerHTML` 樣板後 `test_frontend_case_list_does_not_use_innerhtml_templating` 確實失敗（已驗證後還原），確認該測試不是空過。
+
+### 7.7 執行紀錄（2026-08-08）— 審計日誌回歸修復（P1-6，新發現）
+
+**背景**：本次 `/gsd-resume-work` 恢復後確認 P1-4 早已完成（`5f1f38e`，補記於 §7.6），
+接著跑全套測試作最終驗證，發現 `tests/test_auth.py` 7 個測試失敗，追查後定位為
+**與 P1-4 無關的獨立回歸**，源自前一 session 的 `fcde2c8`（2026-08-07，依使用者裁示
+停用業務端點強制 API Key 認證）。
+
+**根因（P1-6）**：`fcde2c8` 把六個業務端點加進 `_AUTH_EXEMPT_ENDPOINTS`，但
+`server.py::_record_access_audit` 沿用同一份清單判斷「是否寫審計日誌」
+（`if request.endpoint not in _AUTH_EXEMPT_ENDPOINTS`）。結果六個接觸病歷資料的
+端點——`get_sampling_cases`／`audit_sampling_case`／`import_sampling_cases`／
+`get_appeal_cases`／`generate_appeal_draft`／`import_appeal_cases`——**免強制認證後
+連審計日誌也一併消失**，直接違反 09-01 「認證可選，審計必留」的設計精神。
+`test_audit_log_records_correct_caller_id`（帶正確 key 呼叫）失敗即是鐵證：
+`record_access` 完全沒被呼叫。
+
+**修法**：拆成兩份獨立清單，`server.py`——
+- `_AUDIT_EXEMPT_ENDPOINTS = {"index", "health", "static"}`（僅決定寫不寫審計，維持原範圍不擴大）
+- `_AUTH_EXEMPT_ENDPOINTS = _AUDIT_EXEMPT_ENDPOINTS | {六個業務端點}`（僅決定強制不強制認證）
+- `_record_access_audit` 改用 `_AUDIT_EXEMPT_ENDPOINTS` 判斷。
+- `_enforce_api_key` 對豁免端點新增「若呼叫方仍帶了合法 key，順便解析 `g.caller_id`」
+  （錯誤/缺失 key 靜默忽略，不 401）——否則即使 HIS 端老實帶 key，審計仍會落成
+  `anonymous`，稽核時無法區分是哪個呼叫方。
+
+`tests/test_auth.py` 同步改寫 7 個測試斷言（401 → 業務邏輯應得的狀態碼；
+`test_no_header_post_sampling_import_returns_401` 等改為斷言「不是 401」，
+因為無認證但仍可能因缺欄位回 400——那是業務驗證，非認證問題）。
+
+**測試基線：`374 passed / 2 skipped`**（原 367 passed + 7 failed；新增 0 個測試，
+7 個回歸測試改寫斷言後全綠，無新增回歸）。
+
+**教訓**：兩個語義不同的白名單（「要不要強制」vs「要不要記錄」）共用同一個
+`frozenset` 是這次回歸的根本原因——修改前者的人合理地不會想到會連帶影響後者。
+**當一份清單被兩處不同語義的邏輯引用時，即使目前外延相同，也該拆開命名**，
+否則下次調整範圍時會有一側被悄悄帶歪。與 P1-1／P0-2「系統故障必須與業務結論
+可區分」同源：這裡是「認證狀態必須與審計是否記錄可區分」。
 
 ---
 

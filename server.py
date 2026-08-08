@@ -64,11 +64,16 @@ app = Flask(__name__, static_folder='static')
 _MAX_SOAP_CHARS = 10_000
 _MAX_FIELD_CHARS = 200
 
-# 認證豁免清單：依使用者裁示，目前所有 API 端點直接開放供 HIS 對接，不強制 API Key。
-_AUTH_EXEMPT_ENDPOINTS = frozenset({
-    "index",
-    "health",
-    "static",
+# 審計豁免清單：靜態頁與健康檢查不含病歷存取，記錄會被探測流量淹沒。
+# 這份清單只決定「寫不寫審計」，與是否強制認證無關——業務端點即使
+# 免強制 API Key，仍接觸病歷資料，審計軌跡不可因此消失。
+_AUDIT_EXEMPT_ENDPOINTS = frozenset({"index", "health", "static"})
+
+# 認證豁免清單：依使用者裁示，目前所有業務端點直接開放供 HIS 對接，
+# 不強制 API Key。**僅決定認證是否強制，不得沿用來判斷審計**——
+# 兩份清單刻意分開（歷史教訓：曾共用一份清單，導致免認證的業務端點
+# 連審計日誌都被一併跳過，違反「認證可選、審計必留」的設計）。
+_AUTH_EXEMPT_ENDPOINTS = _AUDIT_EXEMPT_ENDPOINTS | frozenset({
     "get_sampling_cases",
     "audit_sampling_case",
     "import_sampling_cases",
@@ -148,6 +153,15 @@ def _enforce_api_key():
     仍保留供未來 blueprint 使用。
     """
     if request.endpoint in _AUTH_EXEMPT_ENDPOINTS:
+        # 免強制認證，但若呼叫方仍帶了合法 key，順便解析 caller_id，
+        # 讓審計日誌不必然落成 anonymous（key 錯誤或缺失則靜默忽略，
+        # 因為這裡不強制擋，錯誤 key 也不該是 401 的理由）。
+        presented_key = request.headers.get(API_KEY_HEADER)
+        if presented_key:
+            try:
+                g.caller_id = resolve_caller(presented_key, app.config["ELC_API_KEYS"])
+            except AuthenticationError:
+                pass
         return None
     if request.endpoint is None:
         # 未匹配任何路由（404），交給 Flask 內建處理，不在此攔截。
@@ -177,7 +191,7 @@ def _record_access_audit(response):
     必須在 application log 留痕（不靜默無痕）。
     不得把 request.json／request.form 內容放進 detail（PHI 風險）。
     """
-    if request.endpoint not in _AUTH_EXEMPT_ENDPOINTS:
+    if request.endpoint not in _AUDIT_EXEMPT_ENDPOINTS:
         try:
             record_access(
                 caller_id=getattr(g, "caller_id", "anonymous"),

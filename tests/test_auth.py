@@ -179,16 +179,16 @@ def _auth_header(key: str) -> dict:
     return {auth.API_KEY_HEADER: key}
 
 
-def test_no_header_get_sampling_cases_returns_401_without_case_fields(app_client):
+def test_no_header_get_sampling_cases_returns_200(app_client):
+    """fcde2c8：業務端點依使用者裁示不再強制 API Key（直接 HIS 對接）。"""
     r = app_client.get("/api/sampling/cases")
-    assert r.status_code == 401
-    body = r.get_json()
-    assert "order_code" not in str(body)
+    assert r.status_code == 200
 
 
-def test_wrong_key_get_sampling_cases_returns_401(app_client):
+def test_wrong_key_get_sampling_cases_still_returns_200(app_client):
+    """免強制認證後，錯誤 key 不應被拒——端點本身不驗證 key 正確性。"""
     r = app_client.get("/api/sampling/cases", headers=_auth_header("wrong-key-wrong-key-000"))
-    assert r.status_code == 401
+    assert r.status_code == 200
 
 
 def test_correct_key_get_sampling_cases_returns_200(app_client):
@@ -196,33 +196,35 @@ def test_correct_key_get_sampling_cases_returns_200(app_client):
     assert r.status_code == 200
 
 
-def test_no_header_post_sampling_audit_returns_401_and_engine_not_called(app_client, monkeypatch):
+def test_no_header_post_sampling_audit_calls_engine(app_client, monkeypatch):
+    """免強制認證後，無 header 的請求仍應正常呼叫引擎（不再被攔在 401）。"""
     import server as server_mod
 
     calls = []
     monkeypatch.setattr(
-        server_mod, "run_presubmission_check", lambda *a, **k: calls.append((a, k))
+        server_mod, "run_presubmission_check", lambda *a, **k: calls.append((a, k)) or None
     )
     r = app_client.post("/api/sampling/audit", json={"order_code": "14050B"})
-    assert r.status_code == 401
-    assert calls == []
+    assert r.status_code != 401
+    assert len(calls) == 1
 
 
-def test_no_header_post_appeal_generate_returns_401(app_client):
+def test_no_header_post_appeal_generate_not_blocked_by_auth(app_client):
     r = app_client.post(
         "/api/appeal/generate", json={"case_seq": "201", "order_code": "64140C"}
     )
-    assert r.status_code == 401
+    assert r.status_code != 401
 
 
-def test_no_header_post_sampling_import_returns_401(app_client):
+def test_no_header_post_sampling_import_not_blocked_by_auth(app_client):
     r = app_client.post("/api/sampling/import", data={})
-    assert r.status_code == 401
+    # 缺必要欄位仍應是 400（業務驗證），而非 401（認證）。
+    assert r.status_code != 401
 
 
-def test_no_header_post_appeal_import_returns_401(app_client):
+def test_no_header_post_appeal_import_not_blocked_by_auth(app_client):
     r = app_client.post("/api/appeal/import", data={})
-    assert r.status_code == 401
+    assert r.status_code != 401
 
 
 def test_index_no_key_returns_200(app_client):

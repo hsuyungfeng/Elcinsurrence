@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: GSD Phase 9 (HIS 服務化) COMPLETE (4/4 plans done). Phase 10 外部依賴門控中。
-last_updated: "2026-08-07T03:37:07.354Z"
+stopped_at: GSD Phase 9 (HIS 服務化) COMPLETE (4/4 plans done)。Phase 10 外部依賴門控中。Phase 11（紙本申復清單列印）已新增至 ROADMAP，待規劃。
+last_updated: "2026-08-08T00:00:00.000Z"
 progress:
-  total_phases: 10
+  total_phases: 11
   completed_phases: 9
   total_plans: 19
   completed_plans: 19
-  percent: 97
+  percent: 82
 ---
 
 # STATE.md — elc-audit-engine
@@ -55,6 +55,13 @@ ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (origi
 ## Not Yet Started
 
 - Phase 3 (解析器) through Phase 9 (HIS 整合佔位) — see ROADMAP.md for full breakdown. Phase 3 (parsers) and Phase 4 (record aggregator) both depend only on Phase 1 (satisfied) and could be planned in either order or in parallel.
+- **Phase 11（紙本申復清單列印）— 2026-08-08 新增**：檢討電子 vs 紙本兩種抽審申復流程時發現，
+  紙本 OCR 辨識輸入（`media.py`／`table_ocr.py`）與內部資料處理（`CaseStore`／`AppealDraft`）
+  皆與電子流程共用引擎，但輸出端只有 Markdown／JSON／申復 XML，缺少可列印 PDF。已依官方
+  三聯式範本（`officialdocument/電子申復文件格式/30396_*`，105.04.01 修訂版）新增 Phase 11，
+  **依賴 Phase 7（`AppealDraft` 已具備）、不依賴 Phase 10**——紙本列印是獨立輸出通道，
+  不需等 VPN/實機串接解除門控即可規劃執行。見 `.planning/ROADMAP.md` Phase 11、
+  `.planning/REQUIREMENTS.md` REQ-paper-appeal-print。尚未 `/gsd-plan-phase 11`。
 
 ## Blockers
 
@@ -62,22 +69,36 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-08-07（本次 `/gsd-resume-work` 恢復）
-Stopped at: **09-01 與 09-02 已完成；09-03-PLAN.md 與 09-04-PLAN.md 已撰寫完成，準備執行 Phase 9 Plan 03**
+Last session: 2026-08-08（本次 `/gsd-resume-work` 恢復）
+Stopped at: **Phase 9（HIS 服務化）4/4 plans 全數完成並 commit；其後又有 5 個 post-Phase-9 commit（API Key 認證政策改為選擇性、UI 調整、OCR 修正），STATE.md 敘述性欄位當時未同步**
 Resume file: 無
 
-**⚠️ 2026-08-07 修正**：本節前一版聲稱 09-01/09-02「已寫好但尚未執行、
-`auth.py`／`case_store/` 不存在」——與 git 實況脫節（`25bf03a`、`c8602e5`、
-`e537c02`、`f8d5dd6` 四個 commit 早已落地）。**教訓：STATE.md 的敘述性欄位
-會與 git 脫節，恢復時一律以 `git log` 與檔案系統實況為準覆核。**
+**⚠️ 2026-08-08 修正**：本節前一版（2026-08-07 寫）聲稱「09-03/09-04 尚未執行、
+準備開始 Plan 03」——與 git 實況脫節。實際上 09-03、09-04 皆已完成並 commit
+（`860a13f`、`c2eb24f`），且其後還有 5 個 commit。**教訓（重複發生）：
+STATE.md 的敘述性欄位會與 git 脫節，恢復時一律以 `git log` 與檔案系統實況為準覆核。**
 
-**Phase 9 進度：**
+**Phase 9 進度（COMPLETE 2026-08-07）：**
 
 | Plan | 範圍 | 狀態 |
 |---|---|---|
 | 09-01 | 認證授權＋審計日誌 | ✅ COMPLETE（`25bf03a`／`e537c02`／`a2022f8`） |
 | 09-02 | 案件狀態機＋SQLite 持久化 | ✅ COMPLETE（`c8602e5`／`f8d5dd6`／`1c298d4`） |
-| 09-03 | 端點接 CaseStore＋uploads 遷移 | ⬜ 未規劃 |
+| 09-03 | 端點接 CaseStore＋uploads 遷移 | ✅ COMPLETE（`860a13f`） |
+| 09-04 | Package Builder（申復 XML 序列化） | ✅ COMPLETE（`c2eb24f`） |
+
+**Post-Phase-9 commits（2026-08-07，STATE.md 未追蹤到，本次補記）：**
+
+- `948d8ad` docs(09): STATE／ROADMAP 標記 Phase 9 完成
+- `61c8495` docs: README 補 HIS 系統串接步驟與 API 整合流程
+- `0ebfa43` fix(ui): header 加 API Key 輸入欄位＋所有請求帶 X-API-Key
+- `fcde2c8` feat(api): **依使用者裁示**，全部業務端點停用強制 API Key 認證，
+  改走直接 HIS 對接（`_AUTH_EXEMPT_ENDPOINTS` 擴大納入六個業務端點）。
+  09-01 的認證機制（constant-time 比對、審計日誌）程式碼仍在，只是不再強制——
+  屬刻意政策轉向，非退化。
+- `e7ace46` style(ui): 移除已無用的 API Key 輸入欄位（呼應上一 commit）
+- `5915022`／`f19eb2e` fix(ingest): OCR 醫令代碼正則擴大支援 5-6 碼英數混合＋
+  大小寫不敏感子字串搜尋修正（`ocr_rows.py`）
 
 **2026-08-05 修復（詳見 `deepflash4improve.md` §7.6）：**
 
@@ -117,8 +138,20 @@ Resume file: 無
   務必人工確認暫存區。
 
 - ~~未處理：P1-2 prompt 注入、P1-3 路徑穿越、P1-5 前端 XSS~~ → **已於
-  2026-08-05 完成（`f6ac775`）**。**仍未處理：P1-4 版本管理（CSV 內容 hash
-  ＋ChromaDB 版本綁定）、P2 全部。**
+  2026-08-05 完成（`f6ac775`）**。~~P1-4 版本管理（CSV 內容 hash＋ChromaDB
+  版本綁定）~~ → **已於 2026-08-05 完成（`5f1f38e`），deepflash4improve.md
+  §7.6 追蹤表當時未同步、2026-08-08 補記確認**。**仍未處理：P2 全部。**
+
+- **2026-08-08 新發現並修復 P1-6（審計日誌回歸）**：`fcde2c8`（2026-08-07，
+  依使用者裁示停用業務端點強制 API Key 認證）誤把認證豁免清單
+  `_AUTH_EXEMPT_ENDPOINTS` 拿去兼做審計豁免判斷依據，導致六個接觸病歷資料
+  的業務端點**完全停止寫審計日誌**，違反 09-01「認證可選、審計必留」設計。
+  已拆成 `_AUDIT_EXEMPT_ENDPOINTS`（僅 index/health/static）與
+  `_AUTH_EXEMPT_ENDPOINTS`（兩者聯集）兩份獨立清單修復，並讓豁免端點若仍
+  帶合法 key 也會解析 `caller_id`（否則審計會全落成 anonymous）。
+  `tests/test_auth.py` 7 個測試斷言同步改寫。測試基線 `374 passed / 2
+  skipped`。詳見 `deepflash4improve.md` §7.7。**教訓：兩個語義不同的白名單
+  不應共用同一個 frozenset，即使目前外延相同。**
 
 **Carry into planning:**
 
