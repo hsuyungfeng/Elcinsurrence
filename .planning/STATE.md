@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Phase 11 執行完成（3/3 plans，驗證通過）——milestone v1.0 僅剩 Phase 10（VPN/實機）阻塞
-last_updated: "2026-08-08T04:22:49.341Z"
+stopped_at: Phase 09.1 context gathered
+last_updated: "2026-08-08T06:06:46.712Z"
 progress:
-  total_phases: 11
+  total_phases: 12
   completed_phases: 10
-  total_plans: 20
+  total_plans: 23
   completed_plans: 20
-  percent: 100
+  percent: 87
 ---
 
 # STATE.md — elc-audit-engine
@@ -69,15 +69,18 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-08-08（`/gsd-execute-phase 11` 完成）
-Stopped at: **Phase 11 執行完成（3/3 plans，3 waves 全部落地，VERIFICATION passed 3/3）**
-Resume file: `.planning/phases/11-paper-appeal-print/11-VERIFICATION.md`
+Last session: --stopped-at
+Stopped at: Phase 09.1 context gathered
+Resume file: --resume-file
 
 **Phase 11 執行摘要（2026-08-08）：**
+
 - 11-01 欄位組裝＋ODT 注入＋分頁＋Wave 0（commit 7d973a5..07d54f8）；D-03 checkpoint 裁示：
   以官方模板**第二聯**為準（docs ba1f211 更新 ROADMAP SC3/REQ 措辭）
+
 - 11-02 壓縮基準模板 9 頁→3 頁收斂成功（6 輪，layout-grid-mode=none 為主因；Golden＝30396_4）；
   render/write_appeal_print＋e2e/copies/security（fa12afa..d00c153）
+
 - 11-03 facility config＋CLI＋README（4849675..ff84526）；code-review should-fixes 3 項（8e8924d）
 - 全套件 408→411 passed / 2 skipped；11-VERIFICATION.md passed 3/3（SC1 逐欄/SC2 資料流/SC3 第二聯）
 - 唯一阻塞：**Phase 10（HIS 串接，需 VPN/實機）**——外部依賴，milestone 無法 100% 收官
@@ -176,6 +179,12 @@ STATE.md 的敘述性欄位會與 git 脫節，恢復時一律以 `git log` 與�
 - fixture 去識別化範圍為使用者知情後的明示決定（**只洗 `d49` 姓名**），下游不得自行擴大。
 - **`get_rule()` 已改為會拋 `RuleRepositoryError`**（P0-2 breaking change）——Phase 3 解析器不呼叫它，但 Phase 5 比對器必須處理此例外。
 
+## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 09.1 (INSERTED, after 09, 2026-08-08): "Address tech debt: 09 狀態機語義 + W4 契約橋"（URGENT）— 清理 audit 發現之 W1（CaseStore 狀態機 imported→appealed 非法轉換）與 W4（/api/appeal/generate 回應契約 ≠ render_appeal_json 契約）
+
 ## Key References
 
 - `.planning/PROJECT.md` — project overview, locked architecture, source doc precedence
@@ -187,4 +196,6 @@ STATE.md 的敘述性欄位會與 git 脫節，恢復時一律以 `git log` 與�
 - `.planning/intel/constraints.md` — SPEC/DOC technical constraints (C1-C12)
 - `.planning/intel/context.md` — DOC background/context notes
 
-**Planned Phase:** 11 (paper-appeal-print) — 3 plans — 2026-08-08T02:13:49.066Z
+**Planned Phase:** 09.1 (address-tech-debt-09-w4) — 3 plans — 2026-08-08T06:06:46.708Z
+
+> **Roadmap Evolution (2026-08-08):** Phase 09.1 (INSERTED, after 09) — "Address tech debt: 09 狀態機語義 + W4 契約橋"（URGENT）

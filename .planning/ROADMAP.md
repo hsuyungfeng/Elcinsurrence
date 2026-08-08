@@ -158,6 +158,21 @@ Plans:
 - [x] 09-03: 端點接 CaseStore＋uploads 遷移（匯入即建案＋重複衝突拒絕；GET 端點改讀 CaseStore 為單一真實來源；啟動期一次性冪等遷移；audit/generate 選填 case_id 觸發狀態轉換）— 見 `09-03-SUMMARY.md`
 - [x] 09-04: Package Builder（申復 XML 序列化，tdata+ddata+pdata，不含 edata；ElementTree 建構＋全形特殊字元轉換＋Big5 fail-fast 寫檔；背景腳本 `scripts/build_appeal_xml.py`，不涉及新端點）— 見 `09-04-SUMMARY.md`
 
+### Phase 09.1: Address tech debt: 09 狀態機語義 + W4 契約橋 (INSERTED)
+
+**Goal:** 修正 Phase 9 交付物的三處整合缺陷（milestone audit W1/W4/W5）：(1) `imported→appealed` 狀態轉換合法化（D-01）；(2) `/api/appeal/generate` 改回 `render_appeal_json` 標準契約（D-03）＋前端 index.html 一併適配（D-04）；(3) CaseStore appeal payload → submission 標準轉換 `build_submission_from_case`（D-05，缺欄誠實留空＋warning，不捏造）。`appealed→submitted` deferred 至 Phase 10。
+**Requirements**: W1（狀態機語義）、W4（契約橋）、W5（submission 契約）
+**Depends on:** Phase 9
+**Plans:** 3 plans — 已規劃（2026-08-08，1 wave）
+
+Plans:
+- [ ] 09.1-01-PLAN.md — W1 狀態機合法邊（states.py）＋W4 generate 回標準契約（server.py）＋`_to_appeal_case` 透傳 rec.id_number（W5 數據流補全）
+- [ ] 09.1-02-PLAN.md — W4 前端 index.html 消費適配標準契約欄位＋前端契約回歸測試
+- [ ] 09.1-03-PLAN.md — W5 `build_submission_from_case` 轉換層（新檔）＋CLI 接入＋端到端測試
+
+**Wave dependencies:**
+- Wave 1：三 plan 全並行（files_modified 零重疊；plan 03 數據流依賴 plan 01 Task 3 的 id_number 透傳，於 interfaces 註明）
+
 ### Phase 10: VPN／實機串接（外部依賴門控）
 **Goal**: 接上 doctor-toolbox 雲端病歷與健保署 VPN 上傳鏈路（原 Phase 9 被阻塞的部分）
 **Depends on**: Phase 9
