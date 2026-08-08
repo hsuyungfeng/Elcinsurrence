@@ -194,6 +194,25 @@ def test_frontend_case_list_does_not_use_innerhtml_templating():
         assert rhs.strip().startswith(("''", '""')), f"疑似 HTML 注入點: {rhs.strip()}"
 
 
+def test_index_html_generate_consumes_standard_contract():
+    """W4 契約回歸（D-04）：generateAppealDraft 須消費 render_appeal_json
+    標準契約鍵（sections/p8_reason1/p9_reason2/rule_found），舊鍵
+    （appeal_sections/xml_p8_p9_valid/data.reason1/data.reason2）不得殘留
+    ——含註解與字數旗標在內，全文子字串層級不許再出現。
+    """
+    from pathlib import Path
+
+    html = Path("static/index.html").read_text(encoding="utf-8")
+
+    # 已移除舊鍵不得殘留（全文子字串斷言，含註解）
+    for old_key in ("appeal_sections", "xml_p8_p9_valid", "data.reason1", "data.reason2"):
+        assert old_key not in html, f"index.html 殘留已移除舊鍵: {old_key}"
+
+    # 新契約鍵必須在場
+    for new_key in ("data.sections[", "data.p8_reason1", "data.p9_reason2", "data.rule_found"):
+        assert new_key in html, f"index.html 缺少標準契約鍵: {new_key}"
+
+
 def test_sampling_import_csv_endpoint(api):
     client, tmp_path = api
     r = client.post(
