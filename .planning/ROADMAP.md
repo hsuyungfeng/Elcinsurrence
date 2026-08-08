@@ -184,10 +184,22 @@ Plans:
   1. PDF 版面與官方三聯式範本（`30396_4_無刪除線1050105-PDF門診診療費用申復清單-.pdf`）逐欄核對一致——代號字碼／醫療院所名稱／審查科別／原申報類別與日期／年度月份頁數／案件分類／流水號／身份證字號／姓名／傷病名稱／醫令序／內容數量金額理由／審核意見／補付數量單價金額／合計人次補付金額，缺一不可
   2. 由既有 `AppealDraft` 資料直接生成 PDF，不需另建資料模型或重新比對——排版層與 Phase 7 資料層職責分離
   3. 三聯（醫療院所存查／衛生福利部中央健康保險署存查／代付款清單）版式差異（第三聯多出「中央健康保險署填列」核定/複核/初核/審查委員欄）正確反映
-**Plans**: 0 plans — 待規劃
+**Plans**: 3 plans — 已規劃（2026-08-08，3 waves）
 
 Plans:
-- [ ] TBD (run `/gsd-plan-phase 11` to break down)
+- [ ] 11-01-PLAN.md — 欄位組裝（官方 14 主表欄＋7 頭表欄，實測 ODT 契約）＋content.xml 注入＋15 行/頁分頁＋Wave 0 測試脚手架（內含 D-03 三聯差異 checkpoint:decision）
+- [ ] 11-02-PLAN.md — 壓縮基準模板（官方 ODT 9 頁→3 頁收斂，Golden＝30396_4）＋render/write_appeal_print＋soffice 端到端與三聯版式差異驗證
+- [ ] 11-03-PLAN.md — config/facility.json＋scripts/build_appeal_print.py CLI＋PHI 安全防線＋全套件回歸
+
+**Wave dependencies:**
+- Wave 1 *(blocked on nothing — 11-01 含 Wave 0 脚手架)*
+- Wave 2 *(blocked on Wave 1 completion — 11-02 消費 11-01 的 build_rows 14 鍵契約與 filled ODT)*
+- Wave 3 *(blocked on Wave 2 completion — 11-03 CLI 呼叫 write_appeal_print)*
+
+**Cross-cutting constraints:**
+- 官方主表 14 資料欄契約（含傷病名稱欄，cell[4]）——11-01（build_rows/odt_fill 注入序）與 11-02（copies cell[4] 斷言）共用，不得回到 13 欄假設
+- PHI 安全防線（ET 文本節點注入、safe_filename、data/output gitignore、PHI 安全錯誤訊息）——三份 plan 的 `<threat_model>` 一致，T-11-01..T-11-07
+- 誠實降級原則：缺欄一律留空＋warning，禁止捏造／重建遮罩身分證字號——11-01 build_rows 與 11-03 CLI warnings 呈現串接
 
 ## Progress
 
