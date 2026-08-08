@@ -45,7 +45,10 @@ ALL_STATES: frozenset[str] = frozenset(
 # 顯式轉換表：鍵為來源狀態，值為該狀態可合法轉入的目標狀態集合。
 # 鍵集合必須恰為 ALL_STATES（測試以遍歷斷言鎖定，見 test_case_states.py）。
 _TRANSITIONS: dict[str, frozenset[str]] = {
-    STATE_IMPORTED: frozenset({STATE_PARSED, STATE_FAILED}),
+    # D-01：appeal 案件生成申復草稿即視為完成申復——imported 案件可直接達 appealed。
+    # 此邊唯一的 server 呼叫點在 /api/appeal/generate（transition(case_id, "appealed")），
+    # sampling 案件走 parsed/reviewing/reviewed 邊、不觸發該呼叫，故不污染預審流語義。
+    STATE_IMPORTED: frozenset({STATE_PARSED, STATE_FAILED, STATE_APPEALED}),
     STATE_PARSED: frozenset({STATE_REVIEWING, STATE_FAILED}),
     STATE_REVIEWING: frozenset({STATE_REVIEWED, STATE_FAILED}),
     # reviewed 為預審流程終點；若進入申復流程則續行至 appealed。

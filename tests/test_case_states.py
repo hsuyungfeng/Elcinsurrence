@@ -62,6 +62,16 @@ def test_main_line_transitions_are_legal(from_state, to_state):
     assert can_transition(from_state, to_state) is True
 
 
+def test_imported_to_appealed_is_legal():
+    """旁支合法邊（D-01）：剛導入（imported）的 appeal 案件可直接生成申復草稿
+    並經 /api/appeal/generate 達成 appealed，不再拋 IllegalTransitionError。
+
+    刻意不加入 _MAIN_LINE——imported→appealed 屬旁支、非六主線之一。
+    """
+    assert can_transition(STATE_IMPORTED, STATE_APPEALED) is True
+    assert_transition_allowed(STATE_IMPORTED, STATE_APPEALED)  # 不拋例外
+
+
 @pytest.mark.parametrize("state", sorted(ALL_STATES - {STATE_SUBMITTED, STATE_FAILED}))
 def test_every_non_submitted_state_can_transition_to_failed(state):
     """遍歷斷言：每個非 submitted、非 failed 本身的狀態都能轉入 failed。"""
