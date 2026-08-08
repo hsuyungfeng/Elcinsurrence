@@ -6,6 +6,9 @@ Test matrix（RESEARCH Validation Architecture）：
 - `-k e2e`／`-k copies`／`-k security`／`-k config`：由 11-02/11-03 依序添加
 """
 
+import os
+import re
+import subprocess
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -469,3 +472,429 @@ def test_odt_fill_zip_mimetype_first_stored(tmp_path):
         assert infos[0].filename == "mimetype"
         assert infos[0].compress_type == zipfile.ZIP_STORED
         assert zf.read("mimetype") == b"application/vnd.oasis.opendocument.text"
+
+
+# ── Task 1 (11-02): -k base（壓縮基準模板 build_print_base）────────
+
+
+def _build_print_base(tmp_path) -> tuple[str, str]:
+    """以官方 ODT 產生壓縮基準模板（tmp_path 隔離），回傳 (odt, sha256)。"""
+    from elc_audit_engine.generators.appeal_print.template import build_print_base
+
+    out_odt = str(tmp_path / "print_base.odt")
+    sha_out = str(tmp_path / "print_base.sha256")
+    result = build_print_base(OFFICIAL_ODT, out_odt, sha256_out=sha_out)
+    assert result == out_odt
+    return out_odt, sha_out
+
+
+@requires_soffice
+def test_base_build_print_base_pdf_3_pages(tmp_path):
+    """Test 1（base, @requires_soffice）：壓縮基準模板經 soffice 轉 PDF → 總頁數=3（每聯一頁）。"""
+    from pypdf import PdfReader
+
+    out_odt, _ = _build_print_base(tmp_path)
+    # soffice 輸出檔名＝輸入檔名去副檔名＋.pdf
+    pdf_path = str(tmp_path / "print_base.pdf")
+    # 比照 write_appeal_print 的 soffice 呼叫（-env:UserInstallation 導向 tmp profile）
+    import subprocess
+    from pathlib import Path
+
+    profile_dir = tmp_path / "lo_profile"
+    profile_dir.mkdir(exist_ok=True)
+    result = subprocess.run(
+        [
+            "soffice",
+            f"-env:UserInstallation={Path(profile_dir).as_uri()}",
+            "--headless",
+            "--norestore",
+            "--nolockcheck",
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            str(tmp_path),
+            out_odt,
+        ],
+        capture_output=True,
+        timeout=120,
+    )
+    assert result.returncode == 0
+    assert os.path.isfile(pdf_path), "soffice 未產出 PDF"
+    reader = PdfReader(pdf_path)
+    assert len(reader.pages) == 3, f"壓縮基準模板應為 3 頁（每聯一頁），實際 {len(reader.pages)}"
+
+
+def test_base_build_print_base_odt_structure_9_tables(tmp_path):
+    """Test 2（base）：產物 *_print_base.odt 存在、content.xml 可解析（9 tables 結構不破壞）。"""
+    import os as _os
+
+    out_odt, _ = _build_print_base(tmp_path)
+    assert _os.path.isfile(out_odt)
+
+    content_raw, root_el = _read_content_xml(out_odt)
+    tables = _find_tables(root_el)
+    assert len(tables) == 9, f"壓縮模板應保留 9 tables（3 聯×3），實際 {len(tables)}"
+    # 主表 18 rows（row0 大標題/row1 表頭/row2~16 資料/row17 合計）結構不變
+    main = tables[1]
+    rows_el = main.findall(
+        "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}table-row"
+    )
+    assert len(rows_el) == 18
+    # 資料行 row2 的 15 cells 保留
+    row2 = rows_el[2].findall(
+        "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}table-cell"
+    )
+    assert len(row2) == 15
+
+
+def test_base_build_print_base_sha256_file_matches(tmp_path):
+    """Test 3（base）：產物 sha256 與同目錄 *_print_base.sha256 內容一致。"""
+    import hashlib as _hashlib
+
+    out_odt, sha_out = _build_print_base(tmp_path)
+
+    digest = _hashlib.sha256()
+    with open(out_odt, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            digest.update(chunk)
+
+    with open(sha_out, encoding="utf-8") as f:
+        recorded = f.read().strip()
+    assert recorded == digest.hexdigest()
+
+
+def test_base_official_print_base_asset_committed(tmp_path):
+    """基準模板資產已入庫（git-tracked 路徑存在；T-11-06 供應鏈資產）。"""
+    import os as _os
+
+    base_asset = (
+        "officialdocument/電子申復文件格式/"
+        "30396_1_1050105-1門診診療費用申復清單_print_base.odt"
+    )
+    sha_asset = base_asset[: -len(".odt")] + ".sha256"
+    assert _os.path.isfile(base_asset), "壓縮基準模板資產未產生"
+    assert _os.path.isfile(sha_asset), "壓縮基準模板 sha256 資產未產生"
+    # 與入庫 sha256 檔內容一致（防竄改基準）
+    from elc_audit_engine.generators.appeal_print.odt_fill import (
+        verify_template_hash,
+    )
+
+    with open(sha_asset, encoding="utf-8") as f:
+        expected = f.read().strip()
+    verify_template_hash(base_asset, expected)
+
+
+# ── Task 2 (11-02): -k e2e／-k security（write/render 端到端）────────
+
+# 壓縮基準模板資產（11-02 Task 1 產出，git-tracked）。
+PRINT_BASE_ODT = (
+    "officialdocument/電子申復文件格式/"
+    "30396_1_1050105-1門診診療費用申復清單_print_base.odt"
+)
+
+
+def extract_pdf_text(pdf_path) -> str:
+    """從 PDF 提取全部文本（A2 fallback 鏈）。
+
+    優先 pypdf；若 pypdf 提取為空/拋例外（RESEARCH A2 未成立）→ 切換
+    `pdftotext`（poppler，soffice 同屬系統套件）；兩路皆無法提取才回傳
+    ""。測試內註記實際採用路徑。
+    """
+    try:
+        from pypdf import PdfReader
+
+        text = "".join(p.extract_text() or "" for p in PdfReader(pdf_path).pages)
+        if text.strip():
+            return text
+    except Exception:  # A2：pypdf 中文提取失敗 → fallback
+        pass
+    try:
+        r = subprocess.run(
+            ["pdftotext", pdf_path, "-"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout
+    except Exception:
+        pass
+    return ""
+
+
+@requires_soffice
+def test_e2e_write_appeal_print_pdf_3_pages_key_text(tmp_path):
+    """Test 1（e2e）：write_appeal_print 產出 3 頁 PDF，文本含關鍵欄位值。"""
+    from elc_audit_engine.generators.appeal_print import write_appeal_print
+
+    output_dir = tmp_path / "out"
+    pdf_path, warnings = write_appeal_print(
+        output_dir,
+        "test_case_001",
+        _payload(),
+        _facility(),
+        template_odt_path=PRINT_BASE_ODT,
+        submission=_submission(),
+    )
+    assert os.path.isfile(pdf_path)
+    assert pdf_path.endswith("申復清單_test_case_001.pdf")
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(pdf_path)
+    assert len(reader.pages) == 3, f"單醫令應為 3 頁（每聯一頁），實際 {len(reader.pages)}"
+
+    text = extract_pdf_text(pdf_path)
+    assert text, "pypdf/pdftotext 皆無法提取文本（A2 fallback 兩路皆敗）"
+    # 官方頭表標題為直排文字，pdftotext 會拆成多行——去空白後斷言子串
+    compact = re.sub(r"\s+", "", text)
+    for key in ("代號字碼", "醫療院所名稱", "測試醫療院所", "01015C", "E5002C", "D2", "18"):
+        assert key in compact, f"關鍵文本缺失：{key}"
+
+
+@requires_soffice
+def test_e2e_print_base_pagination_15_vs_16_rows(tmp_path):
+    """Test 2（e2e）：15 行不分頁（3 頁）、16 行分頁（6 頁）——D-06 與壓縮模板相容。"""
+    from elc_audit_engine.generators.appeal_print.field_mapping import paginate
+    from elc_audit_engine.generators.appeal_print.odt_fill import fill_template
+
+    header = {
+        "代號字碼": "01015C",
+        "醫療院所名稱": "測試醫療院所",
+        "審查科別": "內科",
+        "原申報類別": "□送核",
+        "原申報日期": "110年8月3日",
+        "年度": "110",
+        "月份": "06",
+    }
+
+    def _rows(n):
+        return [
+            {
+                "案件分類": "D2",
+                "流水號": str(i + 1),
+                "身份證字號": f"F10291****{i}",
+                "姓名": f"測試{i}",
+                "傷病名稱": "J189",
+                "醫令序": str(i + 1),
+                "內容": f"E5002C{i}",
+                "數量": "1",
+                "金額": "300",
+                "理由": "理由",
+                "審核意見": "",
+                "補付數量": "",
+                "單價": "",
+                "補付金額": "",
+            }
+            for i in range(n)
+        ]
+
+    import subprocess as _subprocess
+    from pathlib import Path
+
+    def _convert(filled_odt, outdir, pdf_name):
+        profile_dir = outdir / "lo_profile"
+        profile_dir.mkdir(exist_ok=True)
+        r = _subprocess.run(
+            [
+                "soffice",
+                f"-env:UserInstallation={Path(profile_dir).as_uri()}",
+                "--headless",
+                "--norestore",
+                "--nolockcheck",
+                "--convert-to",
+                "pdf",
+                "--outdir",
+                str(outdir),
+                str(filled_odt),
+            ],
+            capture_output=True,
+            timeout=120,
+        )
+        assert r.returncode == 0
+        from pypdf import PdfReader
+
+        return len(PdfReader(outdir / pdf_name).pages)
+
+    filled15 = tmp_path / "filled15.odt"
+    fill_template(PRINT_BASE_ODT, header, paginate(_rows(15)), str(filled15))
+    assert _convert(filled15, tmp_path, "filled15.pdf") == 3
+
+    filled16 = tmp_path / "filled16.odt"
+    fill_template(PRINT_BASE_ODT, header, paginate(_rows(16)), str(filled16))
+    assert _convert(filled16, tmp_path, "filled16.pdf") == 6
+
+
+def test_security_write_appeal_print_rejects_traversal(tmp_path):
+    """Test 3（security）：file_stem 含 `../` → UnsafeIdentifierError，外部目錄未被寫入。"""
+    from elc_audit_engine.generators.appeal_print import write_appeal_print
+    from elc_audit_engine.safe_paths import UnsafeIdentifierError
+
+    output_dir = tmp_path / "out"
+    for evil in ("../escape", "..", "a/b"):
+        with pytest.raises(UnsafeIdentifierError):
+            write_appeal_print(
+                output_dir,
+                evil,
+                _payload(),
+                _facility(),
+                template_odt_path=PRINT_BASE_ODT,
+                submission=_submission(),
+            )
+    # 非法輸入在 makedirs 之前即被拒絕：output_dir 未被建立
+    assert not os.path.exists(output_dir)
+
+
+def test_security_injection_does_not_break_odt(tmp_path):
+    """Test 4（security）：欄位含 `<script>` 與 `&` → render 成功回傳 bytes；soffice 可用時轉檔成功。"""
+    from elc_audit_engine.generators.appeal_print import (
+        render_appeal_print,
+        write_appeal_print,
+    )
+
+    payload = _payload(p8_reason1='<script>alert("x&y")</script>')
+    submission = _submission(patient_name="張<三>&李四")
+
+    # render 層：純函式組 bytes（不 raise、不寫專案目錄）
+    data, warnings = render_appeal_print(
+        payload,
+        _facility(),
+        template_odt_path=PRINT_BASE_ODT,
+        submission=submission,
+    )
+    assert isinstance(data, bytes) and len(data) > 0
+    # 產出 ODT 可被 zipfile+ET 解析（自動轉義，無 XML 損毀）
+    content_raw, root_el = _read_content_xml_bytes(data)
+    tables = _find_tables(root_el)
+    assert len(tables) == 9
+
+    # write 層：soffice 可用時轉檔成功（不 raise）
+    if soffice_is_functional():
+        pdf_path, _ = write_appeal_print(
+            tmp_path / "out2",
+            "inject_case",
+            payload,
+            _facility(),
+            template_odt_path=PRINT_BASE_ODT,
+            submission=submission,
+        )
+        assert os.path.isfile(pdf_path)
+
+
+def _read_content_xml_bytes(odt_bytes: bytes):
+    """從 bytes 讀 content.xml（security 測試用，迴避落盤）。"""
+    import io as _io
+
+    with zipfile.ZipFile(_io.BytesIO(odt_bytes)) as zf:
+        content_raw = zf.read("content.xml").decode("utf-8")
+    import re as _re
+
+    root_open = _re.search(r"<office:document-content[^>]*>", content_raw).group(0)
+    for m in _re.finditer(r'xmlns(?::([A-Za-z0-9_]+))?="([^"]+)"', root_open):
+        ET.register_namespace(m.group(1) or "", m.group(2))
+    root_el = ET.fromstring(content_raw)
+    return content_raw, root_el
+
+
+# ── Task 3 (11-02): -k copies（三聯版式差異）───────────────────────
+#
+# 11-01 使用者裁示（見 11-01-SUMMARY.md）：「中央健康保險署填列」的
+# 核定|複核|初核|審查委員 空白欄在**第二聯**（健保署存查聯）說明表 row1，
+# 第一/三聯無此欄；系統不填該欄（留空供健保署複核）。ROADMAP SC3 與
+# REQUIREMENTS 驗收標準 3 已由 orchestrator 更新為「第二聯」（commit ba1f211）。
+
+
+def _rendered_filled_bytes():
+    """以壓縮基準模板跑 render_appeal_print，回傳 filled ODT bytes。"""
+    from elc_audit_engine.generators.appeal_print import render_appeal_print
+
+    data, _ = render_appeal_print(
+        _payload(),
+        _facility(),
+        template_odt_path=PRINT_BASE_ODT,
+        submission=_submission(primary_diagnosis="J189"),
+    )
+    return data
+
+
+def _copies_note_row1_texts(root_el):
+    """回傳 3 聯說明表 row1 的 cell 文本清單（以聯組內說明表定位，非寫死索引）。"""
+    tables = _find_tables(root_el)
+    assert len(tables) == 9
+    out = []
+    for copy_idx in range(3):
+        note = tables[copy_idx * 3 + 2]  # 聯組內第 3 個＝說明表
+        rows = note.findall(
+            "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}table-row"
+        )
+        row1 = rows[1]
+        cells = row1.findall(
+            "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}table-cell"
+        )
+        out.append([_cell_full_text(c) for c in cells])
+    return out
+
+
+def test_copies_second_copy_review_columns_only():
+    """第二聯說明表 row1 含「核定|複核|初核|審查委員」；第一/三聯無（系統不填）。"""
+    _, root_el = _read_content_xml_bytes(_rendered_filled_bytes())
+    row1_texts = _copies_note_row1_texts(root_el)
+
+    # 第二聯（健保署存查聯）：4 個標題 cell（11-01 使用者裁示以官方模板第二聯為準）
+    assert row1_texts[1] == ["核定", "複核", "初核", "審查委員"]
+    # 第一聯：無此 4 個標題 cell（文本為空）
+    assert row1_texts[0] == ["", "", "", ""]
+    # 第三聯：無此 4 個標題 cell（2 cells，文本為空）
+    assert len(row1_texts[2]) == 2
+    assert all(t == "" for t in row1_texts[2])
+
+
+def test_copies_review_cells_unfilled():
+    """核定/複核/初核/審查委員 欄位系統未填值（留空供健保署複核）。"""
+    _, root_el = _read_content_xml_bytes(_rendered_filled_bytes())
+    tables = _find_tables(root_el)
+    note2 = tables[1 * 3 + 2]
+    rows = note2.findall(
+        "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}table-row"
+    )
+    # row1 標題下的填寫 cell（row2/row3）須為空——系統不產出健保署複核結果
+    for ri in (2, 3):
+        cells = rows[ri].findall(
+            "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}table-cell"
+        )
+        for c in cells:
+            assert _cell_full_text(c) == ""
+
+
+def test_copies_total_row_and_diagnosis_cell():
+    """各聯末頁合計列值＋資料列 cell[4] 傷病名稱（與 build_rows 鍵值一致）。"""
+    from elc_audit_engine.generators.appeal_print.field_mapping import build_rows
+
+    # 先算 build_rows 的傷病名稱鍵值（單醫令 → 1 行）
+    rows, _ = build_rows(_payload(), _facility(), submission=_submission())
+    assert len(rows) == 1
+    diagnosis_key = rows[0]["傷病名稱"]
+
+    _, root_el = _read_content_xml_bytes(_rendered_filled_bytes())
+    tables = _find_tables(root_el)
+    for copy_idx in range(3):
+        main = tables[copy_idx * 3 + 1]
+        mrows = main.findall(
+            "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}table-row"
+        )
+        # 資料列 row2 cell[4]＝傷病名稱欄（14 鍵注入不逐欄錯位，SC1 防護）
+        row2 = mrows[2].findall(
+            "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}table-cell"
+        )
+        assert _cell_full_text(row2[4]) == diagnosis_key
+        # 合計列 row17：cell[0]＝「合計」、數量欄 cell[2]＝該聯資料行數（人次）、
+        # 金額/理由/審核意見/補付金額值 cell 為空（健保署填列欄留空）
+        total = mrows[17].findall(
+            "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}table-cell"
+        )
+        assert _cell_full_text(total[0]) == "合計"
+        assert _cell_full_text(total[2]) == str(len(rows))  # 人次加總
+        assert _cell_full_text(total[3]) == ""  # 金額
+        assert _cell_full_text(total[4]) == ""  # 理由
+        assert _cell_full_text(total[5]) == ""  # 審核意見
+        assert _cell_full_text(total[7]) == ""  # 補付金額值

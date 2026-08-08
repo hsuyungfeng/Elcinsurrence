@@ -33,6 +33,7 @@ from .appeal_xml import (
     draft_json_to_appeal_xml_fields,
     write_appeal_xml,
 )
+from .appeal_print import render_appeal_print, write_appeal_print
 from .reinforcement_report import render_report, render_timeline_summary, write_report
 from .tracking import (
     STATUS_ADOPT,
@@ -61,12 +62,14 @@ __all__ = [
     "draft_json_to_appeal_xml_fields",
     "render_appeal_json",
     "render_appeal_markdown",
+    "render_appeal_print",
     "render_report",
     "render_timeline_summary",
     "render_tracking",
     "resolve_p6_points",
     "validate_appeal_claim",
     "write_appeal",
+    "write_appeal_print",
     "write_appeal_xml",
     "write_report",
 ]
