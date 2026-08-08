@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in_progress
-stopped_at: GSD Phase 9 (HIS 服務化) COMPLETE (4/4 plans done)。Phase 10 外部依賴門控中。Phase 11（紙本申復清單列印）已新增至 ROADMAP，待規劃。
-last_updated: "2026-08-08T00:00:00.000Z"
+status: unknown
+stopped_at: Phase 11 context gathered
+last_updated: "2026-08-08T00:58:48.138Z"
 progress:
   total_phases: 11
   completed_phases: 9
-  total_plans: 19
-  completed_plans: 19
-  percent: 82
+  total_plans: 17
+  completed_plans: 17
+  percent: 100
 ---
 
 # STATE.md — elc-audit-engine
@@ -69,9 +69,9 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-08-08（本次 `/gsd-resume-work` 恢復）
-Stopped at: **Phase 9（HIS 服務化）4/4 plans 全數完成並 commit；其後又有 5 個 post-Phase-9 commit（API Key 認證政策改為選擇性、UI 調整、OCR 修正），STATE.md 敘述性欄位當時未同步**
-Resume file: 無
+Last session: 2026-08-08
+Stopped at: Phase 11 context gathered
+Resume file: `.planning/phases/11-paper-appeal-print/11-CONTEXT.md`
 
 **⚠️ 2026-08-08 修正**：本節前一版（2026-08-07 寫）聲稱「09-03/09-04 尚未執行、
 準備開始 Plan 03」——與 git 實況脫節。實際上 09-03、09-04 皆已完成並 commit
@@ -96,6 +96,7 @@ STATE.md 的敘述性欄位會與 git 脫節，恢復時一律以 `git log` 與�
   改走直接 HIS 對接（`_AUTH_EXEMPT_ENDPOINTS` 擴大納入六個業務端點）。
   09-01 的認證機制（constant-time 比對、審計日誌）程式碼仍在，只是不再強制——
   屬刻意政策轉向，非退化。
+
 - `e7ace46` style(ui): 移除已無用的 API Key 輸入欄位（呼應上一 commit）
 - `5915022`／`f19eb2e` fix(ingest): OCR 醫令代碼正則擴大支援 5-6 碼英數混合＋
   大小寫不敏感子字串搜尋修正（`ocr_rows.py`）
