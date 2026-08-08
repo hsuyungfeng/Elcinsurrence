@@ -6,6 +6,7 @@ import pytest
 
 import server
 from elc_audit_engine.case_store import CaseStore
+from elc_audit_engine.parsers.models import DeductionRecord
 from elc_audit_engine.safe_paths import UnsafeIdentifierError
 
 
@@ -164,10 +165,6 @@ def test_generate_appeal_draft_with_optional_case_id(client, setup_tmp_casestore
         order_code="14050B",
         payload={"id": "APP-2001"},
     )
-    # Fast forward case to reviewed state so transition to appealed is legal
-    setup_tmp_casestore.transition("APP-2001", "parsed")
-    setup_tmp_casestore.transition("APP-2001", "reviewing")
-    setup_tmp_casestore.transition("APP-2001", "reviewed")
 
     headers = {"X-API-Key": "valid-key-123"}
     body = {
@@ -181,6 +178,52 @@ def test_generate_appeal_draft_with_optional_case_id(client, setup_tmp_casestore
     data = resp.get_json()
     assert data["status"] == "success"
     assert data["case_id"] == "APP-2001"
+    assert isinstance(data["rule_found"], bool)
 
+    # W4 契約橋（D-03）：回應主體為 render_appeal_json 標準契約鍵，無舊鍵。
+    assert isinstance(data["sections"], list)
+    assert len(data["sections"]) >= 1
+    for sec in data["sections"]:
+        assert {"key", "title", "text", "trimmed"}.issubset(sec)
+    assert data["word_stats"]["total_chars"] >= 0
+    assert isinstance(data["p8_reason1"], str)
+    assert isinstance(data["p9_reason2"], str)
+    # p6_points 為 render_appeal_json 標準契約內建鍵（appeal.py:499 申復 XML 醫令段）。
+    assert isinstance(data["p6_points"], int) and data["p6_points"] >= 0
+    # case_seq/order_code 同為標準契約內建鍵（appeal.py:485/487），值透傳請求輸入。
+    assert data["case_seq"] == "201"
+    assert data["order_code"] == "14050B"
+    # case_class 非 generate handler 可填（record.case_class 缺省 None）——屬
+    # plan 09.1-03 轉換層補欄範圍，此處誠實為 None。
+    assert data["case_class"] is None
+    for old_key in (
+        "appeal_sections",
+        "reason1",
+        "reason2",
+        "total_char_count",
+        "xml_p8_p9_valid",
+        "over_limit",
+        "record_no",
+    ):
+        assert old_key not in data, f"舊鍵 {old_key} 不應再出現於回應"
+
+    # W1 合法邊（D-01）：imported 案件不經 fast-forward 直接 generate 即達 appealed。
     rec = setup_tmp_casestore.get("APP-2001")
     assert rec.state == "appealed"
+
+
+def test_to_appeal_case_passthroughs_id_number():
+    """W5 數據流（D-05 前置）：_to_appeal_case 透傳 rec.id_number（健保署已遮罩
+    後 4 碼，models.py:166/189）——僅透傳不重組；缺省時 None，不捏造。
+    """
+    out = server._to_appeal_case(
+        1,
+        DeductionRecord(id_number="A123****", case_seq="201", order_code="14050B"),
+    )
+    assert out["id_number"] == "A123****"
+
+    out_missing = server._to_appeal_case(
+        1,
+        DeductionRecord(case_seq="201", order_code="14050B"),
+    )
+    assert out_missing["id_number"] is None

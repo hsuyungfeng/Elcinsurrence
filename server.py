@@ -35,7 +35,7 @@ from elc_audit_engine.case_store import (
     DuplicateCaseError,
     IllegalTransitionError,
 )
-from elc_audit_engine.generators import build_appeal_draft
+from elc_audit_engine.generators import build_appeal_draft, render_appeal_json
 from elc_audit_engine.ingest import (
     MediaExtractError,
     SamplingImportError,
@@ -393,6 +393,11 @@ def _to_appeal_case(idx: int, rec) -> dict:
         "demo": False,
         "case_seq": rec.case_seq or str(idx),
         "record_no": None,
+        # W5 數據流（D-05 前置）：透傳 rec.id_number（健保署已遮罩後 4 碼，
+        # models.py:166/189，與 field_mapping.py:19-22 語意一致）——僅透傳不
+        # 重組完整字號；缺省 None 時照印 None、不捏造。patient_name/case_class/
+        # orders 屬 09.1-03 轉換層缺欄誠實留空＋warning 範圍，不在此補。
+        "id_number": rec.id_number,
         "patient_name": None,
         "order_code": rec.order_code,
         "order_name": name or rec.order_code,
@@ -716,7 +721,6 @@ def generate_appeal_draft():
     case_seq = _clean_str(data, 'case_seq', required=True)
     order_code = _clean_str(data, 'order_code', required=True)
     deduction_reason = _clean_str(data, 'deduction_reason', max_len=_MAX_SOAP_CHARS)
-    record_no = _clean_str(data, 'record_no')
     case_id = _clean_str(data, 'case_id')
 
     is_appealing = data.get('is_appealing', True)
@@ -779,27 +783,18 @@ def generate_appeal_draft():
         except (CaseNotFoundError, IllegalTransitionError) as exc:
             app.logger.warning("appeal case_id=%s 狀態轉換至 appealed 失敗（不阻斷回應）：%s", case_id, exc)
 
-    return jsonify({
-        "status": "success",
-        "case_id": case_id or None,
-        "case_seq": draft.case_seq,
-        "order_code": draft.order_code,
-        "record_no": record_no,
-        "appeal_sections": [
-            {"key": s.key, "title": s.title, "text": s.text} for s in draft.sections
-        ],
-        "reason1": draft.reason1,
-        "reason2": draft.reason2,
-        "p6_points": draft.p6_points,
-        "total_char_count": draft.total_chars,
-        "rule_found": rule.found,
-        # 官方問答集 Q15：p8/p9 各 ≤1000（不是合計 2000）。
-        "xml_p8_p9_valid": (
-            len(draft.reason1) <= 1000 and len(draft.reason2) <= 1000
-        ),
-        "over_limit": draft.over_limit,
-        "validation_errors": list(draft.validation_errors),
-    })
+    # W4 契約橋（D-03）：回應主體為 render_appeal_json 標準契約
+    # （sections/word_stats/p1-p9），前端可直接落盤 appeal_{流水號}.json
+    # 餵 build_appeal_xml/build_appeal_print。舊鍵（appeal_sections/reason1/
+    # reason2/p6_points/total_char_count/xml_p8_p9_valid/record_no/頂層
+    # over_limit/case_seq/order_code）已整段移除——單一契約、不做雙契約兼容。
+    payload = json.loads(render_appeal_json(draft))
+    # 僅併入三個補充鍵：status/case_id/rule_found（rule_found 來自規則庫
+    # get_rule 的 :754 rule.found，不在 AppealDraft 內）。
+    payload["status"] = "success"
+    payload["case_id"] = case_id or None
+    payload["rule_found"] = rule.found
+    return jsonify(payload)
 
 
 @app.route('/api/appeal/import', methods=['POST'])
