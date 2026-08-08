@@ -28,6 +28,7 @@ ocr = [
 
 [dependency-groups]
 dev = [
+    "pypdf>=6.15.0",
     "pytest>=8.0",
 ]
 
