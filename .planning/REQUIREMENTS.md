@@ -103,7 +103,7 @@ No dedicated PRD was present in this ingest set (ADR + SPEC + DOC only). Require
 - **Acceptance criteria:**
   - PDF 版面與官方三聯式「門診醫療費用點數申復清單」範本逐欄核對一致（見 Phase 11 Success Criteria 完整欄位清單）
   - 直接消費既有 `AppealDraft` 資料，不重建資料模型
-  - 三聯版式差異（第三聯「中央健康保險署填列」核定/複核/初核/審查委員欄）正確反映
+  - 三聯版式差異（**第二聯**（健保署存查聯）「中央健康保險署填列」核定/複核/初核/審查委員欄，留空供健保署複核）正確反映（2026-08-08 使用者裁示以官方模板第二聯為準）
 - **Scope:** Phase 11
 - **Supporting context (informational only):** `.odt` 可編輯範本可作為排版依據來源（ODF XML 可解析，延續 Phase 2 docx-tree 索引器的 LibreOffice/soffice 工具鏈慣例，避免引入新的重量級 PDF 套件）
 
