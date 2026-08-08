@@ -84,35 +84,37 @@
 
 > **案例清單端點**（`GET /api/sampling/cases`、`GET /api/appeal/cases`）：未匯入資料時回傳**示範資料**（每個案例帶 `"demo": true`），供 UI 展示工作流；**匯入後優先回傳導入資料**（`source: "csv" / "paddle" / "ocr"`）。醫令名稱一律以規則庫為準（例：`64140C`＝甲床與手指重建術，曾誤標為「手腕韌帶縫合術」，2026-08-04 修正）。
 
-#### 🔐 認證（Phase 9-01：所有病歷資料端點皆需 API key）
+#### 🔐 認證（2026-08-07 起：業務端點依使用者裁示改為選填，供直接 HIS 對接）
 
-| 端點 | 是否需要 `X-API-Key` |
+| 端點 | 是否強制 `X-API-Key` |
 |---|---|
 | `GET /` | 否（靜態頁） |
 | `GET /api/health` | 否（健康檢查，供 HIS／監控探測，不含案件資料） |
-| `GET /api/sampling/cases` | **是** |
-| `POST /api/sampling/audit` | **是** |
-| `POST /api/sampling/import` | **是** |
-| `GET /api/appeal/cases` | **是** |
-| `POST /api/appeal/generate` | **是** |
-| `POST /api/appeal/import` | **是** |
+| `GET /api/sampling/cases` | 否（選填——帶合法 key 時審計日誌會記錄真實 `caller_id`，否則記 `anonymous`） |
+| `POST /api/sampling/audit` | 否（同上） |
+| `POST /api/sampling/import` | 否（同上） |
+| `GET /api/appeal/cases` | 否（同上） |
+| `POST /api/appeal/generate` | 否（同上） |
+| `POST /api/appeal/import` | 否（同上） |
 
+- **背景**：Phase 9-01 原將六個業務端點設為強制認證；`fcde2c8`（2026-08-07）依使用者裁示改為選填，供未經 API Key 分發流程的 HIS 直接對接。認證**機制**（`resolve_caller`／`hmac.compare_digest`）仍在，只是不再強制擋。
 - **機制**：服務間 API key（非 JWT／mTLS——呼叫方是 HIS 服務而非瀏覽器使用者，2026-08-05 使用者裁示）。
-- **Header**：`X-API-Key: <key>`。
-- **設定**：環境變數 `ELC_API_KEYS`，格式 `caller_id1:key1,caller_id2:key2`（多呼叫方，供審計日誌辨識「誰調閱了病歷」）；每組 key 須 >= 16 字元。**`ELC_API_KEYS` 未設定或格式錯誤時服務啟動即失敗**（fail-fast，不得以無認證狀態運行）。
+- **Header**：`X-API-Key: <key>`（選填，帶了會被解析用於審計）。
+- **設定**：環境變數 `ELC_API_KEYS`，格式 `caller_id1:key1,caller_id2:key2`（多呼叫方，供審計日誌辨識「誰調閱了病歷」）；每組 key 須 >= 16 字元。**`ELC_API_KEYS` 未設定或格式錯誤時服務啟動即失敗**（fail-fast，即使業務端點不強制認證，key 表本身仍必須合法配置——用於審計辨識與 `/api/health` 之外所有端點的 caller 解析）。
 - **比對**：`hmac.compare_digest`（constant-time），不使用 `==`（時序側通道）。
-- **401 回應形狀**：`{"status": "error", "message": "認證失敗：缺少或無效的 API key"}`——與「查無資料」（200 + 空陣列）或 404 明確可區分，不得混淆。
+- **401 回應形狀**（`GET /api/sampling/cases` 之外的、未來若新增仍強制認證的端點適用）：`{"status": "error", "message": "認證失敗：缺少或無效的 API key"}`——與「查無資料」（200 + 空陣列）或 404 明確可區分，不得混淆。
 - **真實 key 不得進版控**（`.env` 已在 `.gitignore`；`.env.example` 僅提供格式範例）。
 - 新增端點時**預設受保護**（`before_request` 統一強制）；豁免需顯式列入 `server.py` 的 `_AUTH_EXEMPT_ENDPOINTS`。
 
-#### 📝 存取審計日誌（Phase 9-01：零 PHI）
+#### 📝 存取審計日誌（Phase 9-01：零 PHI；2026-08-08 修復豁免清單誤用）
 
-每次呼叫受保護端點（不含 `/` 與 `/api/health`）都會在審計日誌留下一列 JSON（JSON Lines 格式）：
+每次呼叫非 `_AUDIT_EXEMPT_ENDPOINTS`（`/`／`/api/health`／靜態檔）的端點，都會在審計日誌留下一列 JSON（JSON Lines 格式）：
 
 - **路徑**：`AUDIT_LOG_PATH`（環境變數可覆寫；預設 `data/audit/access.log`，已 `.gitignore`）。
-- **欄位（六個，固定）**：`ts`（UTC ISO 時間戳）、`caller_id`（呼叫方識別，或 `anonymous` 表示認證失敗前的請求）、`method`、`path`、`status`。
+- **欄位（六個，固定）**：`ts`（UTC ISO 時間戳）、`caller_id`（呼叫方識別，或 `anonymous` 表示未帶／帶錯 key）、`method`、`path`、`status`。
 - **明文聲明：不記錄 PHI。** 禁止欄位（`soap`／`soap_text`／`record_no`／`patient_name`／`id_number`／`birth_date`）與超長字串（>100 字）一律拒絕寫入（`AuditFieldError`），不會被靜默剔除——審計的目的是「誰在何時存取了什麼端點」，而非複製病歷內容。
 - 審計寫檔失敗不會讓業務回應變成 500，但會記錄於 application log（不靜默無痕）。
+- **⚠️ 2026-08-08 回歸修復**：`fcde2c8` 把六個業務端點加進認證豁免清單後，`_record_access_audit` 一度沿用同一份清單判斷是否寫審計，導致這六個接觸病歷資料的端點**完全停止寫審計日誌**——違反「認證可選、審計必留」的設計。已拆成 `_AUDIT_EXEMPT_ENDPOINTS`（僅 3 項）與 `_AUTH_EXEMPT_ENDPOINTS`（9 項）兩份獨立清單修復；`test_auth.py` 全數更新驗證。
 
 #### 🔹 [POST] `/api/sampling/audit` — 抽樣事前預審支持度評估
 
@@ -315,7 +317,7 @@ uv run python -m elc_audit_engine.rule_repository.mapping.build_mapping
 uv run pytest -q
 ```
 
-目前基線：**354 passed / 2 skipped**（Phase 9-01 執行後）。測試零 LLM 依賴（判定與生成皆以替身注入），故不需啟動 llama.cpp 即可全數執行；OCR 表格結構化測試以替身覆蓋，不需 GPU。
+目前基線：**374 passed / 2 skipped**（Phase 9 全數完成＋審計日誌回歸修復後，2026-08-08）。測試零 LLM 依賴（判定與生成皆以替身注入），故不需啟動 llama.cpp 即可全數執行；OCR 表格結構化測試以替身覆蓋，不需 GPU。
 
 ---
 
@@ -329,6 +331,12 @@ uv run pytest -q
 | 批次匯入 | `56d9902` | `ingest/` 模組（media/sampling/ocr_rows）＋ `/api/sampling/import`、`/api/appeal/import`；落盤 `data/uploads/*.json` | 已完成，於 Phase 9 追認納管 |
 | 紙本表格結構化 | `8c38a19` | `ingest/table_ocr.py` PP-StructureV3（可選依賴＋自動降級回 tesseract） | 已完成，於 Phase 9 追認納管 |
 | 安全清尾 | `f6ac775` | P1-5 前端 XSS＋CSP／P1-2 prompt 定界／P1-3 路徑穿越 | 已完成，於 Phase 9 追認納管 |
+
+---
+
+## 🖨️ 紙本申復清單列印（規劃中，Phase 11）
+
+除上述 HIS 電子對接外，系統也支援**未串接 HIS 或選擇紙本作業**的院所：PDF／JPEG／BMP 掃描件的辨識輸入（`/api/sampling/import`、`/api/appeal/import`）與內部資料處理（`CaseStore`／`AppealDraft`）已與電子流程共用同一套引擎，但目前輸出端僅有 Markdown／JSON／申復 XML，尚無可列印 PDF。Phase 11 將依官方三聯式「門診醫療費用點數申復清單」版式（105.04.01 修訂版，`officialdocument/電子申復文件格式/30396_*`）新增列印輸出通道，依賴 Phase 7（`AppealDraft` 資料契約）、不依賴 Phase 10（VPN/實機門控）。詳見 `.planning/ROADMAP.md` Phase 11、`.planning/phases/11-paper-appeal-print/11-CONTEXT.md`。
 
 ---
 

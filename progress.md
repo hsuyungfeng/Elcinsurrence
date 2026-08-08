@@ -65,23 +65,35 @@
 - [x] M7 輸出（二）：申復理由草稿（p8/p9 ≤2000字）＋ 申復 XML 欄位（Phase 7 完成，2026-08-03）
 - [x] M8 端到端測試：規格造測試資料 → 待真實樣本進來替換驗證（Phase 8 完成，2026-08-03）
 
-### Phase 2 — HIS 整合（後續）
-- [ ] 雲端病歷 Provider 接 doctor-toolbox（cloud_sync / his_connection 模式）
-- [~] Flask API 化，供 HIS 呼叫 — **雛形已接真實引擎**（2026-08-04，P0-1）：
+### Phase 2 — HIS 整合（GSD Phase 9，已完成本機可驗證範圍）
+- [ ] 雲端病歷 Provider 接 doctor-toolbox（cloud_sync / his_connection 模式）— 移至 GSD Phase 10，外部依賴門控中
+- [x] Flask API 化，供 HIS 呼叫 — **GSD Phase 9 全數完成（2026-08-07）**：
       `/api/sampling/audit` → `run_presubmission_check`、`/api/appeal/generate` → `build_appeal_draft`；
-      安全預設（綁本機／debug=False／錯誤脫敏／入參校驗）。
-      **批次匯入已上線**（2026-08-04）：`/api/sampling/import`、`/api/appeal/import`
-      （CSV＋PDF＋JPEG 影像 OCR，見 ingest 模組；掃描文件走 PP-StructureV3 表格
-      結構化，見 8c38a19）。**安全清尾已完成**（2026-08-05）：P1-5 前端 XSS＋CSP
-      安全標頭＋移除外鏈字型、P1-2 prompt 標籤定界隔離、P1-3 `safe_filename()`
-      路徑穿越防線（見 deepflash4improve §7.6）。**尚缺**：認證授權、案件狀態機、
-      任務佇列
-- [ ] 與 Local Agent / NHI_EIIAPI 上傳流程銜接（見 電子抽審.md 第四節）
-- [ ] Package Builder：PDF/DICOM/申復 XML 序列化（目前僅出 .md/.json）
+      安全預設（綁本機／debug=False／錯誤脫敏／入參校驗）；
+      **認證授權＋審計日誌**（09-01）、**案件狀態機＋SQLite 持久化**（09-02）、
+      **端點接 CaseStore＋uploads 遷移**（09-03）、**Package Builder 申復 XML**（09-04）。
+      **2026-08-07 政策調整**：業務端點依使用者裁示改為認證選填（供未經 key
+      分發流程的 HIS 直接對接），機制仍在，只是不再強制擋（`fcde2c8`）。
+      批次匯入（digital + paper OCR）與安全清尾（P1-2/P1-3/P1-5）已於 09 之前上線，
+      詳見下方 Phase 9 追認記錄。
+- [x] 與 Local Agent / NHI_EIIAPI 上傳流程銜接的**申復上傳格式**部分 — Package Builder
+      （09-04）已產出符合協定的申復 XML；DLL wrapper／VPN 實機串接移至 GSD Phase 10
+- [x] Package Builder：**申復 XML 序列化已完成**（09-04，`appeal_xml.py`，tdata+ddata+pdata，
+      不含 edata）；PDF/DICOM 序列化未在範圍內
 - [ ] Local Gateway 七元件（Heartbeat／Job Downloader／AES 快取／NHI Adapter／
-      Retry Manager／Status Reporter／NHI_EIIAPI.DLL wrapper）— 全數未開工
+      Retry Manager／Status Reporter／NHI_EIIAPI.DLL wrapper）— 全數未開工，移至 GSD Phase 10
 
-> 架構差距矩陣見 [`deepflash4improve.md`](deepflash4improve.md) §7.3：引擎＝架構圖的「大腦」已完備，服務外殼與 Local Gateway 整側空白。
+> 架構差距矩陣見 [`deepflash4improve.md`](deepflash4improve.md) §7.3：引擎＝架構圖的「大腦」已完備。服務外殼（Review/Appeal Service、Package Builder、狀態機）已於 GSD Phase 9 完成；Local Gateway 整側與雲端病歷 Provider 移至 GSD Phase 10，外部依賴（doctor-toolbox 存取權、NHI_EIIAPI.DLL、Windows+VPN+SAM 實機）門控中。
+
+### GSD Phase 11 — 紙本申復清單列印（規劃中，2026-08-08 新增）
+- [ ] 依官方三聯式「門診醫療費用點數申復清單」版式（105.04.01 修訂版）從 `AppealDraft`
+      直接產出可列印 PDF，供未串接 HIS 或選擇紙本作業的院所使用
+- **背景**：檢討電子 vs 紙本兩種抽審申復流程覆蓋現況時發現，紙本 OCR 辨識輸入
+  （`media.py`／`table_ocr.py`）與內部資料處理（`CaseStore`／`AppealDraft`）皆已與
+  電子流程共用引擎，但輸出端只有 Markdown／JSON／申復 XML，缺少可列印 PDF
+- **依賴**：Phase 7（`AppealDraft` 資料契約已具備）——**不依賴 Phase 10**，紙本列印
+  是獨立輸出通道，不需等 VPN/實機串接解除門控
+- 詳見 `.planning/ROADMAP.md` Phase 11、`.planning/phases/11-paper-appeal-print/11-CONTEXT.md`
 
 ## 五、待釐清 / 待補資料
 
@@ -138,3 +150,10 @@
 | 2026-08-05 | **P1-3 路徑穿越：採「校驗後拒絕」而非「清洗取代」；實作期抓到自身真 bug** | 新增 `safe_paths.py::safe_filename()`＋`UnsafeIdentifierError`，套用於 `providers.py::_records_path`（讀取型，XML `d3`）、`write_report`、`write_appeal`（寫入型）。白名單＝ASCII 英數＋`_`＋`-`＋**CJK**（使用者裁示：健保檔案識別碼可能含中文，純 ASCII 會誤判真實資料為非法）；刻意不用 `\w`（Python 下為 Unicode-aware，範圍過寬）。**初版 bug**：先取 `os.path.basename()` 再校驗，而 `basename('../etc/passwd')` 回傳 `'passwd'` 可通過白名單＝把攻擊悄悄清洗成合法檔名，正是本次明確拒絕的靜默改寫；由新測試當場抓出，改為直接校驗原始值。選拒絕不選清洗的理由：清洗使 `A/1` 與 `A_1` 收斂為同一檔名 → 兩案 PHI 報告互相覆寫且無人察覺。**與 P1-1／P0-2 同源原則：系統故障必須與業務結論可區分。** HTTP 面 fail closed（`UnsafeIdentifierError` 繼承 `ValueError`，既有統一 errorhandler 回脫敏 500） |
 | 2026-08-05 | **P1-2 prompt 注入定界隔離（緩解，非證明安全）** | 新增 `prompt_safety.py::fence()`＋`DATA_ISOLATION_NOTICE`，套用於 `judger.py::judge`（`<rule>`／`<record>`）、`narratives.py::generate`、`mapping/prompts.py`（`<code>`／`<candidates>` 等）。**關鍵細節**：包夾前先中和 payload 內的閉合標籤（含 `</ RULE >` 大小寫／空白變體），否則資料可自行關標籤逃逸到指令層（與輸出 HTML 前需先轉義同理）；合法角括號如 `血壓 <140/90` 不受影響。注意 `rule_text` 為**二階不可信**（`build_mapping.py` 的 LLM 生成後寫回 SQLite，再回流為 LLM 輸入）。**誠實界定範圍**：降低成功率≠安全，LLM 仍可能服從資料內指示；真正邊界仍在下游 `VERDICTS` 白名單校驗，不得以「已加定界」為由放寬輸出校驗 |
 | 2026-08-05 | 全套件 **277 passed / 1 skipped**（原 235），新增 42 測試、無回歸 | P1-2／P1-3／P1-5 三項完成（deepflash4improve §7.6）。剩餘：P1-4 CSV 內容 hash＋ChromaDB 版本綁定、全部 P2、P0-3（使用者暫緩） |
+| 2026-08-05 | **P1-4 完成：rule_mapping CSV 內容 hash＋ChromaDB 版本綁定**（`5f1f38e`） | `mapping/versions.py::extract_csv_version` 改為檔名日期標籤＋SHA-256 內容 hash 前 12 碼（原僅取檔名 6 位數字，換版不改檔名時增量建置會誤判未變）；`chroma_store.py::build_chroma_collection` 新增 `source_version` metadata 綁定與版本比對，版本不符時清空重建。**該次 session 以 wip/pause-work-handoff 收尾，deepflash4improve.md §7.6 追蹤表當時未回填「已修」**——2026-08-08 覆核 git 後補記，教訓見 §7.7 |
+| 2026-08-07 | **GSD Phase 9（HIS 服務化）四個 Plan 全數完成** | 09-01 認證授權＋審計日誌（`25bf03a`／`e537c02`／`a2022f8`）；09-02 案件狀態機＋SQLite 持久化（`c8602e5`／`f8d5dd6`／`1c298d4`，七狀態顯式轉換表、`CaseStore`）；09-03 端點接 CaseStore＋uploads 遷移（`860a13f`，匯入即建案、GET 端點改讀 CaseStore、啟動期一次性冪等遷移）；09-04 Package Builder 申復 XML 序列化（`c2eb24f`，tdata+ddata+pdata，Big5 編碼＋全形特殊字元轉換）。全測試套件 363 passed / 2 skipped |
+| 2026-08-07 | **業務端點認證政策調整：依使用者裁示改為選填**（`fcde2c8`） | 六個業務端點（`get_sampling_cases`／`audit_sampling_case`／`import_sampling_cases`／`get_appeal_cases`／`generate_appeal_draft`／`import_appeal_cases`）加入 `_AUTH_EXEMPT_ENDPOINTS`，供未經 API Key 分發流程的 HIS 直接對接；認證機制（`resolve_caller`／constant-time 比對）程式碼仍在，只是不再強制擋。前端同步移除已無用的 API Key 輸入欄位（`e7ace46`），README 補 HIS 串接步驟（`61c8495`） |
+| 2026-08-07 | **ingest OCR 修正**：醫令代碼正則擴大支援 5-6 碼英數混合＋大小寫不敏感子字串搜尋（`5915022`／`f19eb2e`） | 紙本掃描件辨識實測發現既有正則過窄，部分真實醫令代碼格式未涵蓋 |
+| 2026-08-08 | **⚠️ 發現並修復 P1-6：`fcde2c8` 誤把認證豁免清單兼做審計豁免清單，導致業務端點審計日誌完全消失** | `server.py::_record_access_audit` 沿用 `_AUTH_EXEMPT_ENDPOINTS` 判斷是否寫審計，六個業務端點免強制認證後連審計日誌也一併停寫，違反 09-01「認證可選、審計必留」設計。`test_audit_log_records_correct_caller_id`（帶正確 key）失敗即是鐵證。修法：拆成 `_AUDIT_EXEMPT_ENDPOINTS`（僅 index/health/static）與 `_AUTH_EXEMPT_ENDPOINTS`（聯集）兩份獨立清單；`_enforce_api_key` 對豁免端點若仍帶合法 key 也解析 `caller_id`（否則審計全落成 anonymous）。`tests/test_auth.py` 7 個測試斷言同步改寫。全套件 **374 passed / 2 skipped**。**教訓：兩個語義不同的白名單（要不要強制／要不要記錄）不應共用同一個 frozenset，即使目前外延相同**——與 P1-1／P0-2「系統故障必須與業務結論可區分」同源，這裡是「認證狀態必須與審計是否記錄可區分」 |
+| 2026-08-08 | **STATE.md 敘述性欄位再次與 git 脫節（第二次同型教訓）** | `/gsd-resume-work` 恢復時發現 STATE.md 仍記載「準備執行 09-03」，但 git 顯示 09-03/09-04 早已完成，其後還有 5 個 post-Phase-9 commit。已補記同步。同一教訓（`.continue-here.md` 曾於 2026-08-07 記錄過一次）在 2026-08-08 再度發生，確認 STATE.md 敘述性欄位需要在每次 `/gsd-resume-work` 時以 `git log` 覆核，而非信任既有文字 |
+| 2026-08-08 | **新增 GSD Phase 11：紙本申復清單列印**（`cdd1ff3`） | 檢討電子 vs 紙本兩種抽審申復流程覆蓋現況時發現，紙本 OCR 辨識輸入與內部資料處理已與電子流程共用引擎，但輸出端缺少可列印 PDF。新增 REQ-paper-appeal-print、ROADMAP Phase 11（依賴 Phase 7，不依賴 Phase 10）。`/gsd-discuss-phase 11` 已完成，鎖定四項決策：LibreOffice/soffice 套版（延續 Phase 2 docx-tree 工具鏈慣例）、一次列印三聯三頁、院所基本資料新增 config 設定、超行自動分頁重複表頭。詳見 `.planning/phases/11-paper-appeal-print/11-CONTEXT.md` |
