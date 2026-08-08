@@ -37,12 +37,22 @@ def _load_expected_sha256(template_odt_path: str) -> str | None:
 
     基準模板（`*_print_base.odt`）入庫時附帶 `*_print_base.sha256`；
     官方未壓縮模板無 sidecar → 回傳 None（不校驗 hash）。
+
+    Raises:
+        ValueError: 基準模板（`*_print_base.odt`）缺少 sidecar——基準模板
+            屬 git 版控資產，缺 hash 即無法偵測竄改，拒絕靜默跳過校驗
+            （T-11-06 防線完整性）。
     """
     sidecar = os.path.splitext(template_odt_path)[0] + ".sha256"
     if os.path.isfile(sidecar):
         with open(sidecar, encoding="utf-8") as f:
             value = f.read().strip()
         return value or None
+    if template_odt_path.endswith("_print_base.odt"):
+        raise ValueError(
+            "基準模板缺少 *.sha256 sidecar，無法校驗完整性（T-11-06）；"
+            "請確認 *_print_base.odt 與其 *.sha256 均已入庫"
+        )
     return None
 
 

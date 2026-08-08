@@ -144,6 +144,10 @@ def build_rows(
     id_number = _str_or_empty(sub.get("id_number") if sub else None)
     if id_number == "":
         warnings.append("身份證字號")
+    elif "*" not in id_number and len(id_number) >= 8:
+        # 防呆：遮罩值應含 '*'（如 F10291**** 遮罩後 4 碼）；疑似完整
+        # 身分證字號（無遮罩）不照印——加 warning 提示呼叫端，非阻斷。
+        warnings.append("身份證字號（疑似未遮罩，請確認來源）")
 
     patient_name = _str_or_empty(sub.get("patient_name") if sub else None)
     if patient_name == "":

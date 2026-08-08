@@ -167,6 +167,23 @@ def test_mapping_build_rows_submission_absent_degrades():
         assert field in warnings
 
 
+def test_mapping_id_number_unmasked_warns():
+    """should-fix：submission.id_number 疑似完整身分證字號（無 '*'）→ 加 warning 不照印。"""
+    from elc_audit_engine.generators.appeal_print.field_mapping import build_rows
+
+    # 遮罩值（含 '*'）→ 無額外 warning
+    _, warnings_masked = build_rows(
+        _payload(), _facility(), submission=_submission(id_number="F10291****")
+    )
+    assert "身份證字號" not in warnings_masked
+
+    # 疑似未遮罩（無 '*' 且長度 ≥8）→ warning（非阻斷）
+    _, warnings_unmasked = build_rows(
+        _payload(), _facility(), submission=_submission(id_number="F102912345")
+    )
+    assert any("疑似未遮罩" in w for w in warnings_unmasked)
+
+
 def test_mapping_paginate_splits_16_rows():
     """Test 3：16 行醫令 → [15 行, 1 行] 兩頁。"""
     from elc_audit_engine.generators.appeal_print.field_mapping import paginate
@@ -584,6 +601,26 @@ def test_base_official_print_base_asset_committed(tmp_path):
     verify_template_hash(base_asset, expected)
 
 
+def test_base_verify_template_hash_rejects_tampered(tmp_path):
+    """should-fix：模板被竄改（hash 不符）→ verify_template_hash 拋 ValueError（T-11-06 負向）。"""
+    import shutil
+
+    from elc_audit_engine.generators.appeal_print.odt_fill import (
+        verify_template_hash,
+    )
+
+    tampered = tmp_path / "tampered_print_base.odt"
+    shutil.copyfile(PRINT_BASE_ODT, tampered)
+    with open(tampered, "ab") as f:
+        f.write(b"TAMPER")
+
+    from elc_audit_engine.generators.appeal_print import _load_expected_sha256
+
+    expected = _load_expected_sha256(PRINT_BASE_ODT)
+    with pytest.raises(ValueError):
+        verify_template_hash(str(tampered), expected)
+
+
 # ── Task 2 (11-02): -k e2e／-k security（write/render 端到端）────────
 
 # 壓縮基準模板資產（11-02 Task 1 產出，git-tracked）。
@@ -743,6 +780,27 @@ def test_security_write_appeal_print_rejects_traversal(tmp_path):
             )
     # 非法輸入在 makedirs 之前即被拒絕：output_dir 未被建立
     assert not os.path.exists(output_dir)
+
+
+def test_security_print_base_requires_sidecar(tmp_path):
+    """should-fix：*_print_base 模板缺 sidecar → write_appeal_print 拒絕（T-11-06 不可繞過）。"""
+    import shutil
+
+    from elc_audit_engine.generators.appeal_print import write_appeal_print
+
+    # 複製基準模板到無 sidecar 的位置（檔名仍 *_print_base.odt）
+    orphan = tmp_path / "orphan_print_base.odt"
+    shutil.copyfile(PRINT_BASE_ODT, orphan)
+
+    with pytest.raises(ValueError, match="sidecar"):
+        write_appeal_print(
+            tmp_path / "out",
+            "stem",
+            _payload(),
+            _facility(),
+            template_odt_path=str(orphan),
+            submission=_submission(),
+        )
 
 
 def test_security_injection_does_not_break_odt(tmp_path):
