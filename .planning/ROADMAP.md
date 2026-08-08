@@ -176,6 +176,19 @@ Plans:
 Plans:
 - [ ] 10-01: BLOCKED — 待外部依賴
 
+### Phase 11: 紙本申復清單列印
+**Goal**: 依官方三聯式「門診醫療費用點數申復清單」版式（105.04.01 修訂版，`officialdocument/電子申復文件格式/30396_*`）產出可列印 PDF，供尚未串接 HIS 或選擇紙本作業的院所使用——`AppealDraft`（Phase 7 產出）新增一條 PDF 排版輸出通道，與既有 Markdown／JSON／申復 XML（電子上傳，Phase 9）並行，不互相取代
+**Depends on**: Phase 7（`AppealDraft`／`build_appeal_draft` 資料契約已具備，PDF 排版只是新增一種 render 輸出，不需等 Phase 9/10）
+**Requirements**: REQ-paper-appeal-print（新增，紙本申復列印為既有電子申復流程之外的替代輸出通道）
+**Success Criteria** (what must be TRUE):
+  1. PDF 版面與官方三聯式範本（`30396_4_無刪除線1050105-PDF門診診療費用申復清單-.pdf`）逐欄核對一致——代號字碼／醫療院所名稱／審查科別／原申報類別與日期／年度月份頁數／案件分類／流水號／身份證字號／姓名／傷病名稱／醫令序／內容數量金額理由／審核意見／補付數量單價金額／合計人次補付金額，缺一不可
+  2. 由既有 `AppealDraft` 資料直接生成 PDF，不需另建資料模型或重新比對——排版層與 Phase 7 資料層職責分離
+  3. 三聯（醫療院所存查／衛生福利部中央健康保險署存查／代付款清單）版式差異（第三聯多出「中央健康保險署填列」核定/複核/初核/審查委員欄）正確反映
+**Plans**: 0 plans — 待規劃
+
+Plans:
+- [ ] TBD (run `/gsd-plan-phase 11` to break down)
+
 ## Progress
 
 **Execution Order:**
@@ -193,6 +206,12 @@ Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 
 | 7. 輸出二（申復理由草稿） | 0/TBD | Not started | - |
 | 8. 端到端測試 | 0/TBD | Not started | - |
 | 9. doctor-toolbox HIS 整合（佔位） | 0/TBD | Not started | - |
+| 10. VPN／實機串接 | 0/1 | Blocked（外部依賴） | - |
+| 11. 紙本申復清單列印 | 0/TBD | Not started | - |
+
+> ⚠️ **本表格為快照，與 STATE.md 記載的實況已脫節**（Phase 7/8/9 於本表仍顯示 Not started，
+> 但 STATE.md 記載三者皆已於 2026-08-03～2026-08-07 完成）。修 Phase 11 時未一併回填，
+> 因不在本次變更範圍內；下次觸碰本檔時應以 STATE.md／git log 為準覆核整份表格。
 
 ## Out of Roadmap Scope
 

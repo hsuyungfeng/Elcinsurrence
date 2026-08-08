@@ -96,6 +96,17 @@ No dedicated PRD was present in this ingest set (ADR + SPEC + DOC only). Require
 - **Scope:** Phase 2
 - **Supporting context (informational only, not requirements-level detail):** 電子抽審.md §一~§四, §四 sTypeCode API 參數 (constraints.md C10), 檔案格式/命名規範 (constraints.md C9), FHIR/HL7 mapping (constraints.md C12)
 
+## REQ-paper-appeal-print
+
+- **Source:** 2026-08-08 使用者裁示（檢討電子 vs 紙本兩種抽審申復流程覆蓋現況時發現的缺口）；官方範本 `officialdocument/電子申復文件格式/30396_*`（105.04.01 修訂版）
+- **Description:** 紙本抽審與申復流程的辨識輸入（PDF/JPEG/BMP OCR）與內部資料處理（`CaseStore`／`AppealDraft`）已與電子流程共用引擎（Phase 3/7/9），但輸出端只有 Markdown／JSON／申復 XML，缺少可列印的紙本申復清單。本需求新增 PDF 排版輸出通道，供未串接 HIS 或選擇紙本作業的院所使用。
+- **Acceptance criteria:**
+  - PDF 版面與官方三聯式「門診醫療費用點數申復清單」範本逐欄核對一致（見 Phase 11 Success Criteria 完整欄位清單）
+  - 直接消費既有 `AppealDraft` 資料，不重建資料模型
+  - 三聯版式差異（第三聯「中央健康保險署填列」核定/複核/初核/審查委員欄）正確反映
+- **Scope:** Phase 11
+- **Supporting context (informational only):** `.odt` 可編輯範本可作為排版依據來源（ODF XML 可解析，延續 Phase 2 docx-tree 索引器的 LibreOffice/soffice 工具鏈慣例，避免引入新的重量級 PDF 套件）
+
 ---
 
 ## Notes
