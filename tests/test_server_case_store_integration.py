@@ -269,3 +269,210 @@ def test_generate_appeal_draft_passthroughs_order_seq(client, setup_tmp_casestor
     data2 = resp2.get_json()
     assert data2["order_seq"] is None
     assert data2["p1_order_seq"] is None
+
+
+# ── 11.1-02：Phase 4 病歷時間軸接入 Flask API（BLOCKER-1）──────────
+
+
+def _write_records_fixture(root, patient_id: str):
+    """在 tmp_path 寫下 LocalFileProvider 契約病歷檔（最小契約即可）。
+
+    日期取 2026-07-01：落在 build_timeline 預設半年窗（以執行當日
+    2026-08 前後為 end_date）內，Test 1 才能得到 timeline 非 None。
+    """
+    patient_dir = root / patient_id
+    patient_dir.mkdir(parents=True, exist_ok=True)
+    (patient_dir / "records.json").write_text(
+        json.dumps(
+            {"visits": [{"date": "2026-07-01", "clinic": "內科", "soap_text": "S: DM O: 無異常"}]},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return root
+
+
+def test_audit_sampling_case_with_records_timeline(client, setup_tmp_casestore, tmp_path, monkeypatch):
+    """11.1-02 Task1 Test1：RECORDS_DIR 存在＋帶 record_no → LocalFileProvider
+    實查、timeline 傳入 run_presubmission_check（records_degraded=false、ok）。"""
+    from config import settings
+
+    records_dir = _write_records_fixture(tmp_path, "P001")
+    monkeypatch.setattr(settings, "RECORDS_DIR", str(records_dir))
+    headers = {"X-API-Key": "valid-key-123"}
+    body = {
+        "order_code": "14050B",
+        "soap_text": "S: DM O: BP 120/80 A: DM P: HbA1c",
+        "record_no": "P001",
+    }
+    resp = client.post("/api/sampling/audit", json=body, headers=headers)
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["status"] == "success"
+    assert data["records_degraded"] is False
+    assert data["records_source"] == "ok"
+    assert data["records_degraded_reason"] is None
+
+
+def test_audit_sampling_case_patient_records_absent(client, setup_tmp_casestore, tmp_path, monkeypatch):
+    """Task1 Test2：病患缺席（RECORDS_DIR 存在但無該病歷號目錄）→ 已查詢、
+    C5 降級，records_source=absent（與 unconfigured 區分）。"""
+    from config import settings
+
+    records_dir = tmp_path / "records"
+    records_dir.mkdir()
+    monkeypatch.setattr(settings, "RECORDS_DIR", str(records_dir))
+    headers = {"X-API-Key": "valid-key-123"}
+    body = {
+        "order_code": "14050B",
+        "soap_text": "S: DM O: BP 120/80 A: DM P: HbA1c",
+        "record_no": "NO_SUCH_PATIENT",
+    }
+    resp = client.post("/api/sampling/audit", json=body, headers=headers)
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["status"] == "success"
+    assert data["records_degraded"] is True
+    assert data["records_source"] == "absent"
+    assert data["records_degraded_reason"] == "查無此病患病歷檔案"
+
+
+def test_audit_sampling_case_records_dir_unconfigured(client, setup_tmp_casestore, tmp_path, monkeypatch):
+    """Task1 Test3：RECORDS_DIR 不存在 → records_source=unconfigured
+    （病歷來源未設定，未嘗試查詢，不得偽裝成 absent）。"""
+    from config import settings
+
+    monkeypatch.setattr(settings, "RECORDS_DIR", str(tmp_path / "no_such_records"))
+    headers = {"X-API-Key": "valid-key-123"}
+    body = {
+        "order_code": "14050B",
+        "soap_text": "S: DM O: BP 120/80 A: DM P: HbA1c",
+        "record_no": "P001",
+    }
+    resp = client.post("/api/sampling/audit", json=body, headers=headers)
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["status"] == "success"
+    assert data["records_degraded"] is True
+    assert data["records_source"] == "unconfigured"
+    assert data["records_degraded_reason"] == "病歷來源未設定（病歷目錄不存在）"
+
+
+def test_audit_sampling_case_no_record_no(client, setup_tmp_casestore, tmp_path, monkeypatch):
+    """Task1 Test4（回歸）：RECORDS_DIR 存在但不帶 record_no → records_source
+    =no_record_no（有來源但請求未提供病歷號，未嘗試查詢）。"""
+    from config import settings
+
+    records_dir = _write_records_fixture(tmp_path, "P001")
+    monkeypatch.setattr(settings, "RECORDS_DIR", str(records_dir))
+    headers = {"X-API-Key": "valid-key-123"}
+    body = {
+        "order_code": "14050B",
+        "soap_text": "S: DM O: BP 120/80 A: DM P: HbA1c",
+    }
+    resp = client.post("/api/sampling/audit", json=body, headers=headers)
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["status"] == "success"
+    assert data["records_degraded"] is True
+    assert data["records_source"] == "no_record_no"
+    assert data["records_degraded_reason"] == "請求未提供病歷號"
+
+
+def test_audit_sampling_case_corrupt_records_500(client, setup_tmp_casestore, tmp_path, monkeypatch):
+    """Task1 Test5：records.json 損毀（infra 故障）→ RecordProviderError 穿透
+    統一 500（status=error），不得降級成業務結論（P0-2/T-1112-03）。"""
+    from config import settings
+
+    records_dir = tmp_path / "records"
+    patient_dir = records_dir / "P001"
+    patient_dir.mkdir(parents=True)
+    (patient_dir / "records.json").write_text("{bad json", encoding="utf-8")
+    monkeypatch.setattr(settings, "RECORDS_DIR", str(records_dir))
+    headers = {"X-API-Key": "valid-key-123"}
+    body = {
+        "order_code": "14050B",
+        "soap_text": "S: DM O: BP 120/80 A: DM P: HbA1c",
+        "record_no": "P001",
+    }
+    resp = client.post("/api/sampling/audit", json=body, headers=headers)
+    assert resp.status_code == 500
+    data = resp.get_json()
+    assert data["status"] == "error"
+
+
+def test_generate_appeal_draft_timeline_injection(client, setup_tmp_casestore, tmp_path, monkeypatch):
+    """11.1-02 Task2 Test1-4：/api/appeal/generate 帶 record_no（前端 appeal
+    面板病歷號輸入欄 aRecordNoInput 送出）→ timeline 真實傳入 build_appeal_draft
+    （②醫療必要性含半年病史），四態 records_source 正確。
+
+    請求體即前端 generateAppealDraft 自 aRecordNoInput 輸入欄送出的內容
+    （配合 tests/test_ingest.py::test_index_html_appeal_record_no_input 靜態
+    回歸鎖定前端取值，共同證明「前端→API 請求體」真實路徑——非另行手動
+    構造的請求形狀）。
+    """
+    from config import settings
+
+    headers = {"X-API-Key": "valid-key-123"}
+    base_body = {
+        "case_seq": "201",
+        "order_code": "14050B",
+        "deduction_reason": "超過次數",
+    }
+
+    # Test 1：RECORDS_DIR 存在＋record_no → ②醫療必要性為正常半年病史摘要
+    records_dir = _write_records_fixture(tmp_path, "P001")
+    monkeypatch.setattr(settings, "RECORDS_DIR", str(records_dir))
+    resp_ok = client.post(
+        "/api/appeal/generate", json={**base_body, "record_no": "P001"}, headers=headers
+    )
+    assert resp_ok.status_code == 200
+    data_ok = resp_ok.get_json()
+    assert data_ok["status"] == "success"
+    assert data_ok["records_degraded"] is False
+    assert data_ok["records_source"] == "ok"
+    assert data_ok["records_degraded_reason"] is None
+    assert "半年病史" in data_ok["sections"][1]["text"]
+
+    # Test 2：病歷號輸入欄留空（不帶 record_no，RECORDS_DIR 存在）→
+    # no_record_no（有來源但未嘗試查詢），②為「病歷缺席」降級文字
+    resp_no = client.post("/api/appeal/generate", json=dict(base_body), headers=headers)
+    assert resp_no.status_code == 200
+    data_no = resp_no.get_json()
+    assert data_no["records_degraded"] is True
+    assert data_no["records_source"] == "no_record_no"
+    assert data_no["records_degraded_reason"] == "請求未提供病歷號"
+    assert "病歷缺席" in data_no["sections"][1]["text"]
+
+    # Test 3：病患缺席（RECORDS_DIR 存在但無該病歷號目錄）→ absent（已查詢）
+    resp_absent = client.post(
+        "/api/appeal/generate",
+        json={**base_body, "record_no": "NO_SUCH_PATIENT"},
+        headers=headers,
+    )
+    assert resp_absent.status_code == 200
+    data_absent = resp_absent.get_json()
+    assert data_absent["records_degraded"] is True
+    assert data_absent["records_source"] == "absent"
+    assert data_absent["records_degraded_reason"] == "查無此病患病歷檔案"
+
+    # Test 4（回歸）：帶 record_no 但 RECORDS_DIR 不存在 → unconfigured；
+    # render_appeal_json 契約既有鍵（sections/word_stats/p1-p9）不受影響
+    monkeypatch.setattr(settings, "RECORDS_DIR", str(tmp_path / "no_such_records"))
+    resp_unc = client.post(
+        "/api/appeal/generate", json={**base_body, "record_no": "P001"}, headers=headers
+    )
+    assert resp_unc.status_code == 200
+    data_unc = resp_unc.get_json()
+    assert data_unc["records_degraded"] is True
+    assert data_unc["records_source"] == "unconfigured"
+    assert data_unc["records_degraded_reason"] == "病歷來源未設定（病歷目錄不存在）"
+    # render_appeal_json 標準契約鍵不變
+    assert isinstance(data_unc["sections"], list) and len(data_unc["sections"]) >= 1
+    for sec in data_unc["sections"]:
+        assert {"key", "title", "text", "trimmed"}.issubset(sec)
+    assert isinstance(data_unc["word_stats"]["total_chars"], int)
+    assert isinstance(data_unc["p8_reason1"], str)
+    assert isinstance(data_unc["p9_reason2"], str)
+    assert data_unc["status"] == "success"
+    assert isinstance(data_unc["rule_found"], bool)
