@@ -19,6 +19,18 @@ def setup_tmp_casestore(tmp_path, monkeypatch):
     return test_store
 
 
+@pytest.fixture(autouse=True)
+def tmp_upload_dirs(tmp_path, monkeypatch):
+    """把上傳目錄（data/uploads 系）指到 tmp_path，避免測試污染專案 data/。
+
+    沙箱環境中專案 data/ 為唯讀（reasonix bwrap 只對 plan 允許修改的檔案
+    開放寫入），CSV 上傳測試若寫 data/uploads 會以 OSError 500 失敗。此
+    fixture 只改落盤位置、不變更測試斷言語義（既有 import 測試行為不變）。
+    """
+    monkeypatch.setattr(server, "_UPLOAD_DIR", str(tmp_path / "uploads"))
+    monkeypatch.setattr(server, "_RAW_DIR", str(tmp_path / "uploads" / "raw"))
+
+
 @pytest.fixture
 def client(monkeypatch):
     server.app.config["TESTING"] = True
@@ -227,3 +239,33 @@ def test_to_appeal_case_passthroughs_id_number():
         DeductionRecord(case_seq="201", order_code="14050B"),
     )
     assert out_missing["id_number"] is None
+
+
+def test_generate_appeal_draft_passthroughs_order_seq(client, setup_tmp_casestore):
+    """11.1-01 Test 1/2（API 路徑醫令序對應）：generate 請求帶 order_seq →
+    回應（render_appeal_json 契約）的 order_seq/p1_order_seq 透傳為該值；
+    不帶 order_seq → None（不捏造）。"""
+    headers = {"X-API-Key": "valid-key-123"}
+
+    body_with_seq = {
+        "case_seq": "201",
+        "order_code": "14050B",
+        "deduction_reason": "超過次數",
+        "order_seq": "3",
+    }
+    resp = client.post("/api/appeal/generate", json=body_with_seq, headers=headers)
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["order_seq"] == "3"
+    assert data["p1_order_seq"] == "3"
+
+    body_no_seq = {
+        "case_seq": "202",
+        "order_code": "14050B",
+        "deduction_reason": "超過次數",
+    }
+    resp2 = client.post("/api/appeal/generate", json=body_no_seq, headers=headers)
+    assert resp2.status_code == 200
+    data2 = resp2.get_json()
+    assert data2["order_seq"] is None
+    assert data2["p1_order_seq"] is None

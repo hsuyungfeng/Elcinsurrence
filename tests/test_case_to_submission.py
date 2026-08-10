@@ -12,9 +12,11 @@ OFFICIAL_ODT 常量與 `_facility`/`_payload` 自 test_appeal_print.py 複製
 最小量（不 import tests 模組，避免觸發 soffice 探測等模組級副作用）。
 """
 
+import server
 from elc_audit_engine.generators.appeal_print.case_to_submission import (
     build_submission_from_case,
 )
+from elc_audit_engine.parsers.models import DeductionRecord
 
 # 官方模板路徑（git-tracked 版控資產，與 test_appeal_print.py 同源）。
 OFFICIAL_ODT = (
@@ -118,7 +120,10 @@ def test_build_submission_full_case_warnings_empty():
 
     assert submission["case_seq"] == "18"
     assert submission["case_class"] == "D2"
-    assert submission["orders"] == [{"code": "E5002C", "name": "關節腔注射", "seq": "1"}]
+    # 11.1-01：單筆構造分支新增 points 映射（_case_payload 含 deduct_amount=300）
+    assert submission["orders"] == [
+        {"code": "E5002C", "name": "關節腔注射", "seq": "1", "points": 300}
+    ]
     # 遮罩 id_number 照印（不重建）
     assert submission["id_number"] == "F10291****"
     assert submission["patient_name"] == "陳小明"
@@ -172,8 +177,9 @@ def test_build_submission_real_case_payload_keyset():
 
     # id_number 遮罩照印（可 join）
     assert submission["id_number"] == "A123****"
-    # orders 由 order_code/order_name 構造（無 order_seq → 無 seq 鍵）
-    assert submission["orders"] == [{"code": "E5002C", "name": "關節腔注射"}]
+    # orders 由 order_code/order_name 構造（無 order_seq → 無 seq 鍵）；
+    # 11.1-01：_real_case_payload 含 deduct_amount=300 → points 鍵在場
+    assert submission["orders"] == [{"code": "E5002C", "name": "關節腔注射", "points": 300}]
     # 缺欄誠實留空（None）
     assert submission["case_class"] is None
     assert submission["patient_name"] is None
@@ -204,7 +210,7 @@ def test_build_submission_order_name_none_omits_key():
     payload = _case_payload(order_name=None)
     submission, _ = build_submission_from_case(payload)
 
-    assert submission["orders"] == [{"code": "E5002C", "seq": "1"}]
+    assert submission["orders"] == [{"code": "E5002C", "seq": "1", "points": 300}]
     assert "name" not in submission["orders"][0]
 
 
@@ -224,6 +230,84 @@ def test_build_submission_no_order_empty_list():
     submission, _ = build_submission_from_case(payload)
 
     assert submission["orders"] == []
+
+
+# ── 11.1-01: 整合鏈（真實 _to_appeal_case 輸出 → 轉換層 → build_rows）──
+
+
+def test_to_appeal_case_passthroughs_order_seq():
+    """11.1-01 Test 1：_to_appeal_case 透傳 rec.order_seq（值=rec.order_seq），並保留既有 deduct_amount。"""
+    out = server._to_appeal_case(
+        1,
+        DeductionRecord(
+            case_seq="201",
+            order_code="14050B",
+            order_seq="3",
+            non_reimbursed_amount=300,
+        ),
+    )
+    assert out["order_seq"] == "3"
+    assert out["deduct_amount"] == 300
+
+
+def test_build_submission_from_real_to_appeal_case_orders():
+    """11.1-01 Test 2：真實 _to_appeal_case 輸出 → build_submission_from_case 的
+    orders[0] 含 seq（=order_seq）與 points（=deduct_amount）。"""
+    rec = DeductionRecord(
+        case_seq="201",
+        order_code="14050B",
+        order_seq="3",
+        non_reimbursed_amount=300,
+    )
+    submission, _ = build_submission_from_case(server._to_appeal_case(1, rec))
+    order = submission["orders"][0]
+    assert order["code"] == "14050B"
+    assert order["seq"] == "3"
+    assert order["points"] == 300
+
+
+def test_build_rows_integration_chain_amount_and_seq():
+    """11.1-01 Test 3（整合鏈，Success Criteria 4）：走真實 server._to_appeal_case
+    輸出（非手工完整 fixture）→ build_submission_from_case → build_rows，
+    金額欄=points、醫令序=seq，warnings 不含「金額」。（build_rows 為純函式，不需 soffice）"""
+    from elc_audit_engine.generators.appeal_print.field_mapping import build_rows
+
+    rec = DeductionRecord(
+        case_seq="201",
+        order_code="14050B",
+        order_seq="3",
+        non_reimbursed_amount=300,
+    )
+    submission, _ = build_submission_from_case(server._to_appeal_case(1, rec))
+    rows, warnings = build_rows(
+        _appeal_payload(order_seq="3", p1_order_seq="3"),
+        _facility(),
+        submission=submission,
+    )
+    assert rows[0]["金額"] == "300"
+    assert rows[0]["醫令序"] == "3"
+    assert "金額" not in warnings
+
+
+def test_build_rows_missing_order_seq_honest_degrade():
+    """11.1-01 Test 4（回歸）：rec 缺 order_seq 且 deduct_amount 缺省 →
+    _to_appeal_case 的 order_seq 為 None（照印 None，與 id_number 同語意）；
+    轉換層 orders[0] 無 seq/points 鍵；build_rows 金額留空＋warning「金額」
+    （誠實降級不變、不捏造 0）。"""
+    from elc_audit_engine.generators.appeal_print.field_mapping import build_rows
+
+    rec = DeductionRecord(case_seq="201", order_code="14050B")
+    out = server._to_appeal_case(1, rec)
+    assert out["order_seq"] is None
+
+    submission, _ = build_submission_from_case(out)
+    order = submission["orders"][0]
+    assert "seq" not in order
+    assert "points" not in order
+
+    rows, warnings = build_rows(_appeal_payload(), _facility(), submission=submission)
+    assert rows[0]["金額"] == ""
+    assert "金額" in warnings
 
 
 # ── Task 2: 端到端（轉換層 → render_appeal_print 純函式段，不需 soffice）──

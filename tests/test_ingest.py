@@ -213,6 +213,18 @@ def test_index_html_generate_consumes_standard_contract():
         assert new_key in html, f"index.html 缺少標準契約鍵: {new_key}"
 
 
+def test_index_html_generate_sends_order_seq():
+    """11.1-01 Test 3（前端靜態回歸）：generateAppealDraft 請求 body 帶
+    order_seq（currentSelectedCase.order_seq），API 路徑醫令序不再漏送。
+    """
+    from pathlib import Path
+
+    html = Path("static/index.html").read_text(encoding="utf-8")
+    assert "order_seq: currentSelectedCase.order_seq" in html, (
+        "index.html 的 generateAppealDraft 請求 body 應帶 order_seq"
+    )
+
+
 def test_sampling_import_csv_endpoint(api):
     client, tmp_path = api
     r = client.post(
