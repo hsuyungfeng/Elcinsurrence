@@ -219,8 +219,10 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10
-（2/3/4 皆僅依賴 1，可並行規劃；5 需等待 2、3、4 皆完成；6、7 皆依賴 5，可並行；8 需等待 6、7；9 為服務化；10 為實機串接，外部依賴門控中）
+Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 09.1 → 10／11
+（2/3/4 皆僅依賴 1，可並行規劃；5 需等待 2、3、4 皆完成；6、7 皆依賴 5，可並行；8 需等待 6、7；9 為服務化；
+09.1 為 9 之後插入的 tech-debt 清理（URGENT）；10 為實機串接，外部依賴門控中；
+11 僅依賴 7，不依賴 9/10，可與 10 並行——已完成，UAT 7/7 通過）
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -230,15 +232,12 @@ Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 
 | 4. 病歷彙整器 | 1/1 | Complete | 2026-08-03 |
 | 5. 三方比對器 | 1/1 | Complete | 2026-08-03 |
 | 6. 輸出一（病歷補強報告） | 1/1 | Complete | 2026-08-03 |
-| 7. 輸出二（申復理由草稿） | 0/TBD | Not started | - |
-| 8. 端到端測試 | 0/TBD | Not started | - |
-| 9. doctor-toolbox HIS 整合（佔位） | 0/TBD | Not started | - |
+| 7. 輸出二（申復理由草稿） | 1/1 | Complete | 2026-08-03 |
+| 8. 端到端測試 | 1/1 | Complete | 2026-08-03 |
+| 9. HIS 服務化（本機可驗證） | 4/4 | Complete | 2026-08-07 |
+| 09.1. Address tech debt | 3/3 | Complete | 2026-08-08 |
 | 10. VPN／實機串接 | 0/1 | Blocked（外部依賴） | - |
-| 11. 紙本申復清單列印 | 3/3 | Complete | 2026-08-08 |
-
-> ⚠️ **本表格為快照，與 STATE.md 記載的實況已脫節**（Phase 7/8/9 於本表仍顯示 Not started，
-> 但 STATE.md 記載三者皆已於 2026-08-03～2026-08-07 完成）。修 Phase 11 時未一併回填，
-> 因不在本次變更範圍內；下次觸碰本檔時應以 STATE.md／git log 為準覆核整份表格。
+| 11. 紙本申復清單列印 | 3/3 | Complete（UAT 7/7 通過，2026-08-10） | 2026-08-08 |
 
 ## Out of Roadmap Scope
 

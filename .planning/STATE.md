@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-stopped_at: Phase 09.1 context gathered
-last_updated: "2026-08-08T06:09:22.080Z"
+status: blocked
+stopped_at: Phase 11 complete (UAT 7/7 passed); milestone v1.0 blocked only on Phase 10 (external dependencies)
+last_updated: "2026-08-10T01:00:00.000Z"
 progress:
   total_phases: 12
-  completed_phases: 10
-  total_plans: 23
-  completed_plans: 20
-  percent: 87
+  completed_phases: 11
+  total_plans: 26
+  completed_plans: 26
+  percent: 92
 ---
 
 # STATE.md — elc-audit-engine
@@ -33,6 +33,7 @@ ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (origi
 **GSD Phase 8 — 端到端測試 — COMPLETE (2026-08-03)** — 08-01 單輪交付：LLM 判定金標準 30 組（tests/fixtures/llm_gold_standard_30.json：支持12/部分支持9/無記載9＋eval/gold_standard.py harness＋scripts/replay_gold_standard.py 真實 LLM 回放 CLI，health guard，C6-3）＋端到端 3 案例（充分/薄弱/裸奔，run_case_pipeline：compare→write_report→審核 decisions→build_appeal→write_appeal，C6-4）＋E2E-01 修正（classify_support 任一『部分支持』→ 薄弱，原歸充分使 D7 三級缺一角）＋真實樣本替換介面（注入層可換，C6-5）。21 新測試全綠，全套件 197 passed / 5 skipped。五層測試策略全數涵蓋並可執行（C6）。
 **GSD Phase 9 — HIS 服務化（本機可驗證）— COMPLETE (2026-08-07)** — 四個 Plans 全數完成 (09-01 認證/審計、09-02 狀態機/CaseStore、09-03 server.py 接線/遷移、09-04 Package Builder 申復 XML)。全測試套件 363 passed / 2 skipped 驗證通過。
 **GSD Phase 10 — VPN／實機串接 — 阻塞中**（雲端 Provider 需 doctor-toolbox 存取權、NHI_EIIAPI.DLL 需 Windows＋VPN＋SAM 實機）。2026-08-05 自原 Phase 9 拆出：含阻塞項的 phase 永遠無法通過 verify，會汙染 phase 完成訊號。
+**GSD Phase 11 — 紙本申復清單列印 — COMPLETE（2026-08-10，UAT 7/7 通過）** — 僅依賴 Phase 7，不依賴 Phase 9/10，與 Phase 10 阻塞無關可獨立完成。3 個 Plans（11-01/02/03）於 2026-08-08 執行完畢（VERIFICATION 3/3 passed），UAT 於本次 session 跑完剩餘 5 項（測項 3-7）：三聯 CLI 產出、版式與官方範本一致、第二聯核定/複核/初核/審查委員欄僅出現於頁 2、逐欄資料正確、缺欄誠實降級警告、院所設定可由 `FACILITY_CONFIG_PATH` 驅動、錯誤處理友善——全數 pass。UAT 測項 7 過程中發現並修復一個路徑穿越漏洞：`scripts/build_appeal_print.py` 的自訂輸出路徑參數（`output_pdf_path`）原僅驗證 basename，`../x.pdf` 可寫出至專案目錄外（已實測外洩至倉庫上層並清除測試產物）；修復為偵測路徑各段 `os.pardir` 穿越成分並拒絕（校驗後拒絕、非清洗，與既有 `safe_filename` 同一原則），全套件 424 passed / 2 skipped 無迴歸。commit `5b099d2`。
 
 **Phase 3 context highlights (see `.planning/phases/03-parsers/03-CONTEXT.md`):** 使用者提供真實申報 XML `TOTFA.xml`（633 案 / 2,624 醫令 / Big5 / 348 位病患，已 gitignore）。實測推翻三項文件假設：(1) C11 欄位表為精選子集，真實檔多出 18 個 dbody 欄位，其中 `d20`-`d26` 為次診斷代碼（Phase 5 判斷醫療必要性的關鍵）；(2) C8 的 p8/p9 字數上限描述有誤，官方問答集 Q15 確認為**每欄 1000 中文字／合計 2000**——影響 Phase 7 字數控制器；(3) **`電子申復格式及填表說明門診.doc` 是申復「輸出」規格，不是核減「輸入」格式**（原 D-14 據此建模輸入檔屬誤判，已由 D-14a 修正）。
 
@@ -69,9 +70,19 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-08-08（`/gsd-execute-phase 09.1` 完成）
-Stopped at: **Phase 09.1 執行完成（3/3 plans，VERIFICATION 5/5 passed）**
-Resume file: `.planning/phases/09.1-address-tech-debt-09-w4/09.1-VERIFICATION.md`
+Last session: 2026-08-10（Phase 11 UAT 測項 3-7 執行完成＋提交）
+Stopped at: **Phase 11 完成（UAT 7/7 passed），milestone v1.0 現僅卡在 Phase 10（外部依賴阻塞中）**
+Resume file: `.planning/phases/11-paper-appeal-print/11-UAT.md`
+
+**Phase 11 UAT 執行摘要（2026-08-10）：**
+- 測項 1-2 已於前次 session 通過；本次 session 完成測項 3-7
+- 測項 3（第二聯核定欄）：pdftotext -layout 逐頁比對確認核定/複核/初核/審查委員欄僅頁 2 有
+- 測項 4（逐欄資料）：以 `data/output/_目檢/{appeal_demo.json,case_payload_demo.json}` 為輸入逐欄核對，全部正確
+- 測項 5（缺欄降級）：僅帶 appeal.json 執行 exit 0＋逐條列印警告清單
+- 測項 6（院所設定 env 驅動）：`FACILITY_CONFIG_PATH` 覆寫後頭欄正確改值
+- 測項 7（錯誤處理）：發現路徑穿越漏洞並當場修復（見上方 Phase 11 條目），修復後重測 pass
+- 全套件 424 passed / 2 skipped；commit `5b099d2`
+- **milestone v1.0 現況**：12 個 phase 中 11 個完成（1-9、09.1、11），唯一未完成為 Phase 10（VPN／實機串接，阻塞於外部依賴：doctor-toolbox 存取權、NHI_EIIAPI.DLL、Windows+VPN+SAM 實機環境，非程式問題）。若 v1.0 milestone 範圍不強制要求 Phase 10，可考慮收尾；若需要，下一步是 `/gsd-audit-milestone` 或使用者裁示。
 
 **Phase 09.1 執行摘要（2026-08-08，tech-debt 清理）：**
 - 09.1-01 W1 狀態機合法化（`imported→appealed`，171f85c）＋W4 generate 回 `render_appeal_json`
