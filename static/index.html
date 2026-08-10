@@ -258,6 +258,15 @@
           <div>
             <span style="font-size: 12px; color: var(--text-muted); margin-right: 8px;">核減原因：</span>
             <span style="font-size: 13px; color: #f59e0b;" id="aDeductionReason">病歷未載明肌腱撕裂之影像是項與術前評估</span>
+            <br>
+            <!-- 11.1-02（BLOCKER-1，plan-checker BLOCKER 2 使用者裁示）：病歷號
+                 輸入欄（可選填，查半年病史）。CSV 匯入案件 payload.record_no 恆
+                 None，此欄是 generate 端點 timeline 查詢的唯一真實病歷號入口——
+                 有值才查，留空由 server 端誠實標記 no_record_no。 -->
+            <label for="aRecordNoInput" style="font-size: 12px; color: var(--text-muted); margin-right: 8px;">病歷號（選填，查半年病史）：</label>
+            <input type="text" id="aRecordNoInput" placeholder="M220518024"
+              style="font-size: 13px; padding: 6px 10px; border: 1px solid var(--panel-border); border-radius: 6px; background: var(--panel-bg); color: var(--text-color); width: 170px;"
+              title="病歷號（Phase 3 d3），填入後生成草稿時一併查詢半年病史">
           </div>
           <button class="btn-action" onclick="generateAppealDraft()">⚡ 整合多源證據生成申復草稿</button>
         </div>
@@ -475,7 +484,11 @@
           order_code: currentSelectedCase.order_code,
           order_name: currentSelectedCase.order_name,
           soap_text: document.getElementById('sSoapInput').value,
-          missing_reason: currentSelectedCase.missing_reason || ''
+          missing_reason: currentSelectedCase.missing_reason || '',
+          // 11.1-02（BLOCKER-1）：sampling 案件 payload 自 CSV 匯入含 record_no
+          // （server.py _to_sampling_case 透傳 d3 病歷號）＝patient_id——帶上才能
+          // 讓 audit 端點以 LocalFileProvider 實查半年病史（Success Criteria 1）。
+          record_no: currentSelectedCase.record_no
         })
       });
       const data = await res.json();
@@ -506,6 +519,16 @@
       } else {
         badge.innerText = '❓ 查無規則';
         badge.className = 'badge badge-weak';
+      }
+
+      // 11.1-02（BLOCKER-1）：病歷缺席降級的可見呈現——records_degraded=true
+      // 時於建議框前置「⚠ 病歷缺席」與原因文案（innerText 賦值，P1-5 防線；
+      // records_degraded_reason 為 None 時用預設文案，不顯示 undefined）。
+      if (data.records_degraded) {
+        const adv = document.getElementById('sAdviceBox');
+        adv.innerText =
+          '⚠ 病歷缺席：' + (data.records_degraded_reason || '未含半年病史佐證') + '\n' +
+          adv.innerText;
       }
     }
 
@@ -538,6 +561,11 @@
           // 11.1-01：醫令序對應閉合——透傳 order_seq（_to_appeal_case 補欄後
           // CSV 匯入與 API 生成兩路徑皆帶），紙本申復清單「醫令序」欄可對應。
           order_seq: currentSelectedCase.order_seq,
+          // 11.1-02（BLOCKER-1）：病歷號自 appeal 面板輸入欄（aRecordNoInput）
+          // 取值——CSV 匯入案件 currentSelectedCase.record_no 恆 None，輸入欄是
+          // generate 端點 timeline 查詢的唯一真實病歷號入口；可選填：留空送出
+          // 由 server 端誠實標記 no_record_no（plan-checker BLOCKER 2 裁示）。
+          record_no: document.getElementById('aRecordNoInput').value,
           deduct_amount: currentSelectedCase.deduct_amount,
           deduction_reason: currentSelectedCase.deduction_reason,
           // ④ 素材＝醫師採用的補強敘述（字串陣列）。多源證據摘要暫以
@@ -558,6 +586,18 @@
         const sec = data.sections[i];
         document.getElementById(id).value = sec ? sec.text : '';
       });
+
+      // 11.1-02（BLOCKER-1）：病歷缺席降級的可見呈現——records_degraded=true
+      // 時於 ②醫療必要性（aSec2）內容前加上「⚠ 病歷缺席」與原因文案（innerText
+      // 賦值，P1-5 防線；reason 為 None 時只用預設文案，不顯示 undefined）。
+      // 不在此改 generate 請求 body 的 record_no——那由 Task 2 的 aRecordNoInput
+      // 輸入欄負責，本處只消費回應呈現。
+      if (data.records_degraded) {
+        const sec2 = document.getElementById('aSec2');
+        sec2.value =
+          '⚠ 病歷缺席：' + (data.records_degraded_reason || '本次申復未含半年病史佐證') + '\n' +
+          sec2.value;
+      }
 
       // 官方問答集 Q15：p8/p9 各 ≤1000（非合計 2000）；長度以 p8_reason1/
       // p9_reason2 本地計算，超限警告改由本地判斷。

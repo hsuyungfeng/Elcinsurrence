@@ -225,6 +225,43 @@ def test_index_html_generate_sends_order_seq():
     )
 
 
+def test_index_html_appeal_record_no_input():
+    """11.1-02 Task2 Test5（前端靜態回歸）：appeal 面板有病歷號輸入欄
+    aRecordNoInput，generateAppealDraft 請求 body 的 record_no 自輸入欄取值。
+
+    配合 server 端 test_generate_appeal_draft_timeline_injection 共同證明
+    「前端→API 請求體」真實路徑（plan-checker BLOCKER 2 使用者裁示：CSV 匯入
+    案件 payload.record_no 恆 None，輸入欄是 generate 端點 timeline 查詢的
+    唯一真實病歷號入口——有值才查，無值由 server 端誠實標記 no_record_no）。
+    """
+    from pathlib import Path
+
+    html = Path("static/index.html").read_text(encoding="utf-8")
+    assert 'id="aRecordNoInput"' in html, (
+        "index.html 的 appeal 面板應有病歷號輸入欄 aRecordNoInput"
+    )
+    assert "record_no: document.getElementById('aRecordNoInput').value" in html, (
+        "generateAppealDraft 請求 body 的 record_no 應自 aRecordNoInput 輸入欄取值"
+    )
+
+
+def test_index_html_renders_records_degraded():
+    """11.1-02 Task3 Test1（前端靜態回歸）：records_degraded 有可見呈現——
+    sampling 與 appeal 兩面板消費 records_degraded/records_degraded_reason，
+    顯示「⚠ 病歷缺席」＋原因文案；sampling 請求 body 帶 record_no
+    （generate 請求 record_no 由 Task 2 的 aRecordNoInput 輸入欄負責）。
+    """
+    from pathlib import Path
+
+    html = Path("static/index.html").read_text(encoding="utf-8")
+    assert "data.records_degraded" in html, "前端應消費 records_degraded 鍵"
+    assert "data.records_degraded_reason" in html, "前端應消費 records_degraded_reason 鍵"
+    assert "病歷缺席" in html, "前端應有「病歷缺席」可見文案"
+    assert html.count("record_no: currentSelectedCase.record_no") >= 1, (
+        "sampling 請求 body 應帶 record_no（currentSelectedCase.record_no）"
+    )
+
+
 def test_sampling_import_csv_endpoint(api):
     client, tmp_path = api
     r = client.post(
