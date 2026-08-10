@@ -10,7 +10,7 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 
 **Phase Numbering:**
 - Integer phases (1-10): Planned milestone work, 對應 progress.md M1-M8 ＋ Phase 2（服務化＝GSD 9／實機串接＝GSD 10，2026-08-05 拆分）
-- Decimal phases (x.1, x.2): Urgent insertions (marked with INSERTED) — 目前無
+- Decimal phases (x.1, x.2): Urgent insertions (marked with INSERTED) — 09.1（after 9）、11.1（after 11）
 
 - [x] **Phase 1: 專案骨架** - uv 專案初始化、config、目錄結構
 - [x] **Phase 2: 規則庫建置** - CSV→SQLite、審查注意事項→PageIndex、rule_mapping 預編譯
@@ -21,7 +21,10 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 - [x] **Phase 7: 輸出二（申復理由草稿）** - 申復理由草稿（p8/p9 ≤2000字）＋申復XML欄位
 - [x] **Phase 8: 端到端測試** - 規格造測試資料→待真實樣本進來替換驗證
 - [x] **Phase 9: HIS 服務化（本機可驗證）** - 已落地 Flask API＋ingest 納管、認證授權、案件狀態機＋任務佇列、Package Builder（申復 XML）
+- [x] **Phase 09.1: Address tech debt (INSERTED)** - 09 狀態機語義 + W4 契約橋
 - [ ] **Phase 10: VPN／實機串接（門控）** - 雲端病歷 Provider、NHI_EIIAPI wrapper、Local Gateway 七元件 — 阻塞於外部依賴
+- [x] **Phase 11: 紙本申復清單列印** - 官方三聯式申復清單 PDF 排版輸出通道
+- [ ] **Phase 11.1: Close milestone audit gaps (INSERTED)** - Phase 4 病歷時間軸未接入 + Phase 9/9.1/11 金額數量欄位鏈斷裂
 
 ## Phase Details
 
@@ -219,10 +222,12 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 09.1 → 10／11
+Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 09.1 → 10／11 → 11.1
 （2/3/4 皆僅依賴 1，可並行規劃；5 需等待 2、3、4 皆完成；6、7 皆依賴 5，可並行；8 需等待 6、7；9 為服務化；
 09.1 為 9 之後插入的 tech-debt 清理（URGENT）；10 為實機串接，外部依賴門控中；
-11 僅依賴 7，不依賴 9/10，可與 10 並行——已完成，UAT 7/7 通過）
+11 僅依賴 7，不依賴 9/10，可與 10 並行——已完成，UAT 7/7 通過；
+11.1 為 11 之後插入的 milestone audit gap 清理（URGENT）——第二輪 audit 發現 Phase 4 未接入與
+Phase 9/9.1/11 欄位鏈斷裂兩項 critical blocker，milestone v1.0 收尾前必須清理，尚未規劃）
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -238,6 +243,7 @@ Phases execute in dependency order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 
 | 09.1. Address tech debt | 3/3 | Complete | 2026-08-08 |
 | 10. VPN／實機串接 | 0/1 | Blocked（外部依賴） | - |
 | 11. 紙本申復清單列印 | 3/3 | Complete（UAT 7/7 通過，2026-08-10） | 2026-08-08 |
+| 11.1. Close milestone audit gaps | 0/0 | Not planned（URGENT，2 critical blockers） | - |
 
 ## Out of Roadmap Scope
 
@@ -246,3 +252,18 @@ The following material from 電子抽審.md is background/context only and is NO
 - DICOM/PDF/XML file packaging and sTypeCode upload protocol details (constraints.md C9, C10)
 - 院所行政前置申請作業 (VPN 權限開通、紙本替代方案申請) — operational/administrative, not engineering
 - UML/ER research appendix material — background reference for eventual Phase 9 design
+
+### Phase 11.1: Close milestone audit gaps: Phase 4 病歷時間軸未接入 Flask API + Phase 9/9.1/11 金額數量欄位鏈斷裂 (INSERTED)
+
+**Goal:** 修復第二輪 `/gsd-audit-milestone`（2026-08-10）發現的 2 個 critical blocker，讓 milestone v1.0 具備收尾條件：(1) Phase 4 `RecordProvider`/`LocalFileProvider` 接入 Flask API 的事前預審與申復生成路徑（取代目前寫死的 `timeline=None`）；(2) 修補 `server.py` `_to_appeal_case` 與 09.1 `build_submission_from_case` 兩層轉換，讓 `deduct_amount`／`order_seq` 正確映射到 `orders[].points`/`total_qty`/`seq`，使紙本申復清單 PDF 在真實案件（CSV 匯入與 API 生成兩條路徑）金額/數量欄不再恆為空白。
+**Requirements**: REQ-record-aggregator（重新開放，見 v1.0-MILESTONE-AUDIT.md 第 2 輪判定 unsatisfied）、REQ-paper-appeal-print 下游整合缺口（無新 REQ-ID，屬既有需求的整合層修復）
+**Depends on:** Phase 11（消費 `build_submission_from_case`／`field_mapping.py` 契約）、Phase 4（`RecordProvider` 介面）、Phase 9.1（`_to_appeal_case`／`build_submission_from_case` 現況）
+**Success Criteria** (what must be TRUE):
+  1. `server.py` 的事前預審端點與 `/api/appeal/generate` 不再以 `timeline=None` 呼叫比對引擎——實際具現化 `LocalFileProvider`（或等效 Provider）並傳入真實半年病史時間軸
+  2. 前端對「病歷缺席降級」狀態有可見呈現（若 Provider 查無資料仍走既有 C5 降級語意，但不再是「從未嘗試查詢」）
+  3. 透過 `/api/appeal/import`（CSV）與 `/api/appeal/generate`（API）兩條真實路徑產生的紙本申復清單 PDF，金額／數量欄在來源資料存在時正確顯示，不再恆為空白＋警告
+  4. 全套件回歸綠燈，含新增／修改測試覆蓋上述兩項修復（不得僅靠手動構造已含正確欄位的 fixture 掩蓋真實資料流缺口）
+**Plans:** 0 plans — not yet planned
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 11.1 to break down)

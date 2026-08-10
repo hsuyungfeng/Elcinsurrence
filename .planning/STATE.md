@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: blocked
-stopped_at: Phase 11 complete (UAT 7/7 passed); milestone v1.0 blocked only on Phase 10 (external dependencies)
-last_updated: "2026-08-10T01:00:00.000Z"
+status: gaps_found
+stopped_at: Phase 11.1 inserted (URGENT) to close 2 critical blockers found by second-round /gsd-audit-milestone; not yet planned
+last_updated: "2026-08-10T06:15:00.000Z"
 progress:
-  total_phases: 12
+  total_phases: 13
   completed_phases: 11
   total_plans: 26
   completed_plans: 26
-  percent: 92
+  percent: 85
 ---
 
 # STATE.md — elc-audit-engine
@@ -75,6 +75,7 @@ Stopped at: **Phase 11 完成（UAT 7/7 passed），milestone v1.0 現僅卡在 
 Resume file: `.planning/phases/11-paper-appeal-print/11-UAT.md`
 
 **Phase 11 UAT 執行摘要（2026-08-10）：**
+
 - 測項 1-2 已於前次 session 通過；本次 session 完成測項 3-7
 - 測項 3（第二聯核定欄）：pdftotext -layout 逐頁比對確認核定/複核/初核/審查委員欄僅頁 2 有
 - 測項 4（逐欄資料）：以 `data/output/_目檢/{appeal_demo.json,case_payload_demo.json}` 為輸入逐欄核對，全部正確
@@ -85,8 +86,10 @@ Resume file: `.planning/phases/11-paper-appeal-print/11-UAT.md`
 - **milestone v1.0 現況**：12 個 phase 中 11 個完成（1-9、09.1、11），唯一未完成為 Phase 10（VPN／實機串接，阻塞於外部依賴：doctor-toolbox 存取權、NHI_EIIAPI.DLL、Windows+VPN+SAM 實機環境，非程式問題）。若 v1.0 milestone 範圍不強制要求 Phase 10，可考慮收尾；若需要，下一步是 `/gsd-audit-milestone` 或使用者裁示。
 
 **Phase 09.1 執行摘要（2026-08-08，tech-debt 清理）：**
+
 - 09.1-01 W1 狀態機合法化（`imported→appealed`，171f85c）＋W4 generate 回 `render_appeal_json`
   標準契約（679b6dc）＋`_to_appeal_case` 透傳 `rec.id_number`（含於 679b6dc）
+
 - 09.1-02 前端 index.html 消費適配標準契約（cd07f39/338b95b）
 - 09.1-03 `build_submission_from_case` 轉換層（d0b77ea/46aada3）＋CLI 接入
 - 全套件 424 passed / 2 skipped；VERIFICATION 5/5（D-01/D-03/D-04/D-05 實證、D-02 無實作）
@@ -191,6 +194,7 @@ STATE.md 的敘述性欄位會與 git 脫節，恢復時一律以 `git log` 與�
 ### Roadmap Evolution
 
 - Phase 09.1 (INSERTED, after 09, 2026-08-08): "Address tech debt: 09 狀態機語義 + W4 契約橋"（URGENT）— 清理 audit 發現之 W1（CaseStore 狀態機 imported→appealed 非法轉換）與 W4（/api/appeal/generate 回應契約 ≠ render_appeal_json 契約）
+- Phase 11.1 (INSERTED, after 11, 2026-08-10): "Close milestone audit gaps: Phase 4 病歷時間軸未接入 Flask API + Phase 9/9.1/11 金額數量欄位鏈斷裂"（URGENT）— 第二輪 `/gsd-audit-milestone` 發現 2 個 critical blocker：(1) `RecordProvider`/`LocalFileProvider`（Phase 4）從未被 `server.py` 具現化，事前預審恆以 `timeline=None` 呼叫，生產環境永遠處於病歷缺席降級模式；(2) `deduct_amount`／`order_seq` 在 `_to_appeal_case`（server.py）與 `build_submission_from_case`（09.1 新增轉換層）兩層均未映射到 `orders[].points`/`total_qty`/`seq`，導致紙本申復清單 PDF 金額/數量欄在真實案件恆為空白。詳見 `.planning/v1.0-MILESTONE-AUDIT.md`（第 2 輪，2026-08-10，status: gaps_found）。
 
 ## Key References
 
@@ -206,3 +210,8 @@ STATE.md 的敘述性欄位會與 git 脫節，恢復時一律以 `git log` 與�
 **Planned Phase:** 09.1 (address-tech-debt-09-w4) — 3 plans — 2026-08-08T06:06:46.708Z
 
 > **Roadmap Evolution (2026-08-08):** Phase 09.1 (INSERTED, after 09) — "Address tech debt: 09 狀態機語義 + W4 契約橋"（URGENT）
+
+**Current Phase:** 11.1 (close-milestone-audit-gaps-phase-4-flask-api-phase-9-9-1-11) — Not planned yet — 2026-08-10T06:01:31.834Z
+**Next recommended run:** `/gsd-plan-phase 11.1`
+
+> **Roadmap Evolution (2026-08-10):** Phase 11.1 (INSERTED, after 11) — "Close milestone audit gaps: Phase 4 病歷時間軸未接入 Flask API + Phase 9/9.1/11 金額數量欄位鏈斷裂"（URGENT）
