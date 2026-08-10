@@ -15,7 +15,7 @@ No dedicated PRD was present in this ingest set (ADR + SPEC + DOC only). Require
   - config 結構就緒
   - 目錄結構符合技術棧慣例（沿用 DrtoolboxLocalServer 佈局，見 D4）
 - **Scope:** Phase 1
-- **Status:** NOT STARTED — next actionable milestone
+- **Status:** SATISFIED — 01-01-VERIFICATION passed（2026-07-29）；audit 第 2 輪確認 satisfied，先前誤標 NOT STARTED 為文件債，現已修正
 
 ## REQ-rule-repository
 
@@ -37,6 +37,7 @@ No dedicated PRD was present in this ingest set (ADR + SPEC + DOC only). Require
   - 欄位缺漏分級處理（致命 vs 可容忍，見 constraints.md C5）
   - SOAP文字可分段定位(S/O/A/P)
 - **Scope:** Phase 1
+- **Status:** SATISFIED — Phase 3 真實檔回放 633 案／0 拒收；audit 第 2 輪確認 satisfied
 
 ## REQ-record-aggregator
 
@@ -58,6 +59,7 @@ No dedicated PRD was present in this ingest set (ADR + SPEC + DOC only). Require
   - 醫令支持度三級分類（充分/薄弱/裸奔）
   - 缺口生成1~3條候選補強敘述並符合約束（見 constraints.md C2）
 - **Scope:** Phase 1
+- **Status:** SATISFIED — Phase 5 139 passed；`RuleRepositoryError` 例外處理三處一致；audit 第 2 輪確認 satisfied
 
 ## REQ-output-reinforcement-report
 
@@ -68,6 +70,7 @@ No dedicated PRD was present in this ingest set (ADR + SPEC + DOC only). Require
   - 含醫令支持度缺口、半年病史摘要、候選補強敘述（逐條點選）
   - 醫師可勾選/編輯後存檔
 - **Scope:** Phase 1
+- **Status:** SATISFIED — Phase 6 152 passed；audit 第 2 輪確認 satisfied
 
 ## REQ-output-appeal-draft
 
@@ -80,6 +83,7 @@ No dedicated PRD was present in this ingest set (ADR + SPEC + DOC only). Require
   - 每筆核減醫令獨立生成
   - 輸出 `申復草稿_{案件流水號}.md` ＋ `appeal_{流水號}.json`（見 constraints.md C7）
 - **Scope:** Phase 1
+- **Status:** SATISFIED — Phase 7 `render_appeal_json` 契約穩定，09.1 修復後與 `/api/appeal/generate` 對齊確認；audit 第 2 輪確認 satisfied
 
 ## REQ-e2e-testing
 
@@ -88,6 +92,7 @@ No dedicated PRD was present in this ingest set (ADR + SPEC + DOC only). Require
 - **Acceptance criteria:**
   - 五層測試策略全數涵蓋（單元/規則庫驗收/LLM判定金標準30組/端到端3案例/真實樣本回放，見 constraints.md C6）
 - **Scope:** Phase 1
+- **Status:** PARTIAL — 五層 1-4 完整（633 案回放等）；第 5 層真實樣本回放受限於 ground truth 數據缺口（audit 第 2 輪判定 partial）
 
 ## REQ-phase2-his-integration (placeholder, low detail)
 
@@ -95,6 +100,7 @@ No dedicated PRD was present in this ingest set (ADR + SPEC + DOC only). Require
 - **Description:** 雲端病歷Provider接doctor-toolbox（cloud_sync/his_connection模式）；Flask API化供HIS呼叫；與Local Agent/NHI_EIIAPI上傳流程銜接
 - **Acceptance criteria:** not yet detailed — later phase, lightweight placeholder only
 - **Scope:** Phase 2
+- **Status:** PARTIAL（milestone 範圍內 satisfied）— Phase 9 服務化完成；Phase 10 實機串接外部依賴阻塞不計入本次範圍（audit 第 2 輪判定）
 - **Supporting context (informational only, not requirements-level detail):** 電子抽審.md §一~§四, §四 sTypeCode API 參數 (constraints.md C10), 檔案格式/命名規範 (constraints.md C9), FHIR/HL7 mapping (constraints.md C12)
 
 ## REQ-paper-appeal-print
@@ -106,6 +112,7 @@ No dedicated PRD was present in this ingest set (ADR + SPEC + DOC only). Require
   - 直接消費既有 `AppealDraft` 資料，不重建資料模型
   - 三聯版式差異（**第二聯**（健保署存查聯）「中央健康保險署填列」核定/複核/初核/審查委員欄，留空供健保署複核）正確反映（2026-08-08 使用者裁示以官方模板第二聯為準）
 - **Scope:** Phase 11
+- **Status:** SATISFIED — VERIFICATION 3/3＋UAT 7/7（2026-08-10）；下游 Ph9→Ph11 資料鏈的 BLOCKER-2 已由 Phase 11.1 閉合
 - **Supporting context (informational only):** `.odt` 可編輯範本可作為排版依據來源（ODF XML 可解析，延續 Phase 2 docx-tree 索引器的 LibreOffice/soffice 工具鏈慣例，避免引入新的重量級 PDF 套件）
 
 ---
