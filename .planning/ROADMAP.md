@@ -263,7 +263,8 @@ The following material from 電子抽審.md is background/context only and is NO
   2. 前端對「病歷缺席降級」狀態有可見呈現（若 Provider 查無資料仍走既有 C5 降級語意，但不再是「從未嘗試查詢」）
   3. 透過 `/api/appeal/import`（CSV）與 `/api/appeal/generate`（API）兩條真實路徑產生的紙本申復清單 PDF，金額／數量欄在來源資料存在時正確顯示，不再恆為空白＋警告
   4. 全套件回歸綠燈，含新增／修改測試覆蓋上述兩項修復（不得僅靠手動構造已含正確欄位的 fixture 掩蓋真實資料流缺口）
-**Plans:** 0 plans — not yet planned
+**Plans:** 2 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 11.1 to break down)
+- [ ] 11.1-01-PLAN.md — 修復金額/數量欄位鏈（_to_appeal_case 補 order_seq、build_submission_from_case 映射 deduct_amount→points、generate 契約透傳 order_seq；數量欄留空為使用者確認的已知限制）
+- [ ] 11.1-02-PLAN.md — 具現化 LocalFileProvider 接入兩端點（RECORDS_DIR＋前端病歷號輸入欄＋audit/generate timeline 接線＋records_degraded 前端呈現）
