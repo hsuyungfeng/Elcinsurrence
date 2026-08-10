@@ -46,7 +46,8 @@ No dedicated PRD was present in this ingest set (ADR + SPEC + DOC only). Require
   - Provider介面抽象化雲端/本地資料來源
   - 本地檔案Provider可運作（Phase 1 頂替雲端）
   - 產出近半年病史時間軸（就診紀錄/檢驗/檢查/影像清單）
-- **Scope:** Phase 1
+- **Status:** SATISFIED — Phase 11.1（2026-08-10）重新達成：`LocalFileProvider` 已接入 `/api/sampling/audit` 與 `/api/appeal/generate` 生產路徑（`RECORDS_DIR`＋`build_timeline`，取代寫死的 `timeline=None`）；unconfigured/no_record_no/absent 三態誠實降級＋前端可見呈現。v1.0-MILESTONE-AUDIT.md 第 2 輪判定 unsatisfied 已閉合（11.1-VERIFICATION.md 12/12）。
+- **Scope:** Phase 1（+ Phase 11.1 整合閉合）
 
 ## REQ-three-way-comparator
 

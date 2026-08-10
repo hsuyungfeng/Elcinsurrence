@@ -24,7 +24,7 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 - [x] **Phase 09.1: Address tech debt (INSERTED)** - 09 狀態機語義 + W4 契約橋
 - [ ] **Phase 10: VPN／實機串接（門控）** - 雲端病歷 Provider、NHI_EIIAPI wrapper、Local Gateway 七元件 — 阻塞於外部依賴
 - [x] **Phase 11: 紙本申復清單列印** - 官方三聯式申復清單 PDF 排版輸出通道
-- [ ] **Phase 11.1: Close milestone audit gaps (INSERTED)** - Phase 4 病歷時間軸未接入 + Phase 9/9.1/11 金額數量欄位鏈斷裂
+- [x] **Phase 11.1: Close milestone audit gaps (INSERTED)** - Phase 4 病歷時間軸未接入 + Phase 9/9.1/11 金額數量欄位鏈斷裂
 
 ## Phase Details
 
@@ -243,7 +243,7 @@ Phase 9/9.1/11 欄位鏈斷裂兩項 critical blocker，milestone v1.0 收尾前
 | 09.1. Address tech debt | 3/3 | Complete | 2026-08-08 |
 | 10. VPN／實機串接 | 0/1 | Blocked（外部依賴） | - |
 | 11. 紙本申復清單列印 | 3/3 | Complete（UAT 7/7 通過，2026-08-10） | 2026-08-08 |
-| 11.1. Close milestone audit gaps | 0/0 | Not planned（URGENT，2 critical blockers） | - |
+| 11.1. Close milestone audit gaps | 2/2 | Complete（BLOCKER-1/2 閉合，2026-08-10） | 2026-08-10 |
 
 ## Out of Roadmap Scope
 
@@ -266,5 +266,5 @@ The following material from 電子抽審.md is background/context only and is NO
 **Plans:** 2 plans
 
 Plans:
-- [ ] 11.1-01-PLAN.md — 修復金額/數量欄位鏈（_to_appeal_case 補 order_seq、build_submission_from_case 映射 deduct_amount→points、generate 契約透傳 order_seq；數量欄留空為使用者確認的已知限制）
-- [ ] 11.1-02-PLAN.md — 具現化 LocalFileProvider 接入兩端點（RECORDS_DIR＋前端病歷號輸入欄＋audit/generate timeline 接線＋records_degraded 前端呈現）
+- [x] 11.1-01-PLAN.md — 修復金額/數量欄位鏈（_to_appeal_case 補 order_seq、build_submission_from_case 映射 deduct_amount→points、generate 契約透傳 order_seq；數量欄留空為使用者確認的已知限制）
+- [x] 11.1-02-PLAN.md — 具現化 LocalFileProvider 接入兩端點（RECORDS_DIR＋前端病歷號輸入欄＋audit/generate timeline 接線＋records_degraded 前端呈現）
