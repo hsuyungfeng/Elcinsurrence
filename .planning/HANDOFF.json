@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-08-10T08:04:16.309Z",
+  "phase": null,
+  "phase_name": null,
+  "phase_dir": null,
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": "v1.0", "name": "Milestone v1.0 shipped（13 phases，25 plans，38 tasks，2026-08-10）", "status": "done", "commit": "a6c080e（+ tag v1.0）"},
+    {"id": "11.1", "name": "Phase 11.1 gap-closure：BLOCKER-1（病歷時間軸接入）＋BLOCKER-2（金額/醫令序欄位鏈）", "status": "done", "commit": "4647d72..b929c17"},
+    {"id": "VALIDATE-11", "name": "11-VALIDATION.md 回填 approved（nyquist_compliant: true）", "status": "done", "commit": "f5052ed"},
+    {"id": "REQ-SYNC", "name": "REQUIREMENTS.md 全 REQ Status 同步＋11-UAT status → complete", "status": "done", "commit": "2cbb1ba"},
+    {"id": "ARCHIVE", "name": "Milestone 歸檔（milestones/v1.0-*、MILESTONES.md、ROADMAP 重組、git rm REQUIREMENTS.md）", "status": "done", "commit": "f0bddb5..4a4f57f"},
+    {"id": "PROJECT-EVOLVE", "name": "PROJECT.md 全面演進（Validated Requirements 10 REQ、Context）", "status": "done", "commit": "24f35cc"},
+    {"id": "RETRO", "name": "RETROSPECTIVE.md v1.0 反思", "status": "done", "commit": "a6c080e"}
+  ],
+  "remaining_tasks": [
+    {"id": "PUSH", "name": "git push origin main（18 commits）＋tag v1.0", "status": "in_progress", "progress": "待執行"},
+    {"id": "NEXT-MILESTONE", "name": "下一 milestone 規劃（/gsd-new-milestone）——建議方向：Phase 10 實機串接（外部依賴就緒後）、e2e 第 5 層真實樣本、安全 P2-9 parse_flexible_date 修復", "status": "not_started"}
+  ],
+  "blockers": [
+    {"description": "Phase 10（VPN/實機 HIS 串接）——需 doctor-toolbox 存取權、Windows+VPN+SAM 實機", "type": "external", "workaround": "milestone v1.0 已以外部阻塞歸檔，不計入範圍；下一 milestone 視依賴就緒情況重啟"},
+    {"description": "e2e 第 5 層真實樣本回放受限於 ground truth 數據缺口（核減明細實體檔、門診抽樣 CSV、人工申復案例未取得）", "type": "human_action", "workaround": "待使用者提供真實樣本後於下一 milestone 補齊"}
+  ],
+  "human_actions_pending": [
+    {"action": "git push origin main ＋ tag v1.0", "context": "18 commits 與 v1.0 tag 尚未推送遠端", "blocking": false},
+    {"action": "決定下一 milestone 方向（Phase 10 實機串接 vs e2e 樣本 vs 安全修復）", "context": "STATE.md 已為 Awaiting next milestone", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "milestone v1.0 收尾（含 Phase 10 外部阻塞歸檔）", "rationale": "audit 第 2 輪判定 Phase 10 屬外部依賴；11.1 閉合 2 個 critical blocker 後達收尾條件", "phase": "v1.0"},
+    {"decision": "數量欄留空＋警告為已知限制", "rationale": "來源契約（D-14d 18 欄、generate 請求）無 total_qty，使用者確認接受", "phase": "11.1"},
+    {"decision": "generate 端點病歷號＝前端可選輸入欄（aRecordNoInput）", "rationale": "_to_appeal_case record_no 恆 None，輸入欄是 timeline 查詢唯一真實來源；留空誠實標記 no_record_no", "phase": "11.1"},
+    {"decision": "11-VALIDATION.md 回填 approved", "rationale": "執行後實測 37 passed、6/6 task 測試落地，無 gap", "phase": "11"}
+  ],
+  "uncommitted_files": [
+    ".planning/config.json",
+    ".reasonix/",
+    "reasonix.toml"
+  ],
+  "next_action": "git push origin main && git push origin v1.0，然後 /gsd-new-milestone",
+  "context_notes": "Milestone v1.0 已完整收尾並歸檔。工作樹僅剩本地工具配置（.planning/config.json、.reasonix/、reasonix.toml——歷來排除於 commit 之外）。STATE.md = Awaiting next milestone。下一 session 直接 /gsd-new-milestone 即可。"
+}
