@@ -20,6 +20,12 @@ from pathlib import Path
 
 from flask import Flask, g, jsonify, request, send_from_directory
 
+from config import settings
+from elc_audit_engine.record_aggregator import (
+    LocalFileProvider,
+    PatientTimeline,
+    build_timeline,
+)
 from elc_audit_engine.auth import (
     API_KEY_HEADER,
     AuthConfigError,
@@ -415,6 +421,51 @@ def _to_appeal_case(idx: int, rec) -> dict:
     }
 
 
+# 11.1-02（BLOCKER-1）：records_degraded 原因文案（固定中文模板，不含
+# RECORDS_DIR 路徑／病歷號，T-1112-01）。records_source 四態：
+# ok（實查成功）／absent（已查詢、病患缺席，C5 降級）／unconfigured
+# （病歷來源未設定，未嘗試查詢）／no_record_no（有來源但請求未帶病歷號）。
+_RECORDS_DEGRADED_REASONS = {
+    "unconfigured": "病歷來源未設定（病歷目錄不存在）",
+    "no_record_no": "請求未提供病歷號",
+    "absent": "查無此病患病歷檔案",
+}
+
+
+def _records_provider() -> LocalFileProvider | None:
+    """具現化病歷 Provider（Phase 4 LocalFileProvider，BLOCKER-1 接線）。
+
+    RECORDS_DIR 目錄存在 → LocalFileProvider（實查半年病史）；不存在 →
+    None（代表「病歷來源未設定」，不是「病患缺席」——兩者語意不同）。
+
+    實際查詢走 build_timeline：PatientRecordsNotFound 內捕降級（absent），
+    RecordProviderError（JSON 損毀等 infra 故障）向外穿透至統一 500
+    （P0-2/T-1112-03，不吞成業務結論）。
+    """
+    if os.path.isdir(settings.RECORDS_DIR):
+        return LocalFileProvider(settings.RECORDS_DIR)
+    return None
+
+
+def _resolve_records_source(
+    provider: LocalFileProvider | None, record_no: str
+) -> tuple[PatientTimeline | None, str]:
+    """依 Provider 具現化與 record_no 解析 timeline 與 records_source 四態。
+
+    Returns:
+        (timeline, records_source)：timeline 為 PatientTimeline | None；
+        records_source ∈ ok/absent/unconfigured/no_record_no。
+    """
+    timeline = None
+    if provider is not None and record_no:
+        agg = build_timeline(provider, record_no)
+        timeline = agg.timeline
+        return timeline, ("absent" if agg.degraded else "ok")
+    if provider is not None:
+        return None, "no_record_no"
+    return None, "unconfigured"
+
+
 @app.route('/')
 def index():
     return send_from_directory('static', 'index.html')
@@ -502,7 +553,15 @@ def audit_sampling_case():
     soap_doc = parse_soap_text(soap_text) if soap_text else None
 
     try:
-        result = run_presubmission_check(case, soap_doc, None)
+        # 11.1-02（BLOCKER-1）：以 Provider 具現化＋timeline 解析取代寫死的
+        # timeline=None——RECORDS_DIR 存在且請求帶病歷號時，LocalFileProvider
+        # 實查半年病史並傳入 run_presubmission_check（Success Criteria 1）。
+        # RecordProviderError（JSON 損毀等 infra 故障）不在此捕捉，穿透至
+        # errorhandler 統一 500（P0-2/T-1112-03）；PatientRecordsNotFound 由
+        # build_timeline 內捕為 degraded=True（C5 正常降級）。
+        provider = _records_provider()
+        timeline, records_source = _resolve_records_source(provider, record_no)
+        result = run_presubmission_check(case, soap_doc, timeline)
     except RuleRepositoryError as exc:
         # D-06/P0-2：規則庫故障不得偽裝成「查無規則」或「裸奔」。
         app.logger.error("rule repository failure during presubmission: %s", exc)
@@ -554,6 +613,14 @@ def audit_sampling_case():
             for n in oj.narratives
         ],
         "records_degraded": result.comparison.records_degraded,
+        "records_source": records_source,
+        # 降級原因文案（固定中文模板，不含路徑／病歷號，T-1112-01）；
+        # 僅 records_degraded=True 時提供，否則 None。
+        "records_degraded_reason": (
+            _RECORDS_DEGRADED_REASONS.get(records_source)
+            if result.comparison.records_degraded
+            else None
+        ),
     })
 
 
@@ -727,6 +794,12 @@ def generate_appeal_draft():
     order_code = _clean_str(data, 'order_code', required=True)
     deduction_reason = _clean_str(data, 'deduction_reason', max_len=_MAX_SOAP_CHARS)
     case_id = _clean_str(data, 'case_id')
+    # 11.1-02（BLOCKER-1）：病歷號＝Phase 3 d3＝LocalFileProvider 的
+    # patient_id。選填：前端 appeal 面板病歷號輸入欄（aRecordNoInput）送出；
+    # CSV 匯入案件 payload.record_no 恆 None，此欄是 generate 端點 timeline
+    # 查詢的唯一真實來源——有值才查，無值由下方 timeline 解析誠實標記
+    # no_record_no（plan-checker BLOCKER 2 使用者裁示）。
+    record_no = _clean_str(data, 'record_no')
     # 11.1-01：透傳 order_seq（欄 10 醫令序號）至 DeductionRecord，經
     # render_appeal_json 的 order_seq/p1_order_seq（appeal.py:486/494）流入
     # 紙本 build_rows 的 _find_order_by_seq——醫令序對應 API 路徑閉合。
@@ -779,10 +852,18 @@ def generate_appeal_draft():
     else:
         evidence = []
 
+    # 11.1-02（BLOCKER-1）：timeline 解析（共用 _records_provider() helper，
+    # 與 /api/sampling/audit 同一語意）。PatientRecordsNotFound 由
+    # build_timeline 內捕降級；RecordProviderError（infra 故障）向外穿透
+    # 統一 500，不吞成業務結論（P0-2/T-1112-03）。
+    provider = _records_provider()
+    timeline, records_source = _resolve_records_source(provider, record_no)
+
     draft = build_appeal_draft(
         record,
         is_appealing=is_appealing,
         claimed_points=claimed_points,
+        timeline=timeline,
         rule_text=rule_text,
         rule_location=rule_location,
         evidence=evidence,
@@ -802,11 +883,20 @@ def generate_appeal_draft():
     # reason2/p6_points/total_char_count/xml_p8_p9_valid/record_no/頂層
     # over_limit/case_seq/order_code）已整段移除——單一契約、不做雙契約兼容。
     payload = json.loads(render_appeal_json(draft))
-    # 僅併入三個補充鍵：status/case_id/rule_found（rule_found 來自規則庫
-    # get_rule 的 :754 rule.found，不在 AppealDraft 內）。
+    # 僅併入補充鍵：status/case_id/rule_found（rule_found 來自規則庫
+    # get_rule 的 :754 rule.found，不在 AppealDraft 內）＋11.1-02 新增
+    # records_degraded/records_source/records_degraded_reason 三鍵。
     payload["status"] = "success"
     payload["case_id"] = case_id or None
     payload["rule_found"] = rule.found
+    # 11.1-02（BLOCKER-1）：records_degraded＝timeline is None（與 comparator
+    # records_degraded = timeline is None 同語意）；原因文案固定中文模板，
+    # 不含路徑／病歷號（T-1112-01），僅降級時提供否則 None。
+    payload["records_degraded"] = timeline is None
+    payload["records_source"] = records_source
+    payload["records_degraded_reason"] = (
+        _RECORDS_DEGRADED_REASONS.get(records_source) if timeline is None else None
+    )
     return jsonify(payload)
 
 

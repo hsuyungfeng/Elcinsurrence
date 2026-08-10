@@ -22,6 +22,11 @@ FACILITY_CONFIG_PATH = os.getenv(
     "FACILITY_CONFIG_PATH", os.path.join(PROJECT_ROOT, "config/facility.json")
 )
 
+# 11.1-02（BLOCKER-1）：病歷資料來源根目錄（Phase 4 LocalFileProvider 契約，
+# `<RECORDS_DIR>/<patient_id>/records.json`），可用環境變數覆寫（比照
+# FACILITY_CONFIG_PATH 模式）；預設 data/samples/records。
+RECORDS_DIR = os.getenv("RECORDS_DIR", os.path.join(DATA_DIR, "samples", "records"))
+
 # Phase 9-01：存取審計日誌路徑（JSON Lines，無 PHI）。
 AUDIT_LOG_PATH = os.getenv("AUDIT_LOG_PATH", os.path.join(PROJECT_ROOT, "data/audit/access.log"))
 
