@@ -535,6 +535,9 @@
           case_seq: currentSelectedCase.case_seq,
           order_code: currentSelectedCase.order_code,
           order_name: currentSelectedCase.order_name,
+          // 11.1-01：醫令序對應閉合——透傳 order_seq（_to_appeal_case 補欄後
+          // CSV 匯入與 API 生成兩路徑皆帶），紙本申復清單「醫令序」欄可對應。
+          order_seq: currentSelectedCase.order_seq,
           deduct_amount: currentSelectedCase.deduct_amount,
           deduction_reason: currentSelectedCase.deduction_reason,
           // ④ 素材＝醫師採用的補強敘述（字串陣列）。多源證據摘要暫以

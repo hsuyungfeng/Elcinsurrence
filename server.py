@@ -401,6 +401,11 @@ def _to_appeal_case(idx: int, rec) -> dict:
         "patient_name": None,
         "order_code": rec.order_code,
         "order_name": name or rec.order_code,
+        # W5 數據流（11.1-01）：透傳 rec.order_seq（欄 10「醫令序號」，
+        # models.py:190，對應申報 XML p13）——僅透傳不轉型（None 時照印
+        # None，與既有 id_number 透傳同一語意）；points 映射由轉換層
+        # （case_to_submission.py 單筆分支）負責，本函式不新增 orders。
+        "order_seq": rec.order_seq,
         "deduct_amount": rec.non_reimbursed_amount,
         "deduction_reason": rec.deduction_reason or rec.institution_note or "",
         "visit_date": rec.visit_date,
@@ -722,6 +727,11 @@ def generate_appeal_draft():
     order_code = _clean_str(data, 'order_code', required=True)
     deduction_reason = _clean_str(data, 'deduction_reason', max_len=_MAX_SOAP_CHARS)
     case_id = _clean_str(data, 'case_id')
+    # 11.1-01：透傳 order_seq（欄 10 醫令序號）至 DeductionRecord，經
+    # render_appeal_json 的 order_seq/p1_order_seq（appeal.py:486/494）流入
+    # 紙本 build_rows 的 _find_order_by_seq——醫令序對應 API 路徑閉合。
+    # 選填、沿用 _MAX_FIELD_CHARS 上限（T-1111-01 _clean_str 既有防護）。
+    order_seq = _clean_str(data, 'order_seq')
 
     is_appealing = data.get('is_appealing', True)
     if not isinstance(is_appealing, bool):
@@ -746,6 +756,9 @@ def generate_appeal_draft():
         order_code=order_code,
         deduction_reason=deduction_reason or None,
         non_reimbursed_amount=deduct_amount,
+        # 選填：缺省時 _clean_str 回 ""，以 or None 維持「缺省 None、不捏造」
+        # （與 deduction_reason 同模式），render_appeal_json 誠實輸出 null。
+        order_seq=order_seq or None,
     )
 
     # 規則全文一律取自規則庫，不得自行拼造（原實作的核心問題）。

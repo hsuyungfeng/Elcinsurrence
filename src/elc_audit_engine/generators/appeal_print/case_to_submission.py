@@ -18,7 +18,9 @@ primary_diagnosis/clinic/submit_date/orders），缺欄誠實留空＋warnings �
 - **orders**：payload 已有 `orders`（list[dict]，SubmissionCase 風格）→
   直通（既有資料非捏造）；否則由單筆案件 order_code/order_name 構造
   `[{"code": …, "name": …}]`（name 為 None 時省略該鍵）；order_seq 存在時
-  映射至 orders[0]["seq"]。無任何醫令資料 → 空 list（誠實留空）。
+  映射至 orders[0]["seq"]；deduct_amount 存在時映射至 orders[0]["points"]
+  （11.1-01 金額鏈閉合，None 不加鍵不寫 0）。無任何醫令資料 → 空 list
+  （誠實留空）。
 - **visit_date/fee_year_month** 屬既有資料直通（非捏造），允許存在於
   submission（端到端用途），warnings 不因多餘鍵而觸發。
 """
@@ -99,6 +101,10 @@ def build_submission_from_case(payload: dict) -> tuple[dict, list[str]]:
             order["name"] = payload["order_name"]
         if payload.get("order_seq") is not None:
             order["seq"] = payload["order_seq"]
+        # 11.1-01：金額鏈閉合——來源存在（deduct_amount）時才加入 points 鍵；
+        # None 不加鍵、不寫 0、不 type cast（維持模組 docstring「不捏造」語意）。
+        if payload.get("deduct_amount") is not None:
+            order["points"] = payload["deduct_amount"]
         orders = [order]
     else:
         orders = []
