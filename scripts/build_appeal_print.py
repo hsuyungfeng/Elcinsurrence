@@ -122,6 +122,20 @@ def main(argv: list[str] | None = None) -> int:
     # 決定輸出：未指定 output_pdf 時輸出至 settings.OUTPUT_DIR，stem 由
     # appeal JSON 的 case_seq 與 order_seq 組出，先經 safe_filename 校驗（T-11-04）。
     if output_pdf_path:
+        # 路徑穿越防線（UAT-07b 修復）：safe_filename() 只驗證單一路徑段（basename），
+        # 若在此之前就用 os.path.dirname()/os.path.basename() 拆解，`../` 等穿越
+        # 成分會混入 output_dir 而完全繞過白名單檢查——與 safe_paths.py docstring
+        # 明確警告的「先取 basename 等於把攻擊悄悄清洗成合法檔名」同一種失守模式。
+        # CLI 呼叫端本可合理指定任意絕對／相對輸出路徑（非僅限 settings.OUTPUT_DIR），
+        # 故不比對固定根目錄；而是直接偵測路徑各段是否含 `..` 穿越成分——
+        # 這是穿越攻擊的根本特徵，一律拒絕（校驗後拒絕，非清洗取代，與
+        # safe_filename 同一原則）。
+        if os.pardir in output_pdf_path.split(os.sep):
+            print(
+                f"錯誤：不安全的檔名 '{output_pdf_path}': 輸出路徑含路徑穿越成分",
+                file=sys.stderr,
+            )
+            return 1
         output_dir = os.path.dirname(output_pdf_path) or "."
         base = os.path.basename(output_pdf_path)
         if base.lower().endswith(".pdf"):
