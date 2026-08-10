@@ -2,14 +2,16 @@
 
 ## What This Is
 
-`elc-audit-engine` is a local, file-in/file-out engine that automates two stages of Taiwan's National Health Insurance (健保) electronic audit (電子抽審) workflow for a medical clinic:
+`elc-audit-engine` is a local-first engine that automates two stages of Taiwan's National Health Insurance (健保) electronic audit (電子抽審) workflow for a medical clinic:
 
 1. **病歷補強 (pre-submission record reinforcement)** — before a case is submitted for audit, identify which medical orders (醫令) lack adequate documentary support against the payment rules, and generate candidate reinforcement narratives for physician review.
 2. **申復生成 (post-denial appeal generation)** — after a case is denied (核減), generate a draft appeal (p8/p9 fields, ≤2000 Chinese characters) citing the relevant rule text and supporting medical record evidence.
 
 Both stages share a single comparison pipeline (order ↔ rule ↔ record three-way matcher); only the output differs.
 
-source: progress.md D3
+**v1.0 擴充（2026-08-10 shipped）：** 新增紙本申復清單輸出通道（官方三聯式 PDF，`build_appeal_print.py` CLI＋`render_appeal_print` 純函式）、HIS 服務化（Flask API：案件匯入/預審/申復生成/狀態機＋任務佇列）、以及 Phase 4 病歷時間軸的生產路徑接入（`LocalFileProvider`＋`RECORDS_DIR`，兩端點不再以 `timeline=None` 降級）。
+
+source: progress.md D3；v1.0-MILESTONE-AUDIT.md（2026-08-10）
 
 ## Why
 
@@ -22,7 +24,9 @@ source: 電子抽審.md §一 (As-Is流程圖)
 - **Phase 1** — an independent, decoupled engine: core comparison/generation logic separated from data source. Runs entirely local, file-in/file-out. This is the phase covered by the roadmap below (M1-M8).
 - **Phase 2** — package the Phase 1 engine as a `doctor-toolbox` HIS module: cloud medical-record Provider via `doctor-toolbox`, Flask API-ification for HIS calls, and integration with the Local Agent / `NHI_EIIAPI` upload flow described in 電子抽審.md.
 
-source: progress.md D1 (LOCKED)
+**v1.0 進度（2026-08-10）：** Phase 1 的服務化部分（Flask API、Provider 接線）已於 milestone v1.0 完成；Phase 2 剩餘的 VPN／實機串接（雲端 Provider、NHI_EIIAPI wrapper、Local Gateway 七元件）因外部依賴阻塞，不計入 v1.0 範圍。
+
+source: progress.md D1 (LOCKED)；v1.0-MILESTONE-AUDIT.md
 
 ## Core Architecture (LOCKED)
 
@@ -89,3 +93,26 @@ source: constraints.md C9, C10, C12; context.md (Phase 2 topics)
 | `電子抽審.md` | DOC | 2 | Background/context + field-level schema detail |
 
 Full traceability: `.planning/intel/decisions.md`, `.planning/intel/requirements.md`, `.planning/intel/constraints.md`, `.planning/intel/context.md`
+
+## Validated Requirements（v1.0 shipped，2026-08-10）
+
+- ✓ **REQ-project-skeleton** — uv 專案＋config＋目錄結構（01-01-VERIFICATION passed）
+- ✓ **REQ-rule-repository** — CSV→SQLite＋審查注意事項樹狀索引＋rule_mapping 預編譯（3/3 驗收，20 碼人工核對 20/20）
+- ✓ **REQ-parsers** — 申報 XML／核減清單／SOAP 三解析器（真實檔回放 633 案／0 拒收）
+- ✓ **REQ-record-aggregator** — RecordProvider ABC＋LocalFileProvider＋半年病史時間軸（v1.0 重新達成：已接入 Flask API 生產路徑，11.1-VERIFICATION 12/12）
+- ✓ **REQ-three-way-comparator** — 醫令↔規則↔病歷三方比對（139 passed）
+- ✓ **REQ-output-reinforcement-report** — 病歷補強報告.md（152 passed）
+- ✓ **REQ-output-appeal-draft** — 申復理由草稿＋申復 XML（`render_appeal_json` 契約穩定）
+- ⚠️ **REQ-e2e-testing** — 五層 1-4 完整；第 5 層真實樣本回放受限於 ground truth 數據缺口（partial）
+- ⚠️ **REQ-phase2-his-integration** — 服務化部分 satisfied（Flask API）；VPN 實機串接外部依賴阻塞（partial，milestone 範圍外）
+- ✓ **REQ-paper-appeal-print** — 紙本申復清單三聯 PDF（VERIFICATION 3/3＋UAT 7/7）
+
+## Context（v1.0 after）
+
+- **Codebase:** ~10,071 行 Python（src/ + server.py + scripts/）；Flask API（server.py 884 行）；測試基線 438 passed / 2 skipped（440 collected）
+- **Tech stack:** Python 3.12 + uv、Flask、SQLite、python-docx、ChromaDB（auxiliary RAG）、pypdf、llama.cpp（local LLM，localhost:8080）
+- **Shipped 2026-08-10:** 13 phases（12 complete＋Phase 10 外部阻塞），25 plans，38 tasks，164 commits
+- **Known debt:** rule_mapping 46% 無匹配率（recall 限制，deferred）；e2e 第 5 層真實樣本待取得；Phase 9 未做 rate limiting／API key 輪替；安全 P2-9 `parse_flexible_date` 未驗證真實曆法
+
+---
+*Last updated: 2026-08-10 after v1.0 milestone*
