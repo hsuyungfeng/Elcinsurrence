@@ -3,9 +3,10 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 11.1
-status: Phase 11.1 complete
+status: Awaiting next milestone
 stopped_at: **Phase 11 完成（UAT 7/7 passed），milestone v1.0 現僅卡在 Phase 10（外部依賴阻塞中）**
-last_updated: "2026-08-10T07:55:24.422Z"
+last_updated: "2026-08-10T08:01:31.997Z"
+last_activity: 2026-08-10 — Milestone v1.0 completed and archived
 progress:
   total_phases: 13
   completed_phases: 12
@@ -216,3 +217,14 @@ STATE.md 的敘述性欄位會與 git 脫節，恢復時一律以 `git log` 與�
 **Next recommended run:** `/gsd-plan-phase 11.1`
 
 > **Roadmap Evolution (2026-08-10):** Phase 11.1 (INSERTED, after 11) — "Close milestone audit gaps: Phase 4 病歷時間軸未接入 Flask API + Phase 9/9.1/11 金額數量欄位鏈斷裂"（URGENT）
+
+## Current Position
+
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-10 — Milestone v1.0 completed and archived
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
