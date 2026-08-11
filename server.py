@@ -1085,13 +1085,13 @@ def generate_deduction_print():
     if not records:
         raise ApiError("無有效核減資料可供列印")
 
-    facility = settings.load_facility_config()
-
+    from config import settings
     from elc_audit_engine.safe_paths import safe_filename
+    from elc_audit_engine.generators.deduction_print import write_deduction_print
+
+    facility = settings.load_facility_config()
     stem = safe_filename(case_id or uuid.uuid4().hex[:8], "file_stem")
 
-    from elc_audit_engine.generators.deduction_print import write_deduction_print
-    from config import settings
     PRINT_BASE_ODT = os.path.join(
         settings.PROJECT_ROOT,
         "officialdocument",
