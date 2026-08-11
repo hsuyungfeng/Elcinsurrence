@@ -1159,7 +1159,6 @@ def generate_evidence_packet_print():
     try:
         pdf_path, warnings = write_evidence_packet(
             settings.OUTPUT_DIR,
-            safe_case,
             case.payload,
             facility,
             tracking=case.history if hasattr(case, "history") else None,

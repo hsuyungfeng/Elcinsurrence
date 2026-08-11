@@ -40,7 +40,7 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 
 - [x] Phase 12: 影像佐證上傳與關聯驅動（0/1 plans）— 接收 procedure/sono/X-ray 影像上傳，依案件流水號命名關聯，`has_attachment` 改由「是否有實際上傳檔案」真實驅動 `p7=Y/N`。 (completed 2026-08-11)
 - [ ] Phase 13: 核減明細原格式列印（0/1 plans）— 系統處理完核減資料後，印出跟官方核減清單原始紙本一致的版面（RCPI2021R01/RCPI2001R01/RCPI2012R01 式樣）。
-- [ ] Phase 14: 審核軌跡＋病歷摘要＋申復理由＋影像佐證包列印（0/1 plans）— 整合軌跡 JSON、補強 Markdown 報告、申復理由與影像佐證圖片，合成可列印佐證包 PDF。
+- [x] Phase 14: 審核軌跡＋病歷摘要＋申復理由＋影像佐證包列印（0/1 plans）— 整合軌跡 JSON、補強 Markdown 報告、申復理由與影像佐證圖片，合成可列印佐證包 PDF。 (completed 2026-08-11)
 
 ## Phase Details
 
@@ -90,7 +90,7 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 | 11.1. Close milestone audit gaps | 2/2 | Complete | 2026-08-10 |
 | 12. 影像佐證上傳與關聯驅動 | 1/1 | Complete   | 2026-08-11 |
 | 13. 核減明細原格式列印 | 2/3 | In Progress|  |
-| 14. 審核軌跡＋佐證包列印 | 0/1 | Pending | - |
+| 14. 審核軌跡＋佐證包列印 | 3/3 | Complete   | 2026-08-11 |
 
 ## Out of Roadmap Scope
 
