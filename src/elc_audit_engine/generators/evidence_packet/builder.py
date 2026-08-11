@@ -25,6 +25,7 @@ def build_evidence_packet_docx(
     timeline_data: dict,
     appeal_draft: dict,
     attachment_records: list,
+    facility: dict | None = None,
 ) -> tuple[Document, list[str]]:
     doc = Document()
     warnings = []
