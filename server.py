@@ -93,6 +93,7 @@ _AUTH_EXEMPT_ENDPOINTS = _AUDIT_EXEMPT_ENDPOINTS | frozenset({
     "get_appeal_attachments",
     "delete_appeal_attachment",
     "generate_deduction_print",
+    "generate_evidence_packet_print",
 })
 
 
@@ -1106,6 +1107,64 @@ def generate_deduction_print():
             records,
             facility,
             template_odt_path=PRINT_BASE_ODT,
+        )
+    except Exception as exc:
+        raise ApiError(f"產生 PDF 失敗: {exc}")
+
+    pdf_url = f"/output/{os.path.basename(pdf_path)}"
+    
+    return jsonify({
+        "status": "success",
+        "pdf_url": pdf_url,
+        "warnings": warnings,
+    })
+
+
+@app.route('/api/appeal/evidence-packet/print', methods=['POST'])
+def generate_evidence_packet_print():
+    """生成佐證包完整 PDF (Phase 14)"""
+    data = request.json or {}
+    if not isinstance(data, dict):
+        raise ApiError("請求主體必須為 JSON 物件")
+
+    case_id = _clean_str(data, 'case_id', required=True)
+    
+    from elc_audit_engine.safe_paths import safe_filename
+    safe_case = safe_filename(case_id, "case_id")
+
+    try:
+        case = _case_store.get(safe_case)
+    except CaseNotFoundError:
+        raise ApiError(f"找不到案件 '{safe_case}'", status=404)
+
+    if not case.payload:
+        raise ApiError("案件 payload 為空")
+
+    from config import settings
+    facility = settings.load_facility_config()
+    attachments = [
+        {
+            "id": a.id,
+            "filename": a.filename,
+            "file_path": a.file_path,
+            "mime_type": a.mime_type,
+            "order_seq": a.order_seq,
+            "order_code": a.order_code,
+        }
+        for a in attachment_store.list_attachments(safe_case)
+    ]
+
+    from elc_audit_engine.generators.evidence_packet import write_evidence_packet
+
+    try:
+        pdf_path, warnings = write_evidence_packet(
+            settings.OUTPUT_DIR,
+            safe_case,
+            case.payload,
+            facility,
+            tracking=case.history if hasattr(case, "history") else None,
+            timeline=None, # In real use, this might be injected similarly to pre-check if needed, but for print it's fine. Wait, plan says "timeline via PatientTimeline | None" which is default.
+            attachments=attachments,
         )
     except Exception as exc:
         raise ApiError(f"產生 PDF 失敗: {exc}")
