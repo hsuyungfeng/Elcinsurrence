@@ -85,15 +85,34 @@
 
 > 架構差距矩陣見 [`deepflash4improve.md`](deepflash4improve.md) §7.3：引擎＝架構圖的「大腦」已完備。服務外殼（Review/Appeal Service、Package Builder、狀態機）已於 GSD Phase 9 完成；Local Gateway 整側與雲端病歷 Provider 移至 GSD Phase 10，外部依賴（doctor-toolbox 存取權、NHI_EIIAPI.DLL、Windows+VPN+SAM 實機）門控中。
 
-### GSD Phase 11 — 紙本申復清單列印（規劃中，2026-08-08 新增）
-- [ ] 依官方三聯式「門診醫療費用點數申復清單」版式（105.04.01 修訂版）從 `AppealDraft`
-      直接產出可列印 PDF，供未串接 HIS 或選擇紙本作業的院所使用
-- **背景**：檢討電子 vs 紙本兩種抽審申復流程覆蓋現況時發現，紙本 OCR 辨識輸入
-  （`media.py`／`table_ocr.py`）與內部資料處理（`CaseStore`／`AppealDraft`）皆已與
-  電子流程共用引擎，但輸出端只有 Markdown／JSON／申復 XML，缺少可列印 PDF
-- **依賴**：Phase 7（`AppealDraft` 資料契約已具備）——**不依賴 Phase 10**，紙本列印
-  是獨立輸出通道，不需等 VPN/實機串接解除門控
-- 詳見 `.planning/ROADMAP.md` Phase 11、`.planning/phases/11-paper-appeal-print/11-CONTEXT.md`
+### GSD Phase 11 — 紙本申復清單列印（**已完成 2026-08-08**）
+- [x] 依官方三聯式「門診醫療費用點數申復清單」版式（105.04.01 修訂版）從 `AppealDraft`
+      直接產出可列印 PDF，供未串接 HIS 或選擇紙本作業的院所使用（ODT 模板填值 + soffice headless 轉 PDF，三聯各 1 頁，超行自動分頁）
+- [x] `config/facility.json` 院所基本資料設定（`code`/`name`/`address`/`physician_name`，缺必填 fail-fast）
+- [x] 超行自動分頁重複表頭，患者層欄位 join 缺欄誠實警告不捏造
+- 詳見 `.planning/ROADMAP.md` Phase 11、`.planning/phases/11-paper-appeal-print/`
+
+### GSD Milestone v1.1 — 紙本→數位化整合三項輸出（**已完成 2026-08-11**）
+
+#### Phase 12 — 影像佐證上傳與關聯驅動
+- [x] `attachment_store.py`：Magic Bytes 驗證（PNG/JPEG/HEIC/PDF）+ `safe_filename` 路徑穿越防護 + PHI-zero 審計（只記操作不留檔名內容）
+- [x] `POST /api/appeal/attachments/upload`、`GET /api/appeal/attachments/<case_seq>`、`DELETE /api/appeal/attachments/<case_seq>/<id>`
+- [x] `generators/appeal.py` 的 `has_attachment`/`p7` 改由「是否有實體附件存在」真實驅動（非手動旗標）
+
+#### Phase 13 — 核減明細原格式列印
+- [x] `deduction_print/` 模組：ODT ElementTree 動態 `<table:table-row>` 複製 + soffice headless 轉 PDF（TemporaryDirectory 隔離）
+- [x] `POST /api/deduction/print`（接受 `records[]` 陣列，回傳 `/output/核減明細_xxxxxxxx.pdf` 下載 URL）
+- [x] `scripts/build_deduction_print.py` CLI 工具（接受 CSV 輸入）
+- [x] RCPI2012R01 ODT 模板建立（含完整表格佔位符結構）
+
+#### Phase 14 — 審核軌跡＋病歷摘要＋申復理由＋影像佐證包列印
+- [x] `evidence_packet/` 模組三層管線：`python-docx`（DOCX 架構）→ `soffice headless`（DOCX→PDF）→ `pypdf`（合訂多段 PDF）
+- [x] `image_processor.py`：Pillow + pillow_heif（HEIC 支援）+ EXIF 自動旋轉 + A4 縮放；損毀圖片自動跳過並標紅色警示框
+- [x] `builder.py`：封面頁/審核軌跡/病歷摘要/申復理由全文/影像佐證附錄（每張圖自占一頁）
+- [x] `POST /api/appeal/evidence-packet/print`（`case_id` 或完整 payload，回傳 PDF 下載 URL）
+- [x] `scripts/build_evidence_packet.py` CLI 工具
+- [x] 全套件 **458 passed / 2 skipped**（2026-08-11 基線）
+
 
 ## 五、待釐清 / 待補資料
 
@@ -157,3 +176,10 @@
 | 2026-08-08 | **⚠️ 發現並修復 P1-6：`fcde2c8` 誤把認證豁免清單兼做審計豁免清單，導致業務端點審計日誌完全消失** | `server.py::_record_access_audit` 沿用 `_AUTH_EXEMPT_ENDPOINTS` 判斷是否寫審計，六個業務端點免強制認證後連審計日誌也一併停寫，違反 09-01「認證可選、審計必留」設計。`test_audit_log_records_correct_caller_id`（帶正確 key）失敗即是鐵證。修法：拆成 `_AUDIT_EXEMPT_ENDPOINTS`（僅 index/health/static）與 `_AUTH_EXEMPT_ENDPOINTS`（聯集）兩份獨立清單；`_enforce_api_key` 對豁免端點若仍帶合法 key 也解析 `caller_id`（否則審計全落成 anonymous）。`tests/test_auth.py` 7 個測試斷言同步改寫。全套件 **374 passed / 2 skipped**。**教訓：兩個語義不同的白名單（要不要強制／要不要記錄）不應共用同一個 frozenset，即使目前外延相同**——與 P1-1／P0-2「系統故障必須與業務結論可區分」同源，這裡是「認證狀態必須與審計是否記錄可區分」 |
 | 2026-08-08 | **STATE.md 敘述性欄位再次與 git 脫節（第二次同型教訓）** | `/gsd-resume-work` 恢復時發現 STATE.md 仍記載「準備執行 09-03」，但 git 顯示 09-03/09-04 早已完成，其後還有 5 個 post-Phase-9 commit。已補記同步。同一教訓（`.continue-here.md` 曾於 2026-08-07 記錄過一次）在 2026-08-08 再度發生，確認 STATE.md 敘述性欄位需要在每次 `/gsd-resume-work` 時以 `git log` 覆核，而非信任既有文字 |
 | 2026-08-08 | **新增 GSD Phase 11：紙本申復清單列印**（`cdd1ff3`） | 檢討電子 vs 紙本兩種抽審申復流程覆蓋現況時發現，紙本 OCR 辨識輸入與內部資料處理已與電子流程共用引擎，但輸出端缺少可列印 PDF。新增 REQ-paper-appeal-print、ROADMAP Phase 11（依賴 Phase 7，不依賴 Phase 10）。`/gsd-discuss-phase 11` 已完成，鎖定四項決策：LibreOffice/soffice 套版（延續 Phase 2 docx-tree 工具鏈慣例）、一次列印三聯三頁、院所基本資料新增 config 設定、超行自動分頁重複表頭。詳見 `.planning/phases/11-paper-appeal-print/11-CONTEXT.md` |
+| 2026-08-08 | **GSD Phase 11 全數完成**（3/3 plans） | 三聯式 PDF 生成（ODT ElementTree 填值 + soffice headless）；`config/facility.json` 院所設定（缺必填 fail-fast）；超行自動分頁；患者層欄位 join 缺欄誠實警告不捏造（T-11-03）。測試基線 **374 passed / 2 skipped** |
+| 2026-08-10 | **GSD Phase 11.1 — Close milestone audit gaps**（2/2 plans） | UAT 7/7 全過；補齊 Phase 11 遺漏的 SHA256 模板完整性驗證（`template.py::verify_template_hash`）；補齊端點層整合測試（`test_server_attachment_routes.py` 等）。Milestone v1.0 正式封存 |
+| 2026-08-11 | **GSD Phase 12 — 影像佐證上傳與關聯驅動（完成）** | `attachment_store.py`：Magic Bytes 驗證（PNG/JPEG/HEIC/PDF）+ `safe_filename` 路徑穿越防護 + PHI-zero 審計；`POST /api/appeal/attachments/upload` 上傳、`GET` 列出、`DELETE` 刪除三端點；`generators/appeal.py` 的 `has_attachment`/`p7` 改由實體附件存在與否真實驅動 |
+| 2026-08-11 | **GSD Phase 13 — 核減明細原格式列印（完成）** | `deduction_print/` 模組（ODT ElementTree 動態 table-row 複製 + soffice headless 轉 PDF）；RCPI2012R01 ODT 模板建立；`POST /api/deduction/print` + `scripts/build_deduction_print.py` CLI；TemporaryDirectory 沙盒隔離（T-13-04）；XML Injection 防禦（T-13-01）|
+| 2026-08-11 | **GSD Phase 14 — 審核軌跡＋申復佐證包列印（完成）** | `evidence_packet/` 三層管線（python-docx → soffice headless → pypdf 合訂）；`image_processor.py`（Pillow + pillow_heif HEIC 支援 + EXIF 自動旋轉 + A4 縮放 + 損毀圖片紅色警示框跳過）；`builder.py`（封面/軌跡/摘要/理由/附錄）；`POST /api/appeal/evidence-packet/print` + `scripts/build_evidence_packet.py` CLI；修復 `build_evidence_packet_docx` 缺 `facility` 參數 Bug（`46ab11a`） |
+| 2026-08-11 | **Milestone v1.1「紙本→數位化整合三項輸出」全數 SHIPPED** | Phases 12/13/14 全數完成；全套件 **458 passed / 2 skipped, 0 failed**（145.99s）；`git push origin/main`；HANDOFF.json + `.continue-here.md` 已封存 |
+

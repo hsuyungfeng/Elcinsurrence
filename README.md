@@ -317,7 +317,7 @@ uv run python -m elc_audit_engine.rule_repository.mapping.build_mapping
 uv run pytest -q
 ```
 
-目前基線：**374 passed / 2 skipped**（Phase 9 全數完成＋審計日誌回歸修復後，2026-08-08）。測試零 LLM 依賴（判定與生成皆以替身注入），故不需啟動 llama.cpp 即可全數執行；OCR 表格結構化測試以替身覆蓋，不需 GPU。
+目前基線：**458 passed / 2 skipped**（Milestone v1.1 全數完成，2026-08-11）。測試零 LLM 依賴（判定與生成皆以替身注入），故不需啟動 llama.cpp 即可全數執行；OCR 表格結構化測試以替身覆蓋，不需 GPU。
 
 ---
 
@@ -365,6 +365,133 @@ python scripts/build_appeal_print.py data/output/appeal_001.json data/cases_payl
 ### PHI 注意（P0-3）
 
 PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
+
+---
+
+## 📎 影像佐證上傳（Phase 12）
+
+診所可透過 API 上傳超音波、X 光、處置照片等影像佐證，系統依案件流水號與醫令做命名關聯儲存，並由「實體檔案是否存在」真實驅動申復 XML 中的 `p7`（`has_attachment`）欄位。
+
+### 安全設計
+- **Magic Bytes 驗證**：PNG/JPEG/HEIC/PDF 各有 Header Bytes 硬性比對，副檔名偽造無效。
+- **`safe_filename()` 路徑穿越防護**：白名單校驗（ASCII 英數＋`_-`＋CJK），包含 `../` 等穿越組件直接拒絕。
+- **PHI-zero 審計**：附件操作記錄於存取日誌，**只記錄操作不留檔名內容**（T-12-03）。
+
+#### 🔹 [POST] `/api/appeal/attachments/upload` — 上傳影像佐證
+
+- **請求**：`multipart/form-data`，欄位 `file`（PNG/JPEG/HEIC/PDF，≤10MB）+ JSON body `case_seq`、`order_code`。
+- **回傳**：
+  ```json
+  {
+    "status": "success",
+    "attachment_id": "uuid",
+    "filename": "安全後檔名.jpg",
+    "case_seq": "201",
+    "order_code": "64140C"
+  }
+  ```
+- **狀態碼**：`400` 格式不支援或 Magic Bytes 不符；`413` 超過 10MB；`500` 其他。
+
+#### 🔹 [GET] `/api/appeal/attachments/<case_seq>` — 列出佐證附件
+
+回傳指定案件流水號所有已上傳附件的元資料清單（不回傳二進位內容）。
+
+#### 🔹 [DELETE] `/api/appeal/attachments/<case_seq>/<attachment_id>` — 刪除附件
+
+刪除指定附件檔案，並從 `has_attachment` 計算中排除。
+
+---
+
+## 🗒️ 核減明細原格式列印（Phase 13）
+
+匯入並解析健保核減資料後，可輸出與官方「門診醫療給付抽查核減明細表」紙本一致格式的 PDF，供診所留底或紙本對帳（RCPI2012R01 式樣）。
+
+### 技術設計
+- **ODT ElementTree 動態列複製**：以 `xml.etree.ElementTree` 操作 ODT ZIP 結構，動態複製 `<table:table-row>` 並注入各筆核減記錄，避免 XML/String Injection（T-13-01）。
+- **soffice headless 轉 PDF**：在 `TemporaryDirectory` 沙盒中執行轉換，用後即刪（T-13-04）。
+
+#### 🔹 [POST] `/api/deduction/print` — 核減明細 PDF 列印
+
+- **請求 (JSON)**：
+  ```json
+  {
+    "records": [
+      {
+        "case_seq": "201",
+        "order_code": "64140C",
+        "order_name": "甲床與手指重建術",
+        "deduct_amount": 300,
+        "deduction_code": "D01",
+        "deduction_reason": "病歷未記載甲床損傷範圍",
+        "visit_date": "2026-06-20",
+        "fee_year_month": "11506"
+      }
+    ]
+  }
+  ```
+- **回傳**：
+  ```json
+  {
+    "status": "success",
+    "pdf_url": "/output/核減明細_xxxxxxxx.pdf",
+    "warnings": ["Row 1: 缺病患姓名"]
+  }
+  ```
+- **CLI 替代方案**：`python scripts/build_deduction_print.py data/deduction.csv`
+- **狀態碼**：`400` 缺必填欄位；`500` soffice 轉檔失敗（含錯誤說明）。
+
+---
+
+## 📦 審核軌跡＋申復佐證包列印（Phase 14）
+
+將審核軌跡 JSON、病歷補強 Markdown 報告、申復理由草稿，以及上傳之影像佐證照片，合成為結構完整的「可列印佐證包 PDF」，供診所列印後隨同紙本申復清單合訂寄出。
+
+### 技術設計
+- **管線**：`python-docx`（A4 版面架構） → `soffice headless`（DOCX→PDF） → `pypdf`（合訂多段 PDF）。
+- **影像處理**：`Pillow` + `pillow_heif`（HEIC 支援）＋ EXIF 自動旋轉＋A4 自動縮放；損毀圖片自動跳過並標紅色警示框（不中止整包生成）。
+- **結構**：摘要封面→審核軌跡→病歷摘要→申復理由全文→影像佐證附錄（附錄每張圖自占一頁）。
+
+#### 🔹 [POST] `/api/appeal/evidence-packet/print` — 佐證包 PDF 生成
+
+- **請求 (JSON)**：
+  ```json
+  {
+    "case_id": "APP-0001"
+  }
+  ```
+  亦接受完整 payload（`case_seq`、`orders`、`sections` 等），`case_id` 優先從 `CaseStore` 讀取案件資料。
+- **回傳**：
+  ```json
+  {
+    "status": "success",
+    "pdf_url": "/output/申復佐證包_201.pdf",
+    "warnings": []
+  }
+  ```
+- **CLI 替代方案**：`python scripts/build_evidence_packet.py --case-id APP-0001`
+- **狀態碼**：`400` 缺案件資料；`500` 合成失敗（含錯誤說明）。
+
+---
+
+## 🌐 完整 REST API 端點一覽（v1.1）
+
+| Method | 端點 | 功能 | 認證 |
+|--------|------|------|------|
+| `GET` | `/api/health` | 健康檢查 | 免認證 |
+| `GET` | `/` | 控制台首頁（Web UI） | 免認證 |
+| `GET` | `/api/sampling/cases` | 抽審名冊案件列表 | 選填 |
+| `POST` | `/api/sampling/audit` | 事前預審支持度評估 | 選填 |
+| `POST` | `/api/sampling/import` | 匯入抽審名冊（CSV/PDF/影像） | 選填 |
+| `GET` | `/api/appeal/cases` | 申復草稿案件列表 | 選填 |
+| `POST` | `/api/appeal/generate` | 核減申復草稿生成 | 選填 |
+| `POST` | `/api/appeal/import` | 匯入核減清單 | 選填 |
+| `POST` | `/api/appeal/attachments/upload` | 上傳影像佐證（Phase 12） | 選填 |
+| `GET` | `/api/appeal/attachments/<case_seq>` | 列出佐證附件（Phase 12） | 選填 |
+| `DELETE` | `/api/appeal/attachments/<case_seq>/<id>` | 刪除佐證附件（Phase 12） | 選填 |
+| `POST` | `/api/deduction/print` | 核減明細原格式 PDF（Phase 13） | 選填 |
+| `POST` | `/api/appeal/evidence-packet/print` | 佐證包 PDF 合成（Phase 14） | 選填 |
+
+> **認證「選填」說明**：帶合法 `X-API-Key` 時審計日誌記錄真實 `caller_id`；未帶時記 `anonymous`。認證機制仍在，只是不強制擋（2026-08-07 政策調整，詳見「認證」小節）。
 
 ---
 
