@@ -19,6 +19,25 @@ def test_parse_flexible_date_empty_sentinels():
     assert parse_flexible_date("null") is None
 
 
+def test_parse_flexible_date_rejects_invalid_month():
+    with pytest.warns(UserWarning, match="invalid calendar date"):
+        assert parse_flexible_date("20161301") is None
+
+
+def test_parse_flexible_date_rejects_invalid_day():
+    with pytest.warns(UserWarning, match="invalid calendar date"):
+        assert parse_flexible_date("20160230") is None
+
+
+def test_parse_flexible_date_accepts_leap_day():
+    assert parse_flexible_date("20200229") == "2020-02-29"
+
+
+def test_parse_flexible_date_rejects_non_leap_day():
+    with pytest.warns(UserWarning, match="invalid calendar date"):
+        assert parse_flexible_date("20210229") is None
+
+
 def test_db_connection_schema_and_query_roundtrip(tmp_rule_db_path):
     conn = db.get_connection(tmp_rule_db_path)
     db.init_schema(conn)

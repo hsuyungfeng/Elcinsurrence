@@ -11,6 +11,7 @@
 """
 
 import warnings
+from datetime import date
 
 _EMPTY_SENTINELS = {"", "null", "0", "99991231"}
 
@@ -54,10 +55,10 @@ def parse_flexible_date(raw: str) -> str | None:
         return None
 
     try:
-        return f"{year:04d}-{month:02d}-{day:02d}"
-    except (ValueError, TypeError):
+        return date(year, month, day).isoformat()
+    except ValueError:
         warnings.warn(
-            f"parse_flexible_date: failed to format parsed date, raw value={raw!r}",
+            f"parse_flexible_date: invalid calendar date, raw value={raw!r}",
             stacklevel=2,
         )
         return None

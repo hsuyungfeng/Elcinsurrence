@@ -45,3 +45,4 @@ TOTFA.xml
 !tests/fixtures/**/*.xml
 data/samples/
 data/phi/
+data/sampleimage/
