@@ -1,18 +1,18 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
+milestone: v1.1
+milestone_name: 紙本→數位化整合三項輸出
 current_phase: 11.1
-status: Awaiting next milestone
-stopped_at: **Phase 11 完成（UAT 7/7 passed），milestone v1.0 現僅卡在 Phase 10（外部依賴阻塞中）**
-last_updated: "2026-08-10T08:01:31.997Z"
-last_activity: 2026-08-10 — Milestone v1.0 completed and archived
+status: executing
+stopped_at: Resumed session, clarified `phases.clear` confusion (git deleted vs archive), state reset to v1.1 planning, PROJECT.md updated with 17 lines context
+last_updated: "2026-08-11T04:38:31.701Z"
+last_activity: 2026-08-11 -- Phase 12 planning complete
 progress:
-  total_phases: 13
-  completed_phases: 12
-  total_plans: 25
-  completed_plans: 25
-  percent: 92
+  total_phases: 3
+  completed_phases: 0
+  total_plans: 1
+  completed_plans: 0
+  percent: 0
 ---
 
 # STATE.md — elc-audit-engine
@@ -52,8 +52,8 @@ ROADMAP.md was remapped to GSD's per-phase structure: progress.md's M1-M8 (origi
 - **GSD Phase 2 Plan 06 (Wave 2: ChromaDB D-09 embeddings, non-blocking) executed and committed.** Delivered: `src/elc_audit_engine/rule_repository/embeddings/` package (`chroma_store.py` — `flatten_tree_nodes()` + `build_chroma_collection()`, wrapped in a broad non-blocking exception handler per D-09) and `scripts/build_chroma_index.py`. Real artifact produced: local persistent ChromaDB collection at `data/rag/` (165 chunks ingested from the 32-file docx tree corpus, default ONNX all-MiniLM-L6-v2 embedder). Low-priority/non-blocking infrastructure only — no query logic (deferred to Phase 5 per CONTEXT.md). See `.planning/phases/02-rule-repository/02-06-SUMMARY.md`.
 - **GSD Phase 2 Plan 04 (Wave 2: rule_mapping LLM-assisted build, D-04/D-05) executed and committed.** Delivered: `src/elc_audit_engine/rule_repository/mapping/` package (`llm_client.py` — llama.cpp chat_completion wrapper with mandatory smoke test; `prompts.py` — keyword-prefiltered candidate-matching prompts; `build_mapping.py` — CSV-reuse fast path + LLM-assisted fallback batch orchestrator) and `db.py` extended with the `rule_mapping` table schema. Real batch run completed for all 13,942 codes (2,669 payment + 11,273 drug): `{'csv_reuse_count': 6802, 'llm_matched_count': 558, 'no_match_count': 6582}` — the run took ~9.3h wall-clock (mostly LLM inference for the LLM-path codes) and survived an account spend-limit session interruption thanks to a periodic-commit resilience fix (every 100 rows) added during implementation. All 20 human spot-check fixture codes resolved via the CSV fast path with real, substantive article text. Discovered and fixed during batch testing: `chat_template_kwargs.enable_thinking=false` cuts the loaded model's per-call latency from ~30s to ~0.6s (default reasoning-trace mode was otherwise making the batch infeasible). The 46% LLM-path no-match rate is documented as an honest recall limitation of top-5 keyword prefiltering, not a bug — manually verified the LLM correctly declines to fabricate matches when no relevant candidate is found. See `.planning/phases/02-rule-repository/02-04-SUMMARY.md`.
 - **GSD Phase 2 Plan 05 (Wave 3: get_rule() single query interface + human spot-check) executed and committed — Phase 2 now COMPLETE.** Delivered: `get_rule(code)` in `src/elc_audit_engine/rule_repository/__init__.py`, the sole D-07/D-08 public entry point — combines `payment_rules`/`drug_rules` + `rule_mapping` lookups, zero LLM/network calls at query time, never raises (SQLite errors degrade to `not_found()`). Fixed a cross-plan integration gap: `rule_mapping` was missing from `db.py`'s `query_by_code` allowlist. Human 20-code spot-check conducted via a published Artifact review page (Traditional Chinese regulatory text, per user request over raw terminal output) — user confirmed **20/20 correct**. `tests/fixtures/rule_mapping_20_spotcheck.json` locked with real article data, `verified: true` for all entries. Full test suite green: 34 passed, 1 skipped. All 3 REQ-rule-repository acceptance criteria now automated-and-passing. See `.planning/phases/02-rule-repository/02-05-SUMMARY.md`.
-- **GSD Phase 9 Plan 01（認證授權＋存取審計日誌）executed and committed.** Delivered: `auth.py`（`load_api_keys()` 解析 `ELC_API_KEYS` 的 `caller:key` 表、`resolve_caller()` 以 `hmac.compare_digest` constant-time 比對並回傳多呼叫方識別、`require_api_key` decorator 保留供未來 blueprint）；`audit_log.py`（`record_access()` JSON Lines 六欄位追加寫入，路徑取自 `AUDIT_LOG_PATH`，**零 PHI**——只記「誰在何時存取哪個端點」，不記請求主體）；`server.py` 以 **`before_request` 統一強制**而非逐端點 decorator（**新增端點預設受保護**，豁免需顯式列入 `_AUTH_EXEMPT_ENDPOINTS`＝`index`/`health`/`static`，避免「忘記加 decorator 就等於裸奔」的失敗模式），`_init_api_keys()` 啟動期 fail-fast 重拋 `AuthConfigError`（設定缺失時繼續啟動＝無認證對外開放，比啟動失敗更危險），`errorhandler(AuthenticationError)` 回 **401 而非 404**，`after_request` 寫審計且 `OSError` 只記 application log 不讓已完成業務回應變 500，新增 `GET /api/health` 供 HIS/監控探測。README 同步認證/審計契約並追認四筆既有 commit。**認證先於業務邏輯**：未帶 key 時 `run_presubmission_check` 替身呼叫次數斷言為 0。38 新測試（test_auth.py 30＋test_audit_log.py 8），全套件 354 passed / 2 skipped。**401 而非 404 與 P0-2／P1-1 同源：系統／授權故障必須與業務結論可區分。** 見 `.planning/phases/09-his-servicing/09-01-SUMMARY.md`。
-- **GSD Phase 9 Plan 02（案件狀態機＋SQLite 持久化）executed and committed.** Delivered: `src/elc_audit_engine/case_store/` 純資料層子套件（無 Flask／LLM 依賴）——`states.py` 七狀態顯式轉換表（六主線＋failed 旁支，submitted 為封閉終態，未知狀態一律拋 `UnknownStateError` 而非回 False）；`db.py`／`store.py`：`cases`／`case_transitions` 兩表，`CaseStore` 提供 create/get/transition/history/list_by_state（同步版任務佇列取件，無 Celery／Redis）/list_all/counts_by_state；狀態與轉換歷史於單一 SQLite 交易內原子寫入；`failure_reason` 獨立欄位與業務結論分離（P1-1 同源原則延伸）；case_id 沿用既有 `safe_filename()` 校驗後拒絕。65 新測試全綠，全套件由 277 passed / 2 skipped 增至 336 passed / 2 skipped（`test_ingest.py` 7 個 ERROR 屬平行執行的 09-01 `server.py` 未完成所致，非本 plan 範圍）。刻意未動 `server.py`／既有 `data/uploads/*.json`——端點接線與遷移留給 09-03 裁示。見 `.planning/phases/09-his-servicing/09-02-SUMMARY.md`。
+- **GSD Phase 9 Plan 01（認證授權＋存取審計日誌）executed and committed.** Delivered: `auth.py`（`load_api_keys()` 解析 `ELC_API_KEYS` 的 `caller:key` 表、`resolve_caller()` 以 `hmac.compare_digest` constant-time 比對並回傳多呼叫方識別、`require_api_key` decorator 保留供未來 blueprint）；`audit_log.py`（`record_access()` JSON Lines 六欄位追加寫入，路徑取自 `AUDIT_LOG_PATH`，**零 PHI**——只記「誰在何時存取哪個端點」，不記請求主體）；`server.py` 以 **`before_request` 統一強制**而非逐端點 decorator（**新增端點預設受保護**，豁免需顯式列入 `_AUTH_EXEMPT_ENDPOINTS`＝`index`/`health`/`static`，避免「忘記加 decorator 就等於裸奔」的失敗模式），`_init_api_keys()` 啟動期 fail-fast 重拋 `AuthConfigError`（設定缺失時繼續啟動＝無認證對外開放，比啟動失敗更危險），`errorhandler(AuthenticationError)` 回 **401 而非 404**，`after_request` 寫審計且 `OSError` 只記 application log 不讓已完成業務回應變 500，新增 `GET /api/health` 供 HIS/監控探測。README 同步認證/審計契約並追認四筆既有 commit。**認證先於業務邏輯**：未帶 key 時 `run_presubmission_check` 替身呼叫次數斷言為 0。38 新測試（test_auth.py 30＋test_audit_log.py 8），全套件 354 passed / 2 skipped。**401 而非 404 與 P0-2／P1-1 同源：系統／授權故障必須與業務結論可區分。** 見 `.planning/phases/09-his-servicing/09-01-SUMMARY.md`.
+- **GSD Phase 9 Plan 02（案件狀態機＋SQLite 持久化）executed and committed.** Delivered: `src/elc_audit_engine/case_store/` 純資料層子套件（無 Flask／LLM 依賴）——`states.py` 七狀態顯式轉換表（六主線＋failed 旁支，submitted 為封閉終態，未知狀態一律拋 `UnknownStateError` 而非回 False）；`db.py`／`store.py`：`cases`／`case_transitions` 兩表，`CaseStore` 提供 create/get/transition/history/list_by_state（同步版任務佇列取件，無 Celery／Redis）/list_all/counts_by_state；狀態與轉換歷史於單一 SQLite 交易內原子寫入；`failure_reason` 獨立欄位與業務結論分離（P1-1 同源原則延伸）；case_id 沿用既有 `safe_filename()` 校驗後拒絕。65 新測試全綠，全套件由 277 passed / 2 skipped 增至 336 passed / 2 skipped（`test_ingest.py` 7 個 ERROR 屬平行執行的 09-01 `server.py` 未完成所致，非本 plan 範圍）。刻意未動 `server.py`／既有 `data/uploads/*.json`——端點接線與遷移留給 09-03 裁示。見 `.planning/phases/09-his-servicing/09-02-SUMMARY.md`.
 
 ## Not Yet Started
 
@@ -72,9 +72,20 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-08-10（Phase 11 UAT 測項 3-7 執行完成＋提交）
-Stopped at: **Phase 11 完成（UAT 7/7 passed），milestone v1.0 現僅卡在 Phase 10（外部依賴阻塞中）**
-Resume file: `.planning/phases/11-paper-appeal-print/11-UAT.md`
+Last session: 2026-08-11
+Stopped at: Resumed session, clarified `phases.clear` confusion (git deleted vs archive), state reset to v1.1 planning, PROJECT.md updated with 17 lines context
+Resume file: `.planning/PROJECT.md`
+
+## Current Position
+
+Phase: Not started (defining requirements)
+Plan: —
+Status: Ready to execute
+Last activity: 2026-08-11 -- Phase 12 planning complete
+
+## Operator Next Steps
+
+- Proceed with Milestone v1.1 requirement & phase planning (`/gsd-discuss-phase` or `/gsd-plan-phase`)
 
 **Phase 11 UAT 執行摘要（2026-08-10）：**
 
@@ -220,10 +231,10 @@ STATE.md 的敘述性欄位會與 git 脫節，恢復時一律以 `git log` 與�
 
 ## Current Position
 
-Phase: Milestone v1.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-08-10 — Milestone v1.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-08-11 — Milestone v1.1 started
 
 ## Operator Next Steps
 
