@@ -89,7 +89,7 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 | 11. 紙本申復清單列印 | 3/3 | Complete | 2026-08-08 |
 | 11.1. Close milestone audit gaps | 2/2 | Complete | 2026-08-10 |
 | 12. 影像佐證上傳與關聯驅動 | 1/1 | Complete   | 2026-08-11 |
-| 13. 核減明細原格式列印 | 0/1 | Pending | - |
+| 13. 核減明細原格式列印 | 2/3 | In Progress|  |
 | 14. 審核軌跡＋佐證包列印 | 0/1 | Pending | - |
 
 ## Out of Roadmap Scope
