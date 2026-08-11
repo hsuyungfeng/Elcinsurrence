@@ -179,3 +179,24 @@ def test_deduction_print_security(tmp_path):
     # The literal characters should be escaped in XML
     assert "<script>" not in content
     assert "&lt;script&gt;" in content
+
+def test_api_deduction_print(monkeypatch):
+    from server import app
+    client = app.test_client()
+    
+    def mock_write(*args, **kwargs):
+        return "/tmp/mocked.pdf", ["Mock warning"]
+        
+    import elc_audit_engine.generators.deduction_print as dp
+    monkeypatch.setattr(dp, "write_deduction_print", mock_write)
+    
+    response = client.post(
+        "/api/deduction/print",
+        json={"records": [{"order_code": "1234"}]}
+    )
+    assert response.status_code == 200
+    data = response.json
+    assert data["status"] == "success"
+    assert data["pdf_url"].endswith("mocked.pdf")
+    assert "Mock warning" in data["warnings"]
+

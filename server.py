@@ -92,6 +92,7 @@ _AUTH_EXEMPT_ENDPOINTS = _AUDIT_EXEMPT_ENDPOINTS | frozenset({
     "upload_appeal_attachment",
     "get_appeal_attachments",
     "delete_appeal_attachment",
+    "generate_deduction_print",
 })
 
 
@@ -1055,6 +1056,66 @@ def delete_appeal_attachment(case_seq: str, attachment_id: str):
     return jsonify({
         "status": "success",
         "message": "附件已刪除"
+    })
+
+
+@app.route('/api/deduction/print', methods=['POST'])
+def generate_deduction_print():
+    """生成核減明細原格式 PDF（Phase 13-03）"""
+    data = request.json or {}
+    if not isinstance(data, dict):
+        raise ApiError("請求主體必須為 JSON 物件")
+
+    case_id = _clean_str(data, 'case_id', required=False)
+    payload_records = data.get('records')
+
+    records = []
+    if payload_records and isinstance(payload_records, list):
+        records = payload_records
+    elif case_id:
+        try:
+            case = _case_store.get(case_id)
+            if case.payload:
+                records = [case.payload]
+        except CaseNotFoundError:
+            raise ApiError(f"找不到案件 '{case_id}'", status=404)
+    else:
+        raise ApiError("必須提供 records 陣列或 case_id")
+
+    if not records:
+        raise ApiError("無有效核減資料可供列印")
+
+    facility = settings.load_facility_config()
+
+    from elc_audit_engine.safe_paths import safe_filename
+    stem = safe_filename(case_id or uuid.uuid4().hex[:8], "file_stem")
+
+    from elc_audit_engine.generators.deduction_print import write_deduction_print
+    from config import settings
+    PRINT_BASE_ODT = os.path.join(
+        settings.PROJECT_ROOT,
+        "officialdocument",
+        "電子申復文件格式",
+        "RCPI2012R01_核減明細表_print_base.odt",
+    )
+
+    try:
+        pdf_path, warnings = write_deduction_print(
+            settings.OUTPUT_DIR,
+            stem,
+            records,
+            facility,
+            template_odt_path=PRINT_BASE_ODT,
+        )
+    except Exception as exc:
+        raise ApiError(f"產生 PDF 失敗: {exc}")
+
+    pdf_url = f"/output/{os.path.basename(pdf_path)}"
+    
+    return jsonify({
+        "status": "success",
+        "pdf_url": pdf_url,
+        "warnings": warnings,
     })
 
 
