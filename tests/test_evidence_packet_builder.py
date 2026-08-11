@@ -50,40 +50,29 @@ def attachment_records():
 
 
 def test_image_processing_valid(tmp_path):
-    # Setup valid image (mock or generate a tiny image)
     from PIL import Image
     import io
     img_path = tmp_path / "valid.jpg"
     img = Image.new('RGB', (100, 100), color = 'red')
     img.save(img_path)
     
-    # Try calling processor
-    try:
-        buf, w, h = process_and_scale_image(str(img_path))
-        assert isinstance(buf, io.BytesIO)
-        assert w > 0
-        assert h > 0
-    except NameError:
-        pytest.skip("Not implemented yet")
+    buf, w, h = process_and_scale_image(str(img_path))
+    assert isinstance(buf, io.BytesIO)
+    assert w > 0
+    assert h > 0
 
 def test_image_processing_corrupt(tmp_path):
-    # Setup corrupt image
     img_path = tmp_path / "corrupt.jpg"
     img_path.write_bytes(b"not an image")
     
-    # Try calling processor
-    try:
-        with pytest.raises(Exception):
-            process_and_scale_image(str(img_path))
-    except NameError:
-        pytest.skip("Not implemented yet")
+    with pytest.raises(Exception):
+        process_and_scale_image(str(img_path))
 
 def test_build_evidence_packet_docx(cover_info, tracking_data, timeline_data, appeal_draft, attachment_records):
-    try:
-        doc, warnings = build_evidence_packet_docx(
-            cover_info, tracking_data, timeline_data, appeal_draft, attachment_records
-        )
-        assert doc is not None
-        assert isinstance(warnings, list)
-    except NameError:
-        pytest.skip("Not implemented yet")
+    doc, warnings = build_evidence_packet_docx(
+        cover_info, tracking_data, timeline_data, appeal_draft, attachment_records
+    )
+    assert doc is not None
+    assert isinstance(warnings, list)
+    assert len(warnings) > 0  # Should warn about /tmp/test1.jpg missing
+
