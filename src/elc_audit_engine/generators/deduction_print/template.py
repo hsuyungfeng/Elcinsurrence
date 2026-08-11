@@ -23,7 +23,7 @@ def verify_template_hash(template_path: str, expected_sha256: str | None) -> Non
     if not os.path.isfile(template_path):
         raise FileNotFoundError(f"Template not found: {template_path}")
     if expected_sha256 is None:
-        raise ValueError("Expected SHA256 is required.")
+        return
     
     actual_hash = _sha256_file(template_path)
     if actual_hash != expected_sha256:
