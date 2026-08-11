@@ -33,6 +33,9 @@ AUDIT_LOG_PATH = os.getenv("AUDIT_LOG_PATH", os.path.join(PROJECT_ROOT, "data/au
 # Phase 9-02：案件狀態機＋轉換歷史 SQLite 路徑（含 PHI payload，須入 .gitignore）。
 CASES_DB_PATH = os.getenv("CASES_DB_PATH", os.path.join(DB_DIR, "cases.sqlite3"))
 
+# Phase 12：影像佐證附件儲存區根目錄（可由環境變數覆寫）。
+ATTACHMENTS_DIR = os.getenv("ATTACHMENTS_DIR", os.path.join(DATA_DIR, "attachments"))
+
 
 def load_llama_config() -> dict:
     """讀取 llama.cpp server 連線設定（config/llama_config.json）。

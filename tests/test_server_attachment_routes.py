@@ -3,12 +3,18 @@ import json
 import pytest
 from config import settings
 
-def test_attachment_api_endpoints(client, tmp_path, monkeypatch):
+def test_attachment_api_endpoints(tmp_path, monkeypatch):
     """Test attachment upload, list, delete, and generate endpoints in server.py."""
+    import server
+    client = server.app.test_client()
     monkeypatch.setattr(settings, "ATTACHMENTS_DIR", str(tmp_path))
 
-    # 1. Upload valid file
-    png_bytes = b"\x89PNG\r\n\x1a\nfake_image_content"
+    import io
+    from PIL import Image
+    img_buf = io.BytesIO()
+    Image.new("RGB", (1, 1), color="red").save(img_buf, format="PNG")
+    png_bytes = img_buf.getvalue()
+
     data = {
         "case_seq": "case303",
         "order_seq": "1",

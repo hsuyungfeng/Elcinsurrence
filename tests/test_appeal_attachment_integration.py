@@ -13,9 +13,8 @@ def test_appeal_has_attachment_driven_by_attachment_store(tmp_path, monkeypatch)
         case_seq="case202",
         order_seq="1",
         order_code="64140C",
-        order_name="Test Order",
-        deduct_amount=1000,
-        deduct_reason_code="D14",
+        non_reimbursed_amount=1000,
+        deduction_reason="D14",
     )
 
     # 1. No physical files -> has_attachment == False -> p7 == "N"
@@ -24,8 +23,14 @@ def test_appeal_has_attachment_driven_by_attachment_store(tmp_path, monkeypatch)
     json_no = json.loads(render_appeal_json(draft_no))
     assert json_no["p7_attachment"] == "N"
 
+    import io
+    from PIL import Image
+    img_buf = io.BytesIO()
+    Image.new("RGB", (1, 1), color="red").save(img_buf, format="PNG")
+    png_bytes = img_buf.getvalue()
+
     # 2. Add physical attachment
-    attachment_store.save_attachment("case202", b"\x89PNG\r\n\x1a\nfake", "test.png", order_seq="1")
+    attachment_store.save_attachment("case202", png_bytes, "test.png", order_seq="1")
 
     # 3. Dynamic lookup -> has_attachment == True -> p7 == "Y"
     draft_yes = build_appeal_draft(rec)

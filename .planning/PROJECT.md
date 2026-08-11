@@ -109,10 +109,43 @@ Full traceability: `.planning/intel/decisions.md`, `.planning/intel/requirements
 
 ## Context（v1.0 after）
 
-- **Codebase:** ~10,071 行 Python（src/ + server.py + scripts/）；Flask API（server.py 884 行）；測試基線 438 passed / 2 skipped（440 collected）
-- **Tech stack:** Python 3.12 + uv、Flask、SQLite、python-docx、ChromaDB（auxiliary RAG）、pypdf、llama.cpp（local LLM，localhost:8080）
+- **Codebase:** ~10,071 行 Python（src/ + server.py + scripts/）；Flask API（server.py 884 行）；測試基線 442 passed / 2 skipped（444 collected，2026-08-11 更新：P2-9 日期驗證修復＋4 新測試）
+- **Tech stack:** Python 3.12 + uv、Flask、SQLite、python-docx、ChromaDB（auxiliary RAG）、pypdf、llama.cpp（local LLM，localhost:8080）、pillow-heif（2026-08-11 新增，供樣本影像轉換用）
 - **Shipped 2026-08-10:** 13 phases（12 complete＋Phase 10 外部阻塞），25 plans，38 tasks，164 commits
-- **Known debt:** rule_mapping 46% 無匹配率（recall 限制，deferred）；e2e 第 5 層真實樣本待取得；Phase 9 未做 rate limiting／API key 輪替；安全 P2-9 `parse_flexible_date` 未驗證真實曆法
+- **Known debt:** rule_mapping 46% 無匹配率（recall 限制，deferred）；e2e 第 5 層真實樣本待取得；Phase 9 未做 rate limiting／API key 輪替；紙本抽審名冊 OCR 路徑（`sampling.py`/`table_ocr.py`）缺真實樣本驗證
+
+## Current Milestone: v1.1 紙本→數位化整合三項輸出
+
+**Goal：** 降低診所導入電子抽審與申復的門檻——補齊「影像佐證上傳」「核減明細原格式列印」「審核軌跡+病歷摘要+申復理由+影像佐證包列印」三項輸出/輸入通道，讓已習慣紙本作業的診所能漸進轉換到數位流程。
+
+**Target features：**
+- **影像佐證上傳**：接收 procedure/sono/X-ray 影像上傳，依案件流水號命名關聯，`has_attachment` 改由「是否有實際上傳檔案」真實驅動 `p7=Y/N`（現行為手動旗標，見 `generators/appeal.py`）。不做 OCR／不做結構化欄位擷取——影像是給人審查的視覺佐證，不是給系統解析文字。
+- **核減明細原格式列印**：系統處理完核減資料後，印出跟官方核減清單原始紙本一致的版面（RCPI2021R01/RCPI2001R01/RCPI2012R01 那種計算式/逐案表格版式）。比照 Phase 11 的 ODT 填值模式（`generators/appeal_print/`），但需要全新模板——版型跟申復清單完全不同，不能重用既有模板。
+- **審核軌跡+病歷摘要+申復理由+影像佐證包列印**：`generators/tracking.py`（審核軌跡 JSON）、`generators/reinforcement_report.py`（病歷補強 Markdown）目前都沒有列印排版格式。此項要把文字內容（軌跡/摘要/申復理由）與影像圖片合成一份可列印佐證包，可能跟 Phase 11 的三聯申復清單合訂寄出。
+
+**Key context：**
+- 三項工程量都各自接近或超過 Phase 11（3 個 plan）量級，彼此不共用太多程式碼，各自獨立 phase 規劃與執行。
+- 已推翻「核減數據需要從紙本影像萃取結構化欄位」的假設——健保局已透過 VPN 提供 CSV（D-14c/D-14d），紙本照片多半只是診所留底，不是流程必要輸入。
+- 官方 XML 的 `p7` 欄位本質是 Y/N 旗標，XML 與 PACS 影像本來就分開送審（`generators/appeal_xml.py` 已有 `p7` 欄位序列化邏輯）。
+- 背景依據：`.planning/intel/paper-scan-samples.md`（2026-08-11 會話盤點的 7 張核減明細照片＋16 頁申復佐證 PDF 真實樣本分析，含 PHI，已 gitignore）。
+- 不含本次範圍：紙本抽審名冊 OCR 驗證（`sampling.py`/`table_ocr.py` 現有程式碼缺真實樣本驗證，留待後續 milestone）。
+
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition**（via `/gsd-transition`）:
+1. Requirements invalidated？→ Move to Out of Scope with reason
+2. Requirements validated？→ Move to Validated with phase reference
+3. New requirements emerged？→ Add to Active
+4. Decisions to log？→ Add to Key Decisions
+5. "What This Is" still accurate？→ Update if drifted
+
+**After each milestone**（via `/gsd-complete-milestone`）:
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
 
 ---
-*Last updated: 2026-08-10 after v1.0 milestone*
+*Last updated: 2026-08-11 — v1.1 milestone started*

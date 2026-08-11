@@ -11,8 +11,13 @@ def test_save_attachment_valid_png_jpeg_pdf_heic(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "ATTACHMENTS_DIR", str(tmp_path))
     from elc_audit_engine import attachment_store
     from elc_audit_engine.attachment_store import save_attachment, list_attachments, has_attachment
+    import io
+    from PIL import Image
 
-    png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+    img_buf = io.BytesIO()
+    Image.new("RGB", (1, 1), color="red").save(img_buf, format="PNG")
+    png_bytes = img_buf.getvalue()
+
     rec = save_attachment("case101", png_bytes, "xray.png", order_seq="1")
     assert rec.case_seq == "case101"
     assert rec.order_seq == "1"

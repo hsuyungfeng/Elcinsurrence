@@ -63,6 +63,9 @@ from elc_audit_engine.pipeline import run_presubmission_check
 from elc_audit_engine.rule_repository import get_rule
 from elc_audit_engine.rule_repository.errors import RuleRepositoryError
 
+from elc_audit_engine import attachment_store
+from elc_audit_engine.attachment_store import AttachmentStoreError, InvalidAttachmentError
+
 app = Flask(__name__, static_folder='static')
 
 # 入參長度上限（P1-5：端點原本零校驗）。SOAP 全文取 10KB，
@@ -86,6 +89,9 @@ _AUTH_EXEMPT_ENDPOINTS = _AUDIT_EXEMPT_ENDPOINTS | frozenset({
     "get_appeal_cases",
     "generate_appeal_draft",
     "import_appeal_cases",
+    "upload_appeal_attachment",
+    "get_appeal_attachments",
+    "delete_appeal_attachment",
 })
 
 
@@ -867,7 +873,7 @@ def generate_appeal_draft():
         rule_text=rule_text,
         rule_location=rule_location,
         evidence=evidence,
-        has_attachment=bool(data.get('has_attachment', False)),
+        has_attachment=data.get('has_attachment') if 'has_attachment' in data else None,
     )
 
     if case_id:
@@ -969,6 +975,86 @@ def import_appeal_cases():
         'saved_to': saved,
         'case_store_persisted': persisted,
         'case_store_conflicts': conflicts,
+    })
+
+
+@app.route('/api/appeal/attachments/upload', methods=['POST'])
+def upload_appeal_attachment():
+    """上傳佐證影像附件。"""
+    case_seq = request.form.get("case_seq") or request.args.get("case_seq")
+    if not case_seq:
+        raise ApiError("缺少案件流水號 case_seq")
+
+    order_seq = request.form.get("order_seq") or request.args.get("order_seq")
+    order_code = request.form.get("order_code") or request.args.get("order_code")
+
+    file = request.files.get("file")
+    if not file or not (file.filename or "").strip():
+        raise ApiError("缺少上傳檔案（multipart 欄位名 file）")
+
+    file_bytes = file.read()
+    try:
+        rec = attachment_store.save_attachment(
+            case_seq=case_seq,
+            file_bytes=file_bytes,
+            filename=file.filename,
+            order_seq=order_seq,
+            order_code=order_code,
+        )
+    except InvalidAttachmentError as exc:
+        raise ApiError(str(exc))
+    except Exception as exc:
+        app.logger.error("attachment upload error: %s", exc)
+        raise ApiError("附件儲存失敗")
+
+    return jsonify({
+        "status": "success",
+        "attachment": {
+            "id": rec.id,
+            "case_seq": rec.case_seq,
+            "order_seq": rec.order_seq,
+            "order_code": rec.order_code,
+            "filename": rec.filename,
+            "file_size": rec.file_size,
+            "mime_type": rec.mime_type,
+            "created_at": rec.created_at,
+        }
+    })
+
+
+@app.route('/api/appeal/attachments/<case_seq>', methods=['GET'])
+def get_appeal_attachments(case_seq: str):
+    """查詢某案件下的佐證附件清單。"""
+    order_seq = request.args.get("order_seq")
+    records = attachment_store.list_attachments(case_seq, order_seq)
+    return jsonify({
+        "status": "success",
+        "case_seq": case_seq,
+        "attachments": [
+            {
+                "id": r.id,
+                "case_seq": r.case_seq,
+                "order_seq": r.order_seq,
+                "order_code": r.order_code,
+                "filename": r.filename,
+                "file_size": r.file_size,
+                "mime_type": r.mime_type,
+                "created_at": r.created_at,
+            }
+            for r in records
+        ]
+    })
+
+
+@app.route('/api/appeal/attachments/<case_seq>/<attachment_id>', methods=['DELETE'])
+def delete_appeal_attachment(case_seq: str, attachment_id: str):
+    """刪除指定佐證附件。"""
+    deleted = attachment_store.delete_attachment(case_seq, attachment_id)
+    if not deleted:
+        raise ApiError("找不到指定附件或刪除失敗", status=404)
+    return jsonify({
+        "status": "success",
+        "message": "附件已刪除"
     })
 
 

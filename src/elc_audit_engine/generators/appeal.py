@@ -352,8 +352,11 @@ def build_appeal_draft(
     rule_text: str | None = None,
     rule_location: str | None = None,
     evidence: Sequence = (),
-    has_attachment: bool = False,
+    has_attachment: bool | None = None,
 ) -> AppealDraft:
+    if has_attachment is None:
+        from elc_audit_engine import attachment_store
+        has_attachment = attachment_store.has_attachment(record.case_seq, record.order_seq)
     """組裝單筆核減醫令的申復理由草稿（D10，每筆獨立生成）。
 
     Args:
