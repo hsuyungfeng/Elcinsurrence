@@ -1142,6 +1142,7 @@ def generate_evidence_packet_print():
 
     from config import settings
     facility = settings.load_facility_config()
+    attachment_key = case.case_seq or safe_case
     attachments = [
         {
             "id": a.id,
@@ -1151,7 +1152,7 @@ def generate_evidence_packet_print():
             "order_seq": a.order_seq,
             "order_code": a.order_code,
         }
-        for a in attachment_store.list_attachments(safe_case)
+        for a in attachment_store.list_attachments(attachment_key)
     ]
 
     from elc_audit_engine.generators.evidence_packet import write_evidence_packet
@@ -1162,7 +1163,7 @@ def generate_evidence_packet_print():
             case.payload,
             facility,
             tracking=case.history if hasattr(case, "history") else None,
-            timeline=None, # In real use, this might be injected similarly to pre-check if needed, but for print it's fine. Wait, plan says "timeline via PatientTimeline | None" which is default.
+            timeline=None,
             attachments=attachments,
         )
     except Exception as exc:

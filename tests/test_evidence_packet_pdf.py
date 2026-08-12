@@ -60,3 +60,58 @@ def test_api_generate_evidence_packet(monkeypatch):
     assert data["status"] == "success"
     assert data["pdf_url"] == "/output/packet.pdf"
     assert "warning1" in data["warnings"]
+
+
+def test_api_evidence_packet_looks_up_attachments_by_case_seq(monkeypatch):
+    """case_id and case_seq are distinct columns (case_store/store.py) — the
+    attachment lookup must use case.case_seq, the key space attachment_store
+    actually writes to, not the case_id used to fetch the case record."""
+    import server
+    from unittest.mock import MagicMock
+
+    mock_case_store = MagicMock()
+    mock_case = MagicMock()
+    mock_case.payload = {"mock": "data"}
+    mock_case.case_seq = "SEQ-999"
+    mock_case_store.get.return_value = mock_case
+    monkeypatch.setattr(server, "_case_store", mock_case_store)
+
+    mock_attachment_store = MagicMock()
+    mock_attachment_store.list_attachments.return_value = []
+    monkeypatch.setattr(server, "attachment_store", mock_attachment_store)
+
+    mock_write = MagicMock(return_value=("/tmp/output/packet.pdf", []))
+    monkeypatch.setattr("elc_audit_engine.generators.evidence_packet.write_evidence_packet", mock_write)
+
+    client = server.app.test_client()
+    resp = client.post('/api/appeal/evidence-packet/print', json={"case_id": "TEST-123"})
+    assert resp.status_code == 200
+
+    mock_attachment_store.list_attachments.assert_called_once_with("SEQ-999")
+
+
+def test_api_evidence_packet_falls_back_to_case_id_when_case_seq_missing(monkeypatch):
+    """When case.case_seq is None/empty, fall back to the case_id-derived key
+    rather than passing None through to attachment_store."""
+    import server
+    from unittest.mock import MagicMock
+
+    mock_case_store = MagicMock()
+    mock_case = MagicMock()
+    mock_case.payload = {"mock": "data"}
+    mock_case.case_seq = None
+    mock_case_store.get.return_value = mock_case
+    monkeypatch.setattr(server, "_case_store", mock_case_store)
+
+    mock_attachment_store = MagicMock()
+    mock_attachment_store.list_attachments.return_value = []
+    monkeypatch.setattr(server, "attachment_store", mock_attachment_store)
+
+    mock_write = MagicMock(return_value=("/tmp/output/packet.pdf", []))
+    monkeypatch.setattr("elc_audit_engine.generators.evidence_packet.write_evidence_packet", mock_write)
+
+    client = server.app.test_client()
+    resp = client.post('/api/appeal/evidence-packet/print', json={"case_id": "TEST-123"})
+    assert resp.status_code == 200
+
+    mock_attachment_store.list_attachments.assert_called_once_with("TEST-123")
