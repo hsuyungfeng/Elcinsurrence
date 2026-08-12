@@ -44,6 +44,43 @@
 
 ---
 
+## Milestone: v1.1 — 紙本→數位化整合三項輸出
+
+**Shipped:** 2026-08-11（audit gap 修復收尾 2026-08-12）
+**Phases:** 3 | **Plans:** 7 | **Tasks:** 13 | **Commits:** 36（v1.0 tag → HEAD）
+**Timeline:** 2026-08-10 → 2026-08-12（3 天）
+
+### What Was Built
+- 影像佐證上傳（`attachment_store.py`：Magic Bytes 驗證＋路徑安全＋HEIC 支援），`has_attachment`/`p7` 由實體檔案真實驅動
+- 核減明細原格式列印（ODT ElementTree 動態列展開＋soffice headless PDF），CLI＋API 雙通道
+- 審核軌跡＋病歷摘要＋申復理由＋影像佐證包合成 PDF（python-docx＋Pillow＋pypdf），CLI＋API 雙通道
+- 測試基線由 458 提升至 460 passed（新增 2 個 case_seq/case_id 迴歸測試），2 skipped，0 failed
+
+### What Worked
+- **milestone-close 稽核在完成前一次抓到真實跨 phase 缺陷**：REQUIREMENTS.md／VERIFICATION.md 兩份標準文件都缺失（此 milestone 未經過 `/gsd-new-milestone` 標準流程），仍以 SUMMARY.md frontmatter＋live 程式碼直讀重建 3-source cross-reference，未讓文件債擋住稽核品質
+- **稽核發現後立即修復再重新稽核**：發現 gap → 直接讀程式碼驗證（不只信 subagent 報告）→ 修復＋補迴歸測試 → 更新 audit 文件為 passed → 才進入 archive，形成單 session 內的完整閉環
+- **v1.0 的「不可只信 SUMMARY 宣告」教訓在 v1.1 重演並被抓住**：Phase 12→14 的 `case_id`/`case_seq` 混用正是同一失敗模式（各 phase 自己測試綠燈，接起來卻斷），這次稽核步驟本身就是為此設計，確實攔下了
+
+### What Was Inefficient
+- **v1.1 從未建立 REQUIREMENTS.md**：三個 phase 直接從 ROADMAP.md 的 `Requirements:` 行規劃執行，跳過了標準的需求訪談/追溯表建立步驟，導致 milestone-close 稽核時必須手動重建 traceability（比 v1.0 當時「REQUIREMENTS.md 文件債累積」教訓還退一步——這次是完全沒建立，不是建立後維護不佳）
+- **Phase 12 的 VALIDATION.md 簽核清單從未 flip 到 approved**（仍顯示 `status: draft`／`nyquist_compliant: false`），與 SUMMARY.md 記錄的實際完成狀態不符，直到 milestone 稽核才被發現並記錄為 tech debt——執行時的簽核步驟被跳過但沒有任何 gate 擋下它
+
+### Patterns Established
+- **case_id vs case_seq 是兩個獨立、可為 null 的欄位**：任何跨 phase 功能若涉及案件識別，必須明確選定其中一個作為 key space 並在程式碼中一致使用，不能假設兩者同值
+- **稽核 3-source cross-reference 在缺少標準文件時仍可執行**：SUMMARY.md frontmatter（`requirements-completed`）＋ROADMAP.md 的 per-phase `Requirements:` 行＋live 程式碼直讀，三者可在無 REQUIREMENTS.md/VERIFICATION.md 時重建等效的追溯證據
+
+### Key Lessons
+1. v1.0 的核心教訓（跨 phase 整合須核實程式碼，不能信 SUMMARY 宣告）不是一次性修復，是需要每個 milestone 稽核步驟持續執行的常設檢查——這次它確實抓到了新的一次同類缺陷
+2. 標準流程被跳過（未建立 REQUIREMENTS.md、未完成 VALIDATION.md 簽核）不會讓功能不能用，但會讓「這功能真的做完了嗎」在缺乏稽核時失去可驗證性——省下的規劃時間會在收尾稽核時以「重建追溯表」的形式付出
+3. 發現真實缺陷後，同一 session 內修復＋補測試＋更新稽核文件，比留給下一個 milestone 當 known gap 更符合這類資料遺失風險（醫療佐證包漏附件）的嚴重度
+
+### Cost Observations
+- Model mix：整合稽核用 gsd-integration-checker (sonnet)；修復＋測試由 orchestrator 直接執行（未額外派 executor）
+- Sessions：1 個 session 內完成 resume → audit → gap 修復 → milestone complete 全流程
+- Notable：background subagent 的 SendMessage resume 機制在此 session 中多次僅回覆「Task complete」而未重新輸出完整報告內容——最終改用直接讀取 subagent transcript JSONL 並以 Python 解析取出目標文字區塊取得報告全文；未來若需 subagent 重新輸出已完成的報告，直接請求「輸出報告的實際內容」可能仍不可靠，讀 transcript 是更穩健的 fallback
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -51,14 +88,17 @@
 | Milestone | Sessions | Phases | Key Change |
 |-----------|----------|--------|------------|
 | v1.0 | 11+ | 13 | 稽核驅動的 INSERTED 閉合 phase；plan-checker 對抗性驗證導入 |
+| v1.1 | 1 | 3 | 單 session 內完成 audit→gap 修復→milestone close 全流程；REQUIREMENTS.md 標準流程首次被跳過 |
 
 ### Cumulative Quality
 
 | Milestone | Tests | Base | Zero-Dep Additions |
 |-----------|-------|------|-------------------|
 | v1.0 | 440 collected（438 passed / 2 skipped） | 374（Phase 11 前） | 紙本 PDF 鏈（pypdf）、Flask API、Provider 接線全為既有依賴 |
+| v1.1 | 462 collected（460 passed / 2 skipped） | 440（v1.0 後） | 影像佐證（pillow_heif）、DOCX 生成（python-docx）全為既有依賴；無新增外部套件 |
 
 ### Top Lessons (Verified Across Milestones)
 
 1. 整合缺口靠稽核抓、靠 INSERTED phase 閉合、靠端到端測試驗證——三環缺一不可
 2. 「不捏造」語意（缺欄留空＋警告、故障穿透）是資料誠實性的根基，測試必須錨定它
+3. 「跨 phase 整合須核實程式碼，不能信 SUMMARY 宣告」在 v1.0 與 v1.1 各抓到一次同類缺陷（v1.0：Provider 未接生產路徑；v1.1：case_id/case_seq 混用）——這是常設檢查，不是一次性修復

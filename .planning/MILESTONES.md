@@ -1,5 +1,17 @@
 # Milestones
 
+## v1.1 紙本→數位化整合三項輸出 (Shipped: 2026-08-12)
+
+**Phases completed:** 3 phases, 7 plans, 5 tasks
+
+**Key accomplishments:**
+
+- Implemented dynamic ODT XML row expansion and soffice PDF rendering pipeline
+- Implemented user-facing CLI and API endpoint to trigger deduction details PDF generation
+- Local zero-SaaS DOCX generation with EXIF transpose and HEIC support via python-docx and Pillow
+
+---
+
 ## v1.0 elc-audit-engine MVP (Shipped: 2026-08-10)
 
 **Phases completed:** 12 phases, 25 plans, 38 tasks

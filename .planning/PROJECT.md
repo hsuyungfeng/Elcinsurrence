@@ -11,7 +11,9 @@ Both stages share a single comparison pipeline (order ↔ rule ↔ record three-
 
 **v1.0 擴充（2026-08-10 shipped）：** 新增紙本申復清單輸出通道（官方三聯式 PDF，`build_appeal_print.py` CLI＋`render_appeal_print` 純函式）、HIS 服務化（Flask API：案件匯入/預審/申復生成/狀態機＋任務佇列）、以及 Phase 4 病歷時間軸的生產路徑接入（`LocalFileProvider`＋`RECORDS_DIR`，兩端點不再以 `timeline=None` 降級）。
 
-source: progress.md D3；v1.0-MILESTONE-AUDIT.md（2026-08-10）
+**v1.1 擴充（2026-08-11 shipped）：** 新增三項紙本→數位化輸出/輸入通道——影像佐證上傳（`attachment_store.py`，驅動 `has_attachment`/`p7` 真實旗標）、核減明細原格式列印（`generators/deduction_print/`）、審核軌跡＋佐證包合成列印（`generators/evidence_packet/`）。milestone 收尾稽核發現並修復一處跨 phase 串接缺陷（見下方 Key Decisions）。
+
+source: progress.md D3；v1.0-MILESTONE-AUDIT.md（2026-08-10）；v1.1-MILESTONE-AUDIT.md（2026-08-12）
 
 ## Why
 
@@ -61,8 +63,9 @@ source: progress.md §二 (LOCKED)
 | D10 | Appeal structure: 4 assembled sections (案情摘要/醫療必要性/規則依據/病歷佐證), independently generated, trimmed ④→② first if >2000 chars, P6 hard-coded to 0 when not appealing |
 | D11 | Layered failure degradation (LLM timeout → manual-review flag, doesn't block case) + 5-tier test strategy |
 | D12 | Self-learning feedback loop: adoption-rate + hallucination-flag + appeal-outcome signals feed prompt/LoRA improvement; two-tier privacy (record data stays local; rule_mapping/argument skeletons/stats may be shared cross-clinic via doctor-toolbox) |
+| D13 | (v1.1) Evidence-packet attachment lookup must key off `case.case_seq`, not `case_id` — the two are distinct, independently-populated columns in `CaseRecord`, and `attachment_store` writes exclusively to the `case_seq` keyspace. Found via milestone audit cross-phase integration check, fixed same-day (`3f7f097`). ✓ Good — codified as regression test. |
 
-source: progress.md §一 (D1-D12, LOCKED)
+source: progress.md §一 (D1-D12, LOCKED); v1.1-MILESTONE-AUDIT.md (D13)
 
 ## Rule Repository Layering (LOCKED)
 
@@ -94,7 +97,9 @@ source: constraints.md C9, C10, C12; context.md (Phase 2 topics)
 
 Full traceability: `.planning/intel/decisions.md`, `.planning/intel/requirements.md`, `.planning/intel/constraints.md`, `.planning/intel/context.md`
 
-## Validated Requirements（v1.0 shipped，2026-08-10）
+## Validated Requirements
+
+**v1.0 shipped，2026-08-10：**
 
 - ✓ **REQ-project-skeleton** — uv 專案＋config＋目錄結構（01-01-VERIFICATION passed）
 - ✓ **REQ-rule-repository** — CSV→SQLite＋審查注意事項樹狀索引＋rule_mapping 預編譯（3/3 驗收，20 碼人工核對 20/20）
@@ -107,28 +112,35 @@ Full traceability: `.planning/intel/decisions.md`, `.planning/intel/requirements
 - ⚠️ **REQ-phase2-his-integration** — 服務化部分 satisfied（Flask API）；VPN 實機串接外部依賴阻塞（partial，milestone 範圍外）
 - ✓ **REQ-paper-appeal-print** — 紙本申復清單三聯 PDF（VERIFICATION 3/3＋UAT 7/7）
 
-## Context（v1.0 after）
+**v1.1 shipped，2026-08-11：**
 
-- **Codebase:** ~10,071 行 Python（src/ + server.py + scripts/）；Flask API（server.py 884 行）；測試基線 442 passed / 2 skipped（444 collected，2026-08-11 更新：P2-9 日期驗證修復＋4 新測試）
-- **Tech stack:** Python 3.12 + uv、Flask、SQLite、python-docx、ChromaDB（auxiliary RAG）、pypdf、llama.cpp（local LLM，localhost:8080）、pillow-heif（2026-08-11 新增，供樣本影像轉換用）
-- **Shipped 2026-08-10:** 13 phases（12 complete＋Phase 10 外部阻塞），25 plans，38 tasks，164 commits
-- **Known debt:** rule_mapping 46% 無匹配率（recall 限制，deferred）；e2e 第 5 層真實樣本待取得；Phase 9 未做 rate limiting／API key 輪替；紙本抽審名冊 OCR 路徑（`sampling.py`/`table_ocr.py`）缺真實樣本驗證
+- ✓ **REQ-attachment-upload** — 影像佐證上傳（`attachment_store.py`，Magic Bytes＋路徑安全＋HEIC 支援），`has_attachment`/`p7` 由實體檔案真實驅動（v1.1-MILESTONE-AUDIT 驗證端到端）
+- ✓ **REQ-deduction-print** — 核減明細原格式 PDF 列印（ODT 動態列展開＋soffice 轉檔），CLI＋API 雙通道
+- ✓ **REQ-evidence-packet-print** — 審核軌跡＋佐證包合成 PDF；milestone 稽核發現 `case_id`/`case_seq` 混用缺陷並同日修復（commit `3f7f097`），修復後驗證 satisfied
 
-## Current Milestone: v1.1 紙本→數位化整合三項輸出
+## Context（v1.1 after）
 
-**Goal：** 降低診所導入電子抽審與申復的門檻——補齊「影像佐證上傳」「核減明細原格式列印」「審核軌跡+病歷摘要+申復理由+影像佐證包列印」三項輸出/輸入通道，讓已習慣紙本作業的診所能漸進轉換到數位流程。
+- **Codebase:** ~10,071+ 行 Python（v1.0 基線）＋ v1.1 新增 `attachment_store.py`、`generators/deduction_print/`、`generators/evidence_packet/`（61 files changed, +4624/-120 since v1.0 tag）；Flask API 新增 5 個 route
+- **Tech stack:** Python 3.12 + uv、Flask、SQLite、python-docx、ChromaDB（auxiliary RAG）、pypdf、llama.cpp（local LLM，localhost:8080）、pillow-heif（HEIC 支援）
+- **Test baseline:** 460 passed / 2 skipped（v1.1 收尾，含 2 個新增 case_seq/case_id 迴歸測試）
+- **Shipped 2026-08-11 (v1.1):** 3 phases，7 plans，13 tasks，36 commits
+- **Known debt:**
+  - rule_mapping 46% 無匹配率（recall 限制，deferred，v1.0 遺留）
+  - e2e 第 5 層真實樣本待取得（v1.0 遺留）
+  - Phase 9 未做 rate limiting／API key 輪替（v1.0 遺留）
+  - 紙本抽審名冊 OCR 路徑（`sampling.py`/`table_ocr.py`）缺真實樣本驗證（v1.0 遺留）
+  - `RCPI2012R01_核減明細表_print_base.odt` 為手工建立的最小 ODT scaffold，非官方原始表單——待取得官方表單後替換並重算 SHA256（v1.1 已知，non-blocking）
+  - Phase 12 `12-VALIDATION.md` 簽核清單過期（仍顯示 draft/pending），與 SUMMARY.md 記錄的實際完成狀態不符——建議執行 `/gsd-validate-phase 12` 補簽
 
-**Target features：**
-- **影像佐證上傳**：接收 procedure/sono/X-ray 影像上傳，依案件流水號命名關聯，`has_attachment` 改由「是否有實際上傳檔案」真實驅動 `p7=Y/N`（現行為手動旗標，見 `generators/appeal.py`）。不做 OCR／不做結構化欄位擷取——影像是給人審查的視覺佐證，不是給系統解析文字。
-- **核減明細原格式列印**：系統處理完核減資料後，印出跟官方核減清單原始紙本一致的版面（RCPI2021R01/RCPI2001R01/RCPI2012R01 那種計算式/逐案表格版式）。比照 Phase 11 的 ODT 填值模式（`generators/appeal_print/`），但需要全新模板——版型跟申復清單完全不同，不能重用既有模板。
-- **審核軌跡+病歷摘要+申復理由+影像佐證包列印**：`generators/tracking.py`（審核軌跡 JSON）、`generators/reinforcement_report.py`（病歷補強 Markdown）目前都沒有列印排版格式。此項要把文字內容（軌跡/摘要/申復理由）與影像圖片合成一份可列印佐證包，可能跟 Phase 11 的三聯申復清單合訂寄出。
+## Next Milestone Goals
 
-**Key context：**
-- 三項工程量都各自接近或超過 Phase 11（3 個 plan）量級，彼此不共用太多程式碼，各自獨立 phase 規劃與執行。
-- 已推翻「核減數據需要從紙本影像萃取結構化欄位」的假設——健保局已透過 VPN 提供 CSV（D-14c/D-14d），紙本照片多半只是診所留底，不是流程必要輸入。
-- 官方 XML 的 `p7` 欄位本質是 Y/N 旗標，XML 與 PACS 影像本來就分開送審（`generators/appeal_xml.py` 已有 `p7` 欄位序列化邏輯）。
-- 背景依據：`.planning/intel/paper-scan-samples.md`（2026-08-11 會話盤點的 7 張核減明細照片＋16 頁申復佐證 PDF 真實樣本分析，含 PHI，已 gitignore）。
-- 不含本次範圍：紙本抽審名冊 OCR 驗證（`sampling.py`/`table_ocr.py` 現有程式碼缺真實樣本驗證，留待後續 milestone）。
+v1.1 已完整交付，暫無下一 milestone 規劃。啟動下一輪請執行 `/gsd-new-milestone`（會重新進行 questioning → research → requirements → roadmap）。
+
+候選方向（未經需求訪談驗證，僅為觀察）：
+- Phase 12 VALIDATION.md 簽核補正（低成本，可獨立完成）
+- `RCPI2012R01` 官方 ODT 模板取得與替換
+- 紙本抽審名冊 OCR 真實樣本驗證（v1.0 遺留 known debt）
+- Phase 10 VPN／實機串接（若 doctor-toolbox 存取權與 NHI_EIIAPI 實機環境到位）
 
 ## Evolution
 
@@ -148,4 +160,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-11 — v1.1 milestone started*
+*Last updated: 2026-08-12 — v1.1 milestone shipped and archived*
