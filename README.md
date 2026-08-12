@@ -80,6 +80,19 @@
 4. **申復 XML 匯出 (Step 4: XML Export / Package Builder)**
    - 呼叫 CLI 工具 `scripts/build_appeal_xml.py` 讀取 `appeal_{流水號}.json`，生成 Big5 編碼、特殊字元全形轉義之健保署標準申復 XML 檔 (tdata + ddata + pdata)。
 
+### 1.1 ⚠️ 案件識別欄位對接注意事項（`case_id` vs `case_seq`）
+
+HIS 串接時常見的誤用來源：`CaseStore` 中 `case_id` 與 `case_seq` 是**兩個獨立、各自可為 `null` 的欄位**，並非同一值的別名。
+
+| 欄位 | 意義 | 誰產生 | 是否必填 |
+|---|---|---|---|
+| `case_id` | CaseStore 內部主鍵，匯入時由來源資料的 `id` 欄位帶入 | 匯入時系統賦值 | 是（永不為空） |
+| `case_seq` | 健保申報流水號（院所端業務編號） | 匯入時由來源資料的 `case_seq` 欄位帶入（可能未提供） | 否（可為 `null`） |
+
+**HIS 對接時務必注意**：所有 Phase 12 影像佐證端點（`/api/appeal/attachments/*`）與 `attachment_store` 一律以 **`case_seq`** 作為儲存/查詢的 key space；若呼叫方在上傳附件與生成佐證包（`/api/appeal/evidence-packet/print`）時傳入的識別碼不一致（例如上傳用 `case_seq`，生成用 `case_id`），且該案件的 `case_id != case_seq`，會導致查詢不到已上傳的附件。
+
+> **歷史記錄**：v1.1 milestone-close 稽核（2026-08-12）曾發現 `generate_evidence_packet_print` 內部誤用 `case_id` 查詢附件（`attachment_store` 實際以 `case_seq` 寫入），已於同日修復（commit `3f7f097`）——伺服器端現在會優先採用 `case.case_seq`，僅當其為空值時才回退使用 `case_id` 對應的鍵。**但呼叫端仍應在上傳與生成兩端一致地提供 `case_seq`**，以避免依賴此回退邏輯。
+
 ### 2. 核心 REST API 規格
 
 > **案例清單端點**（`GET /api/sampling/cases`、`GET /api/appeal/cases`）：未匯入資料時回傳**示範資料**（每個案例帶 `"demo": true`），供 UI 展示工作流；**匯入後優先回傳導入資料**（`source: "csv" / "paddle" / "ocr"`）。醫令名稱一律以規則庫為準（例：`64140C`＝甲床與手指重建術，曾誤標為「手腕韌帶縫合術」，2026-08-04 修正）。
@@ -317,7 +330,7 @@ uv run python -m elc_audit_engine.rule_repository.mapping.build_mapping
 uv run pytest -q
 ```
 
-目前基線：**458 passed / 2 skipped**（Milestone v1.1 全數完成，2026-08-11）。測試零 LLM 依賴（判定與生成皆以替身注入），故不需啟動 llama.cpp 即可全數執行；OCR 表格結構化測試以替身覆蓋，不需 GPU。
+目前基線：**460 passed / 2 skipped**（Milestone v1.1 shipped 2026-08-11，milestone-close 稽核缺陷修復 2026-08-12）。測試零 LLM 依賴（判定與生成皆以替身注入），故不需啟動 llama.cpp 即可全數執行；OCR 表格結構化測試以替身覆蓋，不需 GPU。
 
 ---
 
@@ -470,6 +483,7 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
   ```
 - **CLI 替代方案**：`python scripts/build_evidence_packet.py --case-id APP-0001`
 - **狀態碼**：`400` 缺案件資料；`500` 合成失敗（含錯誤說明）。
+- **⚠️ 附件查詢鍵**：伺服器內部以 `case.case_seq`（若為空則回退 `case_id`）查詢 Phase 12 已上傳的附件——見上方「案件識別欄位對接注意事項」。若上傳附件時使用的 `case_seq` 與此案件的 `case_seq` 不一致，附件將不會出現在生成的佐證包中（無錯誤，只是 `attachments` 陣列為空）。
 
 ---
 
