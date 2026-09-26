@@ -1071,6 +1071,26 @@ def delete_appeal_attachment(case_seq: str, attachment_id: str):
     })
 
 
+def _output_url(pdf_path: str) -> str:
+    """產出 PDF 的下載 URL（對應 download_output 路由）。"""
+    return f"/api/output/{os.path.basename(pdf_path)}"
+
+
+@app.route('/api/output/<name>', methods=['GET'])
+def download_output(name: str):
+    """下載列印端點產出的 PDF（A-CR-05：原 /output/... 無對應路由）。
+
+    內容含 PHI：刻意不列入 _AUTH_EXEMPT_ENDPOINTS，須帶 X-API-Key，
+    並照常寫審計日誌。<name> 不接受斜線；send_from_directory 另以
+    safe_join 擋路徑穿越。只開放 .pdf。
+    """
+    from config import settings
+
+    if not name.lower().endswith(".pdf"):
+        raise ApiError("找不到檔案", status=404)
+    return send_from_directory(settings.OUTPUT_DIR, name, as_attachment=True)
+
+
 @app.route('/api/deduction/print', methods=['POST'])
 def generate_deduction_print():
     """生成核減明細原格式 PDF（Phase 13-03）"""
@@ -1122,7 +1142,7 @@ def generate_deduction_print():
     except Exception as exc:
         raise ApiError(f"產生 PDF 失敗: {exc}")
 
-    pdf_url = f"/output/{os.path.basename(pdf_path)}"
+    pdf_url = _output_url(pdf_path)
     
     return jsonify({
         "status": "success",
@@ -1180,7 +1200,7 @@ def generate_evidence_packet_print():
     except Exception as exc:
         raise ApiError(f"產生 PDF 失敗: {exc}")
 
-    pdf_url = f"/output/{os.path.basename(pdf_path)}"
+    pdf_url = _output_url(pdf_path)
     
     return jsonify({
         "status": "success",

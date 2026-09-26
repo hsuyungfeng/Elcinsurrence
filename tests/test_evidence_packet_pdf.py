@@ -58,7 +58,7 @@ def test_api_generate_evidence_packet(monkeypatch):
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["status"] == "success"
-    assert data["pdf_url"] == "/output/packet.pdf"
+    assert data["pdf_url"] == "/api/output/packet.pdf"
     assert "warning1" in data["warnings"]
 
 
