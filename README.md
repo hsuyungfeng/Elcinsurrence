@@ -98,7 +98,7 @@ HIS 串接時常見的誤用來源：`CaseStore` 中 `case_id` 與 `case_seq` �
 
 ### 2. 核心 REST API 規格
 
-> **案例清單端點**（`GET /api/sampling/cases`、`GET /api/appeal/cases`）：未匯入資料時回傳**示範資料**（每個案例帶 `"demo": true`），供 UI 展示工作流；**匯入後優先回傳導入資料**（`source: "csv" / "paddle" / "ocr"`）。醫令名稱一律以規則庫為準（例：`64140C`＝甲床與手指重建術，曾誤標為「手腕韌帶縫合術」，2026-08-04 修正）。
+> **案例清單端點**（`GET /api/sampling/cases`、`GET /api/appeal/cases`）：未匯入資料時回傳**示範資料**（每個案例帶 `"demo": true`），供 UI 展示工作流；**匯入後優先回傳導入資料**（`source: "csv" / "paddle" / "ocr"`）。醫令名稱一律以規則庫為準（例：`64140C`＝甲床與手指重建術，曾誤標為「手腕韌帶縫合術」，2026-08-04 修正）。匯入資料的每筆項目另附 `state`（案件狀態）與 `failure_reason`；支援 `?limit=`（1～1000，預設 1000）與 `?offset=` 分頁，回應標頭 `X-Total-Count` 為總筆數，超過 limit 時不再靜默截斷。
 
 #### 🔐 認證（2026-09 起：部分強制——批次讀出 PHI 與破壞性操作必填，其餘選填）
 
@@ -149,6 +149,7 @@ HIS 串接時常見的誤用來源：`CaseStore` 中 `case_id` 與 `case_seq` �
   ```
   * `case_id`（選填）：提供時於判定完成後推進案件狀態（單一交易）：正常判定 → `reviewed`；LLM 判定服務異常（`undetermined=true`）→ `failed`（附原因，可重試）。非抽樣案件回 `409`。回應 `state_transition` 揭露結果：`ok`／`failed`／`skipped`（已在 reviewed 或之後）／`not_found`／`conflict`；未帶 `case_id` 時為 `null`。
   * `/api/appeal/generate` 同樣回傳 `state_transition`；草稿 `validation_errors` 非空時不推進 `appealed`（`skipped`）。
+  * `visit_date`（選填，ISO／西元 8 碼／民國 7 碼／`115/07/10`）：半年病史窗的迄日；未帶時取 CaseStore 案件 payload 的就醫日。回應 `records_window_anchor` 為 `visit_date` 或 `today`（兩者皆無時退回今天）。就醫日也用於檢查規則是否在當日生效，不在生效期間的規則改待人工，不送 LLM 判定。
 
 - **回傳內容 (JSON)**:
   ```json
