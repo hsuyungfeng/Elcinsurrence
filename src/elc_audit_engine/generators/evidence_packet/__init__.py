@@ -61,13 +61,17 @@ def write_evidence_packet(
     tracking: dict | None = None,
     timeline: dict | None = None,
     attachments: list[dict] | None = None,
+    file_stem: str | None = None,
 ) -> tuple[str, list[str]]:
     """
-    Writes the evidence packet PDF to output_dir / 申復佐證包_{case_seq}.pdf.
+    Writes the evidence packet PDF to output_dir / 申復佐證包_{file_stem}.pdf.
+
+    file_stem 應傳全域唯一的 case_id；未提供時退回 payload 的 case_seq
+    （流水號跨月重複，不同案件會互相覆寫，僅供舊呼叫端相容）。
     """
-    case_seq = str(payload.get("case_seq", "unknown"))
-    safe_case_seq = safe_filename(case_seq, "case_seq")
-    output_pdf_path = os.path.join(output_dir, f"申復佐證包_{safe_case_seq}.pdf")
+    stem = file_stem or str(payload.get("case_seq", "unknown"))
+    safe_stem = safe_filename(stem, "file_stem")
+    output_pdf_path = os.path.join(output_dir, f"申復佐證包_{safe_stem}.pdf")
 
     # Path traversal check on output_dir
     if os.pardir in output_dir.split(os.sep):

@@ -62,16 +62,16 @@ def test_api_generate_evidence_packet(monkeypatch):
     assert "warning1" in data["warnings"]
 
 
-def test_api_evidence_packet_looks_up_attachments_by_case_seq(monkeypatch):
-    """case_id and case_seq are distinct columns (case_store/store.py) — the
-    attachment lookup must use case.case_seq, the key space attachment_store
-    actually writes to, not the case_id used to fetch the case record."""
+def test_api_evidence_packet_looks_up_attachments_by_case_id(monkeypatch):
+    """A-CR-03：附件以全域唯一 case_id 為鍵查詢（流水號 case_seq 跨月重複，
+    以它查會把別的病患影像併進本案佐證包）；輸出檔名亦以 case_id 命名。"""
     import server
     from unittest.mock import MagicMock
 
     mock_case_store = MagicMock()
     mock_case = MagicMock()
     mock_case.payload = {"mock": "data"}
+    mock_case.case_id = "TEST-123"
     mock_case.case_seq = "SEQ-999"
     mock_case_store.get.return_value = mock_case
     monkeypatch.setattr(server, "_case_store", mock_case_store)
@@ -87,24 +87,26 @@ def test_api_evidence_packet_looks_up_attachments_by_case_seq(monkeypatch):
     resp = client.post('/api/appeal/evidence-packet/print', json={"case_id": "TEST-123"})
     assert resp.status_code == 200
 
-    mock_attachment_store.list_attachments.assert_called_once_with("SEQ-999")
+    assert mock_attachment_store.list_attachments.call_args_list[0].args == ("TEST-123",)
+    assert mock_write.call_args.kwargs["file_stem"] == "TEST-123"
 
 
-def test_api_evidence_packet_falls_back_to_case_id_when_case_seq_missing(monkeypatch):
-    """When case.case_seq is None/empty, fall back to the case_id-derived key
-    rather than passing None through to attachment_store."""
+def test_api_evidence_packet_warns_on_legacy_case_seq_attachments(monkeypatch):
+    """舊版以流水號存放的附件不自動併入（無法確認病患），但要在 warnings 提示。"""
     import server
     from unittest.mock import MagicMock
 
     mock_case_store = MagicMock()
     mock_case = MagicMock()
     mock_case.payload = {"mock": "data"}
-    mock_case.case_seq = None
+    mock_case.case_id = "TEST-123"
+    mock_case.case_seq = "SEQ-999"
     mock_case_store.get.return_value = mock_case
     monkeypatch.setattr(server, "_case_store", mock_case_store)
 
+    legacy = MagicMock()
     mock_attachment_store = MagicMock()
-    mock_attachment_store.list_attachments.return_value = []
+    mock_attachment_store.list_attachments.side_effect = lambda key, *a: [legacy] if key == "SEQ-999" else []
     monkeypatch.setattr(server, "attachment_store", mock_attachment_store)
 
     mock_write = MagicMock(return_value=("/tmp/output/packet.pdf", []))
@@ -113,5 +115,5 @@ def test_api_evidence_packet_falls_back_to_case_id_when_case_seq_missing(monkeyp
     client = server.app.test_client()
     resp = client.post('/api/appeal/evidence-packet/print', json={"case_id": "TEST-123"})
     assert resp.status_code == 200
-
-    mock_attachment_store.list_attachments.assert_called_once_with("TEST-123")
+    assert mock_write.call_args.kwargs["attachments"] == []
+    assert any("SEQ-999" in w for w in resp.get_json()["warnings"])

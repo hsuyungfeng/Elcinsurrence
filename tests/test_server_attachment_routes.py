@@ -1,39 +1,44 @@
 import io
-import json
+
 import pytest
 from config import settings
 
-def test_attachment_api_endpoints(tmp_path, monkeypatch):
-    """Test attachment upload, list, delete, and generate endpoints in server.py."""
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
     import server
-    client = server.app.test_client()
-    monkeypatch.setattr(settings, "ATTACHMENTS_DIR", str(tmp_path))
+    from elc_audit_engine.case_store import CaseStore
 
-    import io
+    monkeypatch.setattr(settings, "ATTACHMENTS_DIR", str(tmp_path / "att"))
+    store = CaseStore(db_path=str(tmp_path / "cases.sqlite3"))
+    monkeypatch.setattr(server, "_case_store", store)
+    store.create(case_id="APP-aaa", kind="appeal", case_seq="303", payload={"id": "APP-aaa"})
+    return server.app.test_client()
+
+
+def _png() -> bytes:
     from PIL import Image
-    img_buf = io.BytesIO()
-    Image.new("RGB", (1, 1), color="red").save(img_buf, format="PNG")
-    png_bytes = img_buf.getvalue()
 
-    data = {
-        "case_seq": "case303",
-        "order_seq": "1",
-        "file": (io.BytesIO(png_bytes), "sono.png"),
-    }
+    buf = io.BytesIO()
+    Image.new("RGB", (1, 1), color="red").save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_attachment_api_endpoints(client):
+    """上傳（以 case_id）→ 列出 → 刪除；附件以 case_id 為鍵（A-CR-03）。"""
+    data = {"case_id": "APP-aaa", "order_seq": "1", "file": (io.BytesIO(_png()), "sono.png")}
     resp = client.post("/api/appeal/attachments/upload", data=data, content_type="multipart/form-data")
     assert resp.status_code == 200
-    res_data = resp.get_json()
-    assert res_data["status"] == "success"
-    assert res_data["attachment"]["case_seq"] == "case303"
+    att = resp.get_json()["attachment"]
+    assert att["case_id"] == "APP-aaa"
+    assert att["case_seq"] == "303"
 
-    # 2. List attachments
-    resp_list = client.get("/api/appeal/attachments/case303")
+    resp_list = client.get("/api/appeal/attachments/APP-aaa")
     assert resp_list.status_code == 200
     list_data = resp_list.get_json()
     assert len(list_data["attachments"]) == 1
 
-    # 3. Delete attachment
     att_id = list_data["attachments"][0]["id"]
-    resp_del = client.delete(f"/api/appeal/attachments/case303/{att_id}")
+    resp_del = client.delete(f"/api/appeal/attachments/APP-aaa/{att_id}")
     assert resp_del.status_code == 200
     assert resp_del.get_json()["status"] == "success"

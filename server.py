@@ -39,7 +39,7 @@ from elc_audit_engine.auth import (
 )
 from elc_audit_engine.audit_log import record_access
 from elc_audit_engine.rule_repository.loaders.dates import parse_flexible_date
-from elc_audit_engine.safe_paths import UnsafeIdentifierError
+from elc_audit_engine.safe_paths import UnsafeIdentifierError, safe_filename
 from elc_audit_engine.case_store import (
     CaseNotFoundError,
     CaseStore,
@@ -232,6 +232,12 @@ def _handle_authentication_error(exc: AuthenticationError):
 @app.errorhandler(ApiError)
 def _handle_api_error(exc: ApiError):
     return jsonify({"status": "error", "message": exc.message}), exc.status
+
+
+@app.errorhandler(UnsafeIdentifierError)
+def _handle_unsafe_identifier(exc: UnsafeIdentifierError):
+    """不合法的識別碼（含路徑成分等）是呼叫方錯誤，回 400 而非 500。"""
+    return jsonify({"status": "error", "message": str(exc)}), 400
 
 
 @app.errorhandler(UploadFileError)
@@ -940,6 +946,17 @@ def generate_appeal_draft():
     # 與 /api/sampling/audit 同一語意）。PatientRecordsNotFound 由
     # build_timeline 內捕降級；RecordProviderError（infra 故障）向外穿透
     # 統一 500，不吞成業務結論（P0-2/T-1112-03）。
+    # p7 附件旗標（A-CR-03）：呼叫方明示優先（必須是布林，字串 "false" 會被當真）；
+    # 否則以 case_id 查附件——不再以流水號查，避免別案附件讓本案 p7=Y。
+    if 'has_attachment' in data:
+        has_attachment = data['has_attachment']
+        if not isinstance(has_attachment, bool):
+            raise ApiError("欄位 has_attachment 必須為布林值")
+    elif case_id:
+        has_attachment = attachment_store.has_attachment(case_id, order_seq or None)
+    else:
+        has_attachment = False
+
     provider = _records_provider()
     visit_date = _resolve_visit_date(data, _clean_str(data, 'case_id'))
     timeline, records_source = _resolve_records_source(provider, record_no, visit_date)
@@ -952,7 +969,7 @@ def generate_appeal_draft():
         rule_text=rule_text,
         rule_location=rule_location,
         evidence=evidence,
-        has_attachment=data.get('has_attachment') if 'has_attachment' in data else None,
+        has_attachment=has_attachment,
     )
 
     if case_id:
@@ -1058,12 +1075,41 @@ def import_appeal_cases():
     })
 
 
+def _resolve_attachment_case(case_ref: str, *, allow_seq: bool = True):
+    """把呼叫方給的案件識別轉成 CaseStore 案件（A-CR-03）。
+
+    附件一律以全域唯一的 case_id 為儲存鍵。健保流水號 case_seq 只在單一
+    費用年月／案件分類內唯一，舊版以它當鍵會把別的病患影像併進本案佐證包。
+    為相容既有 HIS 呼叫（README 1.1），仍接受 case_seq：僅在它唯一對應一筆
+    申復案件時採用，多筆 → 409，查無 → 404，絕不猜測。
+    """
+    safe_filename(case_ref, "case_id")
+    try:
+        return _case_store.get(case_ref)
+    except CaseNotFoundError:
+        pass
+    if allow_seq:
+        matches = [r for r in _case_store.list_all(kind="appeal") if r.case_seq == case_ref]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise ApiError(
+                f"流水號 '{case_ref}' 對應 {len(matches)} 筆申復案件，請改用 case_id 指定",
+                status=409,
+            )
+    raise ApiError(f"找不到案件 '{case_ref}'", status=404)
+
+
 @app.route('/api/appeal/attachments/upload', methods=['POST'])
 def upload_appeal_attachment():
     """上傳佐證影像附件。"""
-    case_seq = request.form.get("case_seq") or request.args.get("case_seq")
-    if not case_seq:
-        raise ApiError("缺少案件流水號 case_seq")
+    case_ref = (
+        request.form.get("case_id") or request.args.get("case_id")
+        or request.form.get("case_seq") or request.args.get("case_seq")
+    )
+    if not case_ref:
+        raise ApiError("缺少案件識別 case_id（或可唯一對應的 case_seq）")
+    case = _resolve_attachment_case(case_ref)
 
     order_seq = request.form.get("order_seq") or request.args.get("order_seq")
     order_code = request.form.get("order_code") or request.args.get("order_code")
@@ -1075,7 +1121,7 @@ def upload_appeal_attachment():
     file_bytes = file.read()
     try:
         rec = attachment_store.save_attachment(
-            case_seq=case_seq,
+            case_seq=case.case_id,
             file_bytes=file_bytes,
             filename=file.filename,
             order_seq=order_seq,
@@ -1091,7 +1137,8 @@ def upload_appeal_attachment():
         "status": "success",
         "attachment": {
             "id": rec.id,
-            "case_seq": rec.case_seq,
+            "case_id": case.case_id,
+            "case_seq": case.case_seq,
             "order_seq": rec.order_seq,
             "order_code": rec.order_code,
             "filename": rec.filename,
@@ -1102,18 +1149,21 @@ def upload_appeal_attachment():
     })
 
 
-@app.route('/api/appeal/attachments/<case_seq>', methods=['GET'])
-def get_appeal_attachments(case_seq: str):
-    """查詢某案件下的佐證附件清單。"""
+@app.route('/api/appeal/attachments/<case_ref>', methods=['GET'])
+def get_appeal_attachments(case_ref: str):
+    """查詢某案件下的佐證附件清單（case_ref＝case_id，或可唯一對應的 case_seq）。"""
+    case = _resolve_attachment_case(case_ref)
     order_seq = request.args.get("order_seq")
-    records = attachment_store.list_attachments(case_seq, order_seq)
+    records = attachment_store.list_attachments(case.case_id, order_seq)
     return jsonify({
         "status": "success",
-        "case_seq": case_seq,
+        "case_id": case.case_id,
+        "case_seq": case.case_seq,
         "attachments": [
             {
                 "id": r.id,
-                "case_seq": r.case_seq,
+                "case_id": case.case_id,
+                "case_seq": case.case_seq,
                 "order_seq": r.order_seq,
                 "order_code": r.order_code,
                 "filename": r.filename,
@@ -1126,10 +1176,11 @@ def get_appeal_attachments(case_seq: str):
     })
 
 
-@app.route('/api/appeal/attachments/<case_seq>/<attachment_id>', methods=['DELETE'])
-def delete_appeal_attachment(case_seq: str, attachment_id: str):
-    """刪除指定佐證附件。"""
-    deleted = attachment_store.delete_attachment(case_seq, attachment_id)
+@app.route('/api/appeal/attachments/<case_ref>/<attachment_id>', methods=['DELETE'])
+def delete_appeal_attachment(case_ref: str, attachment_id: str):
+    """刪除指定佐證附件（case_ref＝case_id，或可唯一對應的 case_seq）。"""
+    case = _resolve_attachment_case(case_ref)
+    deleted = attachment_store.delete_attachment(case.case_id, attachment_id)
     if not deleted:
         raise ApiError("找不到指定附件或刪除失敗", status=404)
     return jsonify({
@@ -1240,7 +1291,7 @@ def generate_evidence_packet_print():
 
     from config import settings
     facility = settings.load_facility_config()
-    attachment_key = case.case_seq or safe_case
+    # A-CR-03：附件以 case_id 為鍵（流水號跨月重複，會混入他人影像）。
     attachments = [
         {
             "id": a.id,
@@ -1250,8 +1301,14 @@ def generate_evidence_packet_print():
             "order_seq": a.order_seq,
             "order_code": a.order_code,
         }
-        for a in attachment_store.list_attachments(attachment_key)
+        for a in attachment_store.list_attachments(case.case_id)
     ]
+    legacy_warnings = []
+    if case.case_seq and case.case_seq != case.case_id and attachment_store.list_attachments(case.case_seq):
+        legacy_warnings.append(
+            f"發現以流水號 '{case.case_seq}' 存放的舊版附件，因無法確認屬於本案病患而未併入；"
+            "請確認後以 case_id 重新上傳"
+        )
 
     from elc_audit_engine.generators.evidence_packet import write_evidence_packet
 
@@ -1263,9 +1320,11 @@ def generate_evidence_packet_print():
             tracking=case.history if hasattr(case, "history") else None,
             timeline=None,
             attachments=attachments,
+            file_stem=safe_case,
         )
     except Exception as exc:
         raise ApiError(f"產生 PDF 失敗: {exc}")
+    warnings = legacy_warnings + list(warnings)
 
     pdf_url = _output_url(pdf_path)
     

@@ -145,6 +145,10 @@ def api(monkeypatch, tmp_path):
     monkeypatch.setattr(server_mod, "_RAW_DIR", str(tmp_path / "raw"))
     monkeypatch.setattr(server_mod, "_sampling_cases", None)
     monkeypatch.setattr(server_mod, "_appeal_cases", None)
+    # 隔離 CaseStore：否則會寫入專案 data/db/cases.sqlite3，跨次執行殘留案件
+    from elc_audit_engine.case_store import CaseStore
+
+    monkeypatch.setattr(server_mod, "_case_store", CaseStore(db_path=str(tmp_path / "cases.sqlite3")))
     monkeypatch.setitem(server_mod.app.config, "ELC_API_KEYS", {_TEST_API_KEY: "test-suite"})
     client = server_mod.app.test_client()
     client.environ_base["HTTP_X_API_KEY"] = _TEST_API_KEY

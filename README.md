@@ -86,12 +86,15 @@ HIS 串接時常見的誤用來源：`CaseStore` 中 `case_id` 與 `case_seq` �
 
 | 欄位 | 意義 | 誰產生 | 是否必填 |
 |---|---|---|---|
-| `case_id` | CaseStore 內部主鍵，匯入時由來源資料的 `id` 欄位帶入 | 匯入時系統賦值 | 是（永不為空） |
+| `case_id` | CaseStore 全域唯一主鍵（`SAMP-`／`APP-` + 記錄內容雜湊；同一份檔案重複匯入得到相同 id，回報於 `case_store_conflicts`） | 匯入時系統賦值 | 是（永不為空） |
 | `case_seq` | 健保申報流水號（院所端業務編號） | 匯入時由來源資料的 `case_seq` 欄位帶入（可能未提供） | 否（可為 `null`） |
 
-**HIS 對接時務必注意**：所有 Phase 12 影像佐證端點（`/api/appeal/attachments/*`）與 `attachment_store` 一律以 **`case_seq`** 作為儲存/查詢的 key space；若呼叫方在上傳附件與生成佐證包（`/api/appeal/evidence-packet/print`）時傳入的識別碼不一致（例如上傳用 `case_seq`，生成用 `case_id`），且該案件的 `case_id != case_seq`，會導致查詢不到已上傳的附件。
+**HIS 對接時務必注意**：`case_seq` 只在單一費用年月／案件分類內唯一，跨月必定重複，**不可當成案件主鍵**。所有 Phase 12 影像佐證端點（`/api/appeal/attachments/*`）、佐證包列印與申復草稿的 p7 附件旗標，一律以 **`case_id`** 作為附件儲存／查詢鍵。
 
-> **歷史記錄**：v1.1 milestone-close 稽核（2026-08-12）曾發現 `generate_evidence_packet_print` 內部誤用 `case_id` 查詢附件（`attachment_store` 實際以 `case_seq` 寫入），已於同日修復（commit `3f7f097`）——伺服器端現在會優先採用 `case.case_seq`，僅當其為空值時才回退使用 `case_id` 對應的鍵。**但呼叫端仍應在上傳與生成兩端一致地提供 `case_seq`**，以避免依賴此回退邏輯。
+- 附件端點仍接受 `case_seq` 作為相容用識別：伺服器會以它反查申復案件，**僅在唯一對應一筆時採用**；對應多筆回 `409`（請改用 `case_id`），查無回 `404`。
+- 附件回應同時帶 `case_id` 與 `case_seq`。
+
+> **歷史記錄**：v1.1 以 `case_seq` 為附件鍵（commit `3f7f097` 曾修正生成端與上傳端不一致）。2026-09 全專案 code review（`doc/REVIEW-A-api-store-generators.md` CR-03）發現流水號跨月重複會把他人影像併入本案佐證包、誤設 p7=Y，改為 `case_id` 為鍵。升級前以流水號存放的舊附件**不會自動併入**佐證包，列印時會在 `warnings` 提示，請確認病患後以 `case_id` 重新上傳。
 
 ### 2. 核心 REST API 規格
 
@@ -392,24 +395,31 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 
 #### 🔹 [POST] `/api/appeal/attachments/upload` — 上傳影像佐證
 
-- **請求**：`multipart/form-data`，欄位 `file`（PNG/JPEG/HEIC/PDF，≤10MB）+ JSON body `case_seq`、`order_code`。
+- **請求**：`multipart/form-data`，欄位 `file`（PNG/JPEG/HEIC/PDF，≤10MB）＋ `case_id`（建議；或可唯一對應的 `case_seq`）、`order_seq`、`order_code`。
 - **回傳**：
   ```json
   {
     "status": "success",
-    "attachment_id": "uuid",
-    "filename": "安全後檔名.jpg",
-    "case_seq": "201",
-    "order_code": "64140C"
+    "attachment": {
+      "id": "uuid",
+      "case_id": "APP-3f2a9c01d4e5b6a7",
+      "case_seq": "201",
+      "order_seq": "1",
+      "order_code": "64140C",
+      "filename": "安全後檔名.jpg",
+      "file_size": 12345,
+      "mime_type": "image/jpeg",
+      "created_at": "..."
+    }
   }
   ```
-- **狀態碼**：`400` 格式不支援或 Magic Bytes 不符；`413` 超過 10MB；`500` 其他。
+- **狀態碼**：`400` 格式不支援、Magic Bytes 不符或識別碼不合法；`404` 查無案件；`409` `case_seq` 對應多筆案件；`500` 其他。
 
-#### 🔹 [GET] `/api/appeal/attachments/<case_seq>` — 列出佐證附件
+#### 🔹 [GET] `/api/appeal/attachments/<case_id>` — 列出佐證附件
 
-回傳指定案件流水號所有已上傳附件的元資料清單（不回傳二進位內容）。
+回傳指定案件所有已上傳附件的元資料清單（不回傳二進位內容）。路徑參數亦接受可唯一對應的 `case_seq`（規則同上傳）。
 
-#### 🔹 [DELETE] `/api/appeal/attachments/<case_seq>/<attachment_id>` — 刪除附件
+#### 🔹 [DELETE] `/api/appeal/attachments/<case_id>/<attachment_id>` — 刪除附件
 
 刪除指定附件檔案，並從 `has_attachment` 計算中排除。
 
@@ -446,7 +456,7 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
   ```json
   {
     "status": "success",
-    "pdf_url": "/output/核減明細_xxxxxxxx.pdf",
+    "pdf_url": "/api/output/核減明細_xxxxxxxx.pdf",
     "warnings": ["Row 1: 缺病患姓名"]
   }
   ```
@@ -477,13 +487,17 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
   ```json
   {
     "status": "success",
-    "pdf_url": "/output/申復佐證包_201.pdf",
+    "pdf_url": "/api/output/申復佐證包_APP-3f2a9c01d4e5b6a7.pdf",
     "warnings": []
   }
   ```
 - **CLI 替代方案**：`python scripts/build_evidence_packet.py --case-id APP-0001`
 - **狀態碼**：`400` 缺案件資料；`500` 合成失敗（含錯誤說明）。
-- **⚠️ 附件查詢鍵**：伺服器內部以 `case.case_seq`（若為空則回退 `case_id`）查詢 Phase 12 已上傳的附件——見上方「案件識別欄位對接注意事項」。若上傳附件時使用的 `case_seq` 與此案件的 `case_seq` 不一致，附件將不會出現在生成的佐證包中（無錯誤，只是 `attachments` 陣列為空）。
+- **附件查詢鍵**：以 `case_id` 查詢 Phase 12 附件，輸出檔名亦以 `case_id` 命名——見上方「案件識別欄位對接注意事項」。
+
+#### 🔹 [GET] `/api/output/<檔名>.pdf` — 下載列印產出
+
+下載 `/api/deduction/print`、`/api/appeal/evidence-packet/print` 回傳的 `pdf_url`。內容含 PHI，**必須帶 `X-API-Key`**，並寫入存取審計日誌；僅開放 `.pdf`。
 
 ---
 
@@ -500,10 +514,11 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 | `POST` | `/api/appeal/generate` | 核減申復草稿生成 | 選填 |
 | `POST` | `/api/appeal/import` | 匯入核減清單 | 選填 |
 | `POST` | `/api/appeal/attachments/upload` | 上傳影像佐證（Phase 12） | 選填 |
-| `GET` | `/api/appeal/attachments/<case_seq>` | 列出佐證附件（Phase 12） | 選填 |
-| `DELETE` | `/api/appeal/attachments/<case_seq>/<id>` | 刪除佐證附件（Phase 12） | 選填 |
+| `GET` | `/api/appeal/attachments/<case_id>` | 列出佐證附件（Phase 12） | 選填 |
+| `DELETE` | `/api/appeal/attachments/<case_id>/<id>` | 刪除佐證附件（Phase 12） | 選填 |
 | `POST` | `/api/deduction/print` | 核減明細原格式 PDF（Phase 13） | 選填 |
 | `POST` | `/api/appeal/evidence-packet/print` | 佐證包 PDF 合成（Phase 14） | 選填 |
+| `GET` | `/api/output/<檔名>.pdf` | 下載列印產出 PDF | **必填** |
 
 > **認證「選填」說明**：帶合法 `X-API-Key` 時審計日誌記錄真實 `caller_id`；未帶時記 `anonymous`。認證機制仍在，只是不強制擋（2026-08-07 政策調整，詳見「認證」小節）。
 
