@@ -99,6 +99,36 @@ def _declared_encoding(raw: bytes) -> str | None:
     return match.group(1).decode("ascii", errors="ignore") if match else None
 
 
+def _decode_with_info(raw: bytes) -> tuple[str, str, str | None]:
+    """解碼並回傳 (文字, 實際使用編碼, 宣告編碼)。
+
+    宣告編碼優先；**無宣告時先試 UTF-8（嚴格解碼，誤判率極低）**，再依
+    big5→cp950→big5hkscs 回退（B-WR-21：原本無宣告時先試 big5，部分 UTF-8
+    中文會被 big5「成功」解成亂碼而不自知）。
+    """
+    declared = _declared_encoding(raw)
+    candidates: list[str] = []
+    if declared:
+        candidates.append(declared)
+    else:
+        candidates.append("utf-8")
+    for enc in _ENCODING_FALLBACKS:
+        if enc not in candidates:
+            candidates.append(enc)
+
+    errors: list[str] = []
+    for enc in candidates:
+        try:
+            return raw.decode(enc), enc, declared
+        except (LookupError, UnicodeDecodeError) as exc:
+            errors.append(f"{enc}: {exc}")
+    raise SubmissionXmlError(
+        "申報 XML 無法解碼：嘗試編碼 "
+        + ", ".join(c.split(":")[0] for c in errors)
+        + f" 皆失敗（宣告={declared!r}）"
+    )
+
+
 def decode_xml_bytes(raw: bytes) -> str:
     """依 D-01 順序把 bytes 解碼為 str。
 
@@ -111,25 +141,7 @@ def decode_xml_bytes(raw: bytes) -> str:
     Raises:
         SubmissionXmlError: 宣告編碼與所有回退編碼皆失敗。
     """
-    declared = _declared_encoding(raw)
-    candidates: list[str] = []
-    if declared:
-        candidates.append(declared)
-    for enc in _ENCODING_FALLBACKS:
-        if enc not in candidates:
-            candidates.append(enc)
-
-    errors: list[str] = []
-    for enc in candidates:
-        try:
-            return raw.decode(enc)
-        except (LookupError, UnicodeDecodeError) as exc:
-            errors.append(f"{enc}: {exc}")
-    raise SubmissionXmlError(
-        "申報 XML 無法解碼：嘗試編碼 "
-        + ", ".join(c.split(":")[0] for c in errors)
-        + f" 皆失敗（宣告={declared!r}）"
-    )
+    return _decode_with_info(raw)[0]
 
 
 def _neutralize_declaration(text: str) -> str:
@@ -239,7 +251,7 @@ def _parse_case(ddata: ET.Element) -> SubmissionCase | RejectedCase:
     )
 
 
-def _parse_decoded_text(text: str) -> SubmissionParseResult:
+def _parse_decoded_text(text: str, warnings: tuple[str, ...] = ()) -> SubmissionParseResult:
     """解析已解碼的申報 XML 文字（D-07 回傳形狀，不含編碼偵測）。
 
     Args:
@@ -277,7 +289,7 @@ def _parse_decoded_text(text: str) -> SubmissionParseResult:
         header=header,
         cases=tuple(cases),
         rejected=tuple(rejected),
-        warnings=tuple(),
+        warnings=tuple(warnings),
     )
 
 
@@ -293,8 +305,13 @@ def parse_submission_xml_bytes(raw: bytes) -> SubmissionParseResult:
     Raises:
         SubmissionXmlError: 編碼全失敗，或根元素不是 <outpatient>。
     """
-    text = decode_xml_bytes(raw)
-    return _parse_decoded_text(_neutralize_declaration(text))
+    text, used, declared = _decode_with_info(raw)
+    warnings: list[str] = []
+    if declared is None:
+        warnings.append(f"申報 XML 未宣告編碼，以 {used} 解碼")
+    elif used.lower() != declared.lower():
+        warnings.append(f"申報 XML 宣告編碼 {declared} 解碼失敗，改以 {used} 解碼（請確認內容無亂碼）")
+    return _parse_decoded_text(_neutralize_declaration(text), tuple(warnings))
 
 
 def parse_submission_xml(path: str | os.PathLike[str]) -> SubmissionParseResult:
