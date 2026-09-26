@@ -14,6 +14,11 @@ import os
 import sys
 from pathlib import Path
 
+# 與其他腳本一致：直接執行時把專案根插入 sys.path，讓 `config` 可被匯入（A-IN-07）
+_PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
 from elc_audit_engine.generators import (
     AppealXmlEncodingError,
     build_appeal_xml,

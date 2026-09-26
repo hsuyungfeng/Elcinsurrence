@@ -75,9 +75,8 @@ SCHEMA_INDEX_TRANSITIONS_CASE = (
 )
 
 # SQL 表名一律寫死於靜態語句，不動態組裝——與 rule_repository 同慣例
-# （T-09-13 mitigation）。目前本模組內部查詢皆為靜態字串，此白名單
-# 供未來新增查詢介面時比照 rule_repository 的防線沿用。
-_ALLOWED_TABLES = {"cases", "case_transitions", "case_artifacts"}
+# （T-09-13 mitigation）。若日後新增依表名查詢的介面，再比照
+# rule_repository 加白名單。
 
 
 def get_connection(db_path: str) -> sqlite3.Connection:

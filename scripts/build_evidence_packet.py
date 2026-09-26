@@ -19,7 +19,10 @@ def main(argv: list[str] | None = None) -> int:
         argv = sys.argv[1:]
 
     parser = argparse.ArgumentParser(description="Generate Evidence Packet PDF")
-    parser.add_argument("--case-seq", required=True, help="Case sequence number")
+    parser.add_argument(
+        "--case-seq", required=True,
+        help="輸出檔名主幹（申復佐證包_<值>.pdf）；建議傳 CaseStore case_id 以免流水號跨月撞名",
+    )
     parser.add_argument("--output-dir", required=True, help="Output directory")
     parser.add_argument("--payload", required=True, help="Path to JSON payload")
     parser.add_argument("--facility-config", help="Path to facility config JSON")
@@ -46,13 +49,20 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     try:
+        file_stem = safe_filename(args.case_seq, "case_seq")
+    except ValueError as e:
+        print(f"錯誤：不安全的 --case-seq：{e}", file=sys.stderr)
+        return 1
+
+    try:
         out_path, warnings = write_evidence_packet(
             output_dir=args.output_dir,
             payload=payload,
             facility=facility,
             tracking={},
             timeline=None,  # CLI 未查詢病史：標示「未查詢」而非「無就醫紀錄」
-            attachments=[]
+            attachments=[],
+            file_stem=file_stem,
         )
         print(f"Successfully generated: {out_path}")
         if warnings:

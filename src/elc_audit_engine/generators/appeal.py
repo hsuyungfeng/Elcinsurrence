@@ -376,11 +376,8 @@ def build_appeal_draft(
     rule_text: str | None = None,
     rule_location: str | None = None,
     evidence: Sequence = (),
-    has_attachment: bool | None = None,
+    has_attachment: bool = False,
 ) -> AppealDraft:
-    if has_attachment is None:
-        from elc_audit_engine import attachment_store
-        has_attachment = attachment_store.has_attachment(record.case_seq, record.order_seq)
     """組裝單筆核減醫令的申復理由草稿（D10，每筆獨立生成）。
 
     Args:
@@ -393,7 +390,9 @@ def build_appeal_draft(
         rule_location: 規則出處（條文位置）。
         evidence: 醫師採用敘述（`adopted_narratives_from_tracking` 輸出
             或字串序列，④素材）。
-        has_attachment: p7 申復檔案連結（True=Y）。
+        has_attachment: p7 申復檔案連結（True=Y）。由呼叫端依 CaseStore case_id
+            查附件後傳入（A-IN-01：本模組為純組裝層，不做 I/O；原本以流水號
+            查附件，會讓別案附件把本案 p7 設為 Y）。
 
     Returns:
         AppealDraft：四段＋p8/p9＋p6＋字數統計＋硬檢查結果。

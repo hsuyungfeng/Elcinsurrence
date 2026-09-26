@@ -304,11 +304,6 @@ _RAW_DIR = os.path.join(_UPLOAD_DIR, "raw")
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 _ALLOWED_EXTS = {".csv", ".pdf", ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
 
-# 導入後案件清單（None＝尚未導入，回傳示範資料）。落盤於 data/uploads/*.json，
-# server 啟動時載入最新一份，重啟不丟失。
-_sampling_cases: list[dict] | None = None
-_appeal_cases: list[dict] | None = None
-
 
 def _save_upload(file_storage) -> tuple[str, str]:
     """儲存上傳檔到 data/uploads/raw/（uuid 檔名，防路徑穿越 P1-3）。
@@ -364,9 +359,6 @@ def _load_latest_cases(kind: str) -> list[dict] | None:
     except (OSError, json.JSONDecodeError):
         return None
 
-
-_sampling_cases = _load_latest_cases("sampling")
-_appeal_cases = _load_latest_cases("appeal")
 
 _case_store = CaseStore()
 
@@ -1318,8 +1310,6 @@ def download_output(name: str):
     並照常寫審計日誌。<name> 不接受斜線；send_from_directory 另以
     safe_join 擋路徑穿越。只開放 .pdf。
     """
-    from config import settings
-
     if not name.lower().endswith(".pdf"):
         raise ApiError("找不到檔案", status=404)
     return send_from_directory(settings.OUTPUT_DIR, name, as_attachment=True)
@@ -1356,7 +1346,6 @@ def generate_deduction_print():
     if not records:
         raise ApiError("無有效核減資料可供列印")
 
-    from config import settings
     from elc_audit_engine.safe_paths import safe_filename
     from elc_audit_engine.generators.deduction_print import write_deduction_print
 
@@ -1420,7 +1409,6 @@ def generate_evidence_packet_print():
         "entries": [dataclasses.asdict(t) for t in _case_store.history(safe_case)]
     }
 
-    from config import settings
     facility = settings.load_facility_config()
     # A-CR-03：附件以 case_id 為鍵（流水號跨月重複，會混入他人影像）。
     attachments = [

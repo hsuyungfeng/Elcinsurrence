@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not _server_is_up():
         print(
-            "llama.cpp server 未在 localhost:8080 啟動（/health 非 200）。"
+            f"llama.cpp server 未在 {LLAMA_CPP_BASE_URL} 啟動（/health 非 200）。"
             "請先啟動 server 再回放金標準。",
             file=sys.stderr,
         )

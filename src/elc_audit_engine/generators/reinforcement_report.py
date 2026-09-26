@@ -53,13 +53,6 @@ def _support_badge(level: str | None, rule_found: bool = False) -> str:
     return _SUPPORT_BADGES.get(level, level)
 
 
-def _timeline_summary(comparison: CaseComparisonResult) -> list[str]:
-    """半年病史摘要區（timeline 存在時由 comparison 提供者帶入）。"""
-    # CaseComparisonResult 目前未攜帶 timeline 明細；摘要區由呼叫端
-    # 以 render_timeline_summary(timeline) 另行渲染，此處僅留佔位。
-    return []
-
-
 def render_timeline_summary(timeline) -> str:
     """渲染半年病史摘要（供報告「半年病史摘要」區塊使用）。
 

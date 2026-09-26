@@ -84,10 +84,6 @@ def write_evidence_packet(
     safe_stem = safe_filename(stem, "file_stem")
     output_pdf_path = os.path.join(output_dir, f"申復佐證包_{safe_stem}.pdf")
 
-    # Path traversal check on output_dir
-    if os.pardir in output_dir.split(os.sep):
-        raise ValueError("Invalid output_dir containing path traversal components.")
-
     docx_bytes, warnings = render_evidence_packet(
         payload, facility, tracking=tracking, timeline=timeline, attachments=attachments
     )

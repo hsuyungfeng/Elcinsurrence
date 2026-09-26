@@ -170,8 +170,6 @@ def app_client(monkeypatch):
         "ELC_API_KEYS",
         {_APP_KEY_HIS1: "his1", _APP_KEY_HIS2: "his2"},
     )
-    monkeypatch.setattr(server_mod, "_sampling_cases", None)
-    monkeypatch.setattr(server_mod, "_appeal_cases", None)
     return server_mod.app.test_client()
 
 
