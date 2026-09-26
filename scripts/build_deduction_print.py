@@ -15,6 +15,7 @@ Usage:
 
 import argparse
 import json
+from dataclasses import asdict
 import os
 import sys
 from pathlib import Path
@@ -53,14 +54,16 @@ def main(argv: list[str] | None = None) -> int:
         if not os.path.exists(args.csv):
             print(f"錯誤：找不到檔案 '{args.csv}'", file=sys.stderr)
             return 1
-        with open(args.csv, "rb") as f:
-            try:
-                res = parse_deduction_file(f.read())
-                records = [vars(r) for r in res.records]
-                file_stem = Path(args.csv).stem
-            except Exception as e:
-                print(f"錯誤：解析 CSV 失敗: {e}", file=sys.stderr)
-                return 1
+        try:
+            # parse_deduction_file 接受路徑（原本傳入檔案內容 bytes，被當成檔名而必定失敗）
+            res = parse_deduction_file(args.csv)
+            records = [
+                {k: v for k, v in asdict(r).items() if k != "raw"} for r in res.records
+            ]
+            file_stem = Path(args.csv).stem
+        except Exception as e:
+            print(f"錯誤：解析 CSV 失敗: {e}", file=sys.stderr)
+            return 1
     elif args.json:
         if not os.path.exists(args.json):
             print(f"錯誤：找不到檔案 '{args.json}'", file=sys.stderr)
