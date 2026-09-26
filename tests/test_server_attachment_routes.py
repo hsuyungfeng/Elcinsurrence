@@ -13,7 +13,10 @@ def client(tmp_path, monkeypatch):
     store = CaseStore(db_path=str(tmp_path / "cases.sqlite3"))
     monkeypatch.setattr(server, "_case_store", store)
     store.create(case_id="APP-aaa", kind="appeal", case_seq="303", payload={"id": "APP-aaa"})
-    return server.app.test_client()
+    monkeypatch.setitem(server.app.config, "ELC_API_KEYS", {"valid-key-1234567": "his1"})
+    c = server.app.test_client()
+    c.environ_base["HTTP_X_API_KEY"] = "valid-key-1234567"
+    return c
 
 
 def _png() -> bytes:

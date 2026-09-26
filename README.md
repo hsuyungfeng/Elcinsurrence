@@ -100,25 +100,26 @@ HIS 串接時常見的誤用來源：`CaseStore` 中 `case_id` 與 `case_seq` �
 
 > **案例清單端點**（`GET /api/sampling/cases`、`GET /api/appeal/cases`）：未匯入資料時回傳**示範資料**（每個案例帶 `"demo": true`），供 UI 展示工作流；**匯入後優先回傳導入資料**（`source: "csv" / "paddle" / "ocr"`）。醫令名稱一律以規則庫為準（例：`64140C`＝甲床與手指重建術，曾誤標為「手腕韌帶縫合術」，2026-08-04 修正）。
 
-#### 🔐 認證（2026-08-07 起：業務端點依使用者裁示改為選填，供直接 HIS 對接）
+#### 🔐 認證（2026-09 起：部分強制——批次讀出 PHI 與破壞性操作必填，其餘選填）
 
 | 端點 | 是否強制 `X-API-Key` |
 |---|---|
-| `GET /` | 否（靜態頁） |
+| `GET /` | 否（靜態頁；頁面側邊欄可輸入 API Key，存於瀏覽器 localStorage） |
 | `GET /api/health` | 否（健康檢查，供 HIS／監控探測，不含案件資料） |
-| `GET /api/sampling/cases` | 否（選填——帶合法 key 時審計日誌會記錄真實 `caller_id`，否則記 `anonymous`） |
-| `POST /api/sampling/audit` | 否（同上） |
-| `POST /api/sampling/import` | 否（同上） |
-| `GET /api/appeal/cases` | 否（同上） |
-| `POST /api/appeal/generate` | 否（同上） |
-| `POST /api/appeal/import` | 否（同上） |
+| `GET /api/sampling/cases` | **是**（批次回傳病患資料） |
+| `GET /api/appeal/cases` | **是**（同上） |
+| `GET /api/appeal/attachments/<case_id>` | **是**（附件清單） |
+| `DELETE /api/appeal/attachments/<case_id>/<id>` | **是**（破壞性操作） |
+| `GET /api/output/<檔名>.pdf` | **是**（列印產出含 PHI） |
+| `POST /api/sampling/audit`、`/api/sampling/import`、`/api/appeal/generate`、`/api/appeal/import`、`/api/appeal/attachments/upload`、`/api/deduction/print`、`/api/appeal/evidence-packet/print` | 否（選填——帶合法 key 時審計日誌記錄真實 `caller_id`，否則記 `anonymous`） |
 
-- **背景**：Phase 9-01 原將六個業務端點設為強制認證；`fcde2c8`（2026-08-07）依使用者裁示改為選填，供未經 API Key 分發流程的 HIS 直接對接。認證**機制**（`resolve_caller`／`hmac.compare_digest`）仍在，只是不再強制擋。
+- **背景**：Phase 9-01 原將業務端點設為強制認證；`fcde2c8`（2026-08-07）改為全部選填。2026-09 全專案 code review（`doc/REVIEW-A-api-store-generators.md` CR-01）指出免認證的 GET／DELETE 可被任何能連到服務的人（含 DNS rebinding）批次讀取或刪除 PHI，依使用者裁示改為上表的部分強制。
+- **Host 白名單（防 DNS rebinding）**：所有請求的 `Host` 必須在 `ELC_ALLOWED_HOSTS`（逗號分隔；未設定時僅 `127.0.0.1`／`localhost`／`[::1]`）內，否則回 `400`。對外部署時須加入實際主機名稱。
 - **機制**：服務間 API key（非 JWT／mTLS——呼叫方是 HIS 服務而非瀏覽器使用者，2026-08-05 使用者裁示）。
-- **Header**：`X-API-Key: <key>`（選填，帶了會被解析用於審計）。
+- **Header**：`X-API-Key: <key>`（上表必填端點缺少或錯誤時回 401；選填端點帶了會被解析用於審計）。
 - **設定**：環境變數 `ELC_API_KEYS`，格式 `caller_id1:key1,caller_id2:key2`（多呼叫方，供審計日誌辨識「誰調閱了病歷」）；每組 key 須 >= 16 字元。**`ELC_API_KEYS` 未設定或格式錯誤時服務啟動即失敗**（fail-fast，即使業務端點不強制認證，key 表本身仍必須合法配置——用於審計辨識與 `/api/health` 之外所有端點的 caller 解析）。
 - **比對**：`hmac.compare_digest`（constant-time），不使用 `==`（時序側通道）。
-- **401 回應形狀**（`GET /api/sampling/cases` 之外的、未來若新增仍強制認證的端點適用）：`{"status": "error", "message": "認證失敗：缺少或無效的 API key"}`——與「查無資料」（200 + 空陣列）或 404 明確可區分，不得混淆。
+- **401 回應形狀**（上表必填端點）：`{"status": "error", "message": "認證失敗：缺少或無效的 API key"}`——與「查無資料」（200 + 空陣列）或 404 明確可區分，不得混淆。
 - **真實 key 不得進版控**（`.env` 已在 `.gitignore`；`.env.example` 僅提供格式範例）。
 - 新增端點時**預設受保護**（`before_request` 統一強制）；豁免需顯式列入 `server.py` 的 `_AUTH_EXEMPT_ENDPOINTS`。
 
@@ -507,20 +508,20 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 |--------|------|------|------|
 | `GET` | `/api/health` | 健康檢查 | 免認證 |
 | `GET` | `/` | 控制台首頁（Web UI） | 免認證 |
-| `GET` | `/api/sampling/cases` | 抽審名冊案件列表 | 選填 |
+| `GET` | `/api/sampling/cases` | 抽審名冊案件列表 | **必填** |
 | `POST` | `/api/sampling/audit` | 事前預審支持度評估 | 選填 |
 | `POST` | `/api/sampling/import` | 匯入抽審名冊（CSV/PDF/影像） | 選填 |
-| `GET` | `/api/appeal/cases` | 申復草稿案件列表 | 選填 |
+| `GET` | `/api/appeal/cases` | 申復草稿案件列表 | **必填** |
 | `POST` | `/api/appeal/generate` | 核減申復草稿生成 | 選填 |
 | `POST` | `/api/appeal/import` | 匯入核減清單 | 選填 |
 | `POST` | `/api/appeal/attachments/upload` | 上傳影像佐證（Phase 12） | 選填 |
-| `GET` | `/api/appeal/attachments/<case_id>` | 列出佐證附件（Phase 12） | 選填 |
-| `DELETE` | `/api/appeal/attachments/<case_id>/<id>` | 刪除佐證附件（Phase 12） | 選填 |
+| `GET` | `/api/appeal/attachments/<case_id>` | 列出佐證附件（Phase 12） | **必填** |
+| `DELETE` | `/api/appeal/attachments/<case_id>/<id>` | 刪除佐證附件（Phase 12） | **必填** |
 | `POST` | `/api/deduction/print` | 核減明細原格式 PDF（Phase 13） | 選填 |
 | `POST` | `/api/appeal/evidence-packet/print` | 佐證包 PDF 合成（Phase 14） | 選填 |
 | `GET` | `/api/output/<檔名>.pdf` | 下載列印產出 PDF | **必填** |
 
-> **認證「選填」說明**：帶合法 `X-API-Key` 時審計日誌記錄真實 `caller_id`；未帶時記 `anonymous`。認證機制仍在，只是不強制擋（2026-08-07 政策調整，詳見「認證」小節）。
+> **認證「選填」說明**：帶合法 `X-API-Key` 時審計日誌記錄真實 `caller_id`；未帶時記 `anonymous`。「必填」端點缺 key 回 401（2026-09 部分強制，詳見「認證」小節）。
 
 ---
 

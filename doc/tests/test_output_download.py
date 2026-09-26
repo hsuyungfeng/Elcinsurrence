@@ -21,6 +21,7 @@ def test_download_pdf_with_key(client, out_dir):
 
 
 def test_download_requires_api_key(client, out_dir):
+    client.environ_base.pop("HTTP_X_API_KEY", None)
     assert client.get("/api/output/核減明細_abc.pdf").status_code == 401
 
 

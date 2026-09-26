@@ -87,19 +87,34 @@ _AUDIT_EXEMPT_ENDPOINTS = frozenset({"index", "health", "static"})
 # 不強制 API Key。**僅決定認證是否強制，不得沿用來判斷審計**——
 # 兩份清單刻意分開（歷史教訓：曾共用一份清單，導致免認證的業務端點
 # 連審計日誌都被一併跳過，違反「認證可選、審計必留」的設計）。
+#
+# 2026-09 部分強制（code review A-CR-01，使用者裁示選項 2）：批次讀出 PHI 的
+# 端點（案件清單、附件清單、列印產出下載）與破壞性操作（刪除附件）必須帶
+# X-API-Key；其餘以單筆請求為單位、由呼叫方自帶資料的端點維持選填。
 _AUTH_EXEMPT_ENDPOINTS = _AUDIT_EXEMPT_ENDPOINTS | frozenset({
-    "get_sampling_cases",
     "audit_sampling_case",
     "import_sampling_cases",
-    "get_appeal_cases",
     "generate_appeal_draft",
     "import_appeal_cases",
     "upload_appeal_attachment",
-    "get_appeal_attachments",
-    "delete_appeal_attachment",
     "generate_deduction_print",
     "generate_evidence_packet_print",
 })
+
+
+def _load_allowed_hosts() -> frozenset[str]:
+    """Host header 白名單（防 DNS rebinding：惡意網域解析到 127.0.0.1 後，
+    瀏覽器會帶攻擊者網域的 Host，藉此讀取免認證端點）。
+
+    ELC_ALLOWED_HOSTS 以逗號分隔（不含 port 亦可）；未設定時僅允許本機名稱。
+    對外部署時須把實際主機名稱加入。
+    """
+    raw = os.getenv("ELC_ALLOWED_HOSTS", "")
+    hosts = {h.strip().lower() for h in raw.split(",") if h.strip()}
+    return frozenset(hosts or {"127.0.0.1", "localhost", "[::1]"})
+
+
+_ALLOWED_HOSTS = _load_allowed_hosts()
 
 
 def _init_api_keys(flask_app) -> None:
@@ -171,6 +186,10 @@ def _enforce_api_key():
     `_AUTH_EXEMPT_ENDPOINTS`，而非預設放行。`require_api_key` decorator
     仍保留供未來 blueprint 使用。
     """
+    host = (request.host or "").lower()
+    hostname = host.rsplit(":", 1)[0] if not host.endswith("]") else host
+    if host not in _ALLOWED_HOSTS and hostname not in _ALLOWED_HOSTS:
+        return jsonify({"status": "error", "message": "不允許的 Host"}), 400
     if request.endpoint in _AUTH_EXEMPT_ENDPOINTS:
         # 免強制認證，但若呼叫方仍帶了合法 key，順便解析 caller_id，
         # 讓審計日誌不必然落成 anonymous（key 錯誤或缺失則靜默忽略，
@@ -1342,8 +1361,10 @@ if __name__ == '__main__':
     # 例外會回顯堆疊；本服務會接觸病歷資料，不得如此。
     # 需對外提供時請置於反向代理／VPN 後，並以環境變數覆寫：
     #   ELC_SERVER_HOST=0.0.0.0 ELC_SERVER_PORT=5000 python server.py
-    # Phase 9-01：認證已由 before_request 強制，除 / 與 /api/health 外
-    # 一律需帶 X-API-Key；ELC_API_KEYS 未設定時服務啟動即失敗（fail-fast）。
+    # 認證：before_request 依 _AUTH_EXEMPT_ENDPOINTS 決定是否強制 X-API-Key
+    # （案件清單、附件清單／刪除、PDF 下載必填；其餘選填，見該清單註解）。
+    # ELC_API_KEYS 未設定時服務啟動即失敗（fail-fast）。
+    # 對外部署另須設定 ELC_ALLOWED_HOSTS（Host header 白名單）。
     host = os.getenv('ELC_SERVER_HOST', '127.0.0.1')
     port = int(os.getenv('ELC_SERVER_PORT', '5000'))
     debug = os.getenv('ELC_SERVER_DEBUG', '').lower() in ('1', 'true', 'yes')

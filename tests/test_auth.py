@@ -179,16 +179,35 @@ def _auth_header(key: str) -> dict:
     return {auth.API_KEY_HEADER: key}
 
 
-def test_no_header_get_sampling_cases_returns_200(app_client):
-    """fcde2c8：業務端點依使用者裁示不再強制 API Key（直接 HIS 對接）。"""
+def test_no_header_get_sampling_cases_returns_401(app_client):
+    """2026-09 部分強制（A-CR-01）：案件清單批次回傳 PHI，必須帶 API Key。"""
     r = app_client.get("/api/sampling/cases")
-    assert r.status_code == 200
+    assert r.status_code == 401
 
 
-def test_wrong_key_get_sampling_cases_still_returns_200(app_client):
-    """免強制認證後，錯誤 key 不應被拒——端點本身不驗證 key 正確性。"""
+def test_wrong_key_get_sampling_cases_returns_401(app_client):
     r = app_client.get("/api/sampling/cases", headers=_auth_header("wrong-key-wrong-key-000"))
-    assert r.status_code == 200
+    assert r.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "method, path",
+    [
+        ("get", "/api/appeal/cases"),
+        ("get", "/api/appeal/attachments/APP-x"),
+        ("delete", "/api/appeal/attachments/APP-x/abc"),
+        ("get", "/api/output/x.pdf"),
+    ],
+)
+def test_phi_read_and_delete_endpoints_require_key(app_client, method, path):
+    assert getattr(app_client, method)(path).status_code == 401
+
+
+def test_unlisted_host_is_rejected(app_client):
+    """DNS rebinding 防護：Host 不在 ELC_ALLOWED_HOSTS 白名單 → 400。"""
+    r = app_client.get("/api/health", headers={"Host": "evil.example.com"})
+    assert r.status_code == 400
+    assert app_client.get("/api/health", headers={"Host": "127.0.0.1:5000"}).status_code == 200
 
 
 def test_correct_key_get_sampling_cases_returns_200(app_client):

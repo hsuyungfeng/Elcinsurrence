@@ -25,4 +25,5 @@ def client(monkeypatch, tmp_path):
     server.app.config["TESTING"] = True
     monkeypatch.setitem(server.app.config, "ELC_API_KEYS", {"valid-key-123": "clinic_a"})
     with server.app.test_client() as c:
+        c.environ_base["HTTP_X_API_KEY"] = "valid-key-123"
         yield c
