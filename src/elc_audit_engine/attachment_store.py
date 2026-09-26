@@ -2,8 +2,15 @@ import os
 import json
 import uuid
 import mimetypes
+import contextlib
+import tempfile
 from datetime import datetime, timezone
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, fields
+
+try:  # POSIX 檔案鎖；Windows 無 fcntl 時退化為不加鎖（單機單程序部署）
+    import fcntl
+except ImportError:  # pragma: no cover
+    fcntl = None
 from PIL import Image
 import pillow_heif
 from pypdf import PdfReader
@@ -24,6 +31,13 @@ class AttachmentStoreError(Exception):
 
 class InvalidAttachmentError(AttachmentStoreError, ValueError):
     """Raised when an attachment file is invalid, corrupted, or unsupported."""
+
+class AttachmentIndexCorruptError(AttachmentStoreError):
+    """meta.json 索引無法解析——fail-fast，不得當成「沒有附件」（A-CR-10）。
+
+    舊實作遇到損毀會重設成 [] 再覆寫，等於把既有附件從索引中抹除；
+    列表時回 [] 則讓佐證包在無警告下缺附件、p7 誤判為 N。
+    """
 
 @dataclass(frozen=True)
 class AttachmentRecord:
@@ -85,6 +99,56 @@ def io_bytes(b: bytes):
     import io
     return io.BytesIO(b)
 
+_RECORD_FIELDS = {f.name for f in fields(AttachmentRecord)}
+
+
+@contextlib.contextmanager
+def _locked_index(case_dir: str):
+    """以 case 目錄下的 .meta.lock 對 meta.json 讀-改-寫加獨占鎖。"""
+    os.makedirs(case_dir, exist_ok=True)
+    with open(os.path.join(case_dir, ".meta.lock"), "a") as lock:
+        if fcntl is not None:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if fcntl is not None:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+def _read_index(case_dir: str) -> list[dict]:
+    meta_path = os.path.join(case_dir, "meta.json")
+    if not os.path.isfile(meta_path):
+        return []
+    try:
+        with open(meta_path, "r", encoding="utf-8") as mf:
+            data = json.load(mf)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise AttachmentIndexCorruptError(f"附件索引無法讀取：{meta_path}：{exc}") from exc
+    if not isinstance(data, list):
+        raise AttachmentIndexCorruptError(f"附件索引格式錯誤（非陣列）：{meta_path}")
+    return data
+
+
+def _write_index(case_dir: str, meta_list: list[dict]) -> None:
+    """寫入暫存檔後 os.replace，崩潰時不會留下半截 JSON。"""
+    fd, tmp_path = tempfile.mkstemp(dir=case_dir, prefix=".meta.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as mf:
+            json.dump(meta_list, mf, ensure_ascii=False, indent=2)
+            mf.flush()
+            os.fsync(mf.fileno())
+        os.replace(tmp_path, os.path.join(case_dir, "meta.json"))
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(tmp_path)
+        raise
+
+
+def _to_record(item: dict) -> AttachmentRecord:
+    return AttachmentRecord(**{k: item.get(k) for k in _RECORD_FIELDS})
+
+
 def save_attachment(
     case_seq: str,
     file_bytes: bytes,
@@ -127,18 +191,10 @@ def save_attachment(
         created_at=now_iso,
     )
 
-    meta_path = os.path.join(case_dir, "meta.json")
-    meta_list = []
-    if os.path.exists(meta_path):
-        try:
-            with open(meta_path, "r", encoding="utf-8") as mf:
-                meta_list = json.load(mf)
-        except Exception:
-            meta_list = []
-
-    meta_list.append(asdict(rec))
-    with open(meta_path, "w", encoding="utf-8") as mf:
-        json.dump(meta_list, mf, ensure_ascii=False, indent=2)
+    with _locked_index(case_dir):
+        meta_list = _read_index(case_dir)
+        meta_list.append(asdict(rec))
+        _write_index(case_dir, meta_list)
 
     return rec
 
@@ -164,21 +220,13 @@ def list_attachments(case_seq: str, order_seq: str | None = None) -> list[Attach
         return []
 
     case_dir = os.path.join(settings.ATTACHMENTS_DIR, safe_case)
-    meta_path = os.path.join(case_dir, "meta.json")
-    if not os.path.isfile(meta_path):
-        return []
-
-    try:
-        with open(meta_path, "r", encoding="utf-8") as mf:
-            data = json.load(mf)
-    except Exception:
-        return []
+    data = _read_index(case_dir)  # 損毀時拋 AttachmentIndexCorruptError，不回 []
 
     res = []
     safe_order = safe_filename(order_seq, "order_seq") if order_seq else None
 
     for item in data:
-        rec = AttachmentRecord(**item)
+        rec = _to_record(item)
         if os.path.exists(rec.file_path):
             if safe_order is None or rec.order_seq == safe_order:
                 res.append(rec)
@@ -188,32 +236,23 @@ def delete_attachment(case_seq: str, attachment_id: str) -> bool:
     """Delete a specified attachment record and file."""
     safe_case = safe_filename(case_seq, "case_seq")
     case_dir = os.path.join(settings.ATTACHMENTS_DIR, safe_case)
-    meta_path = os.path.join(case_dir, "meta.json")
-    if not os.path.isfile(meta_path):
+    if not os.path.isdir(case_dir):
         return False
 
-    try:
-        with open(meta_path, "r", encoding="utf-8") as mf:
-            data = json.load(mf)
-    except Exception:
-        return False
+    removed_path = None
+    with _locked_index(case_dir):
+        data = _read_index(case_dir)
+        new_data = [item for item in data if item.get("id") != attachment_id]
+        deleted = len(new_data) != len(data)
+        if deleted:
+            removed_path = next(
+                (item.get("file_path") for item in data if item.get("id") == attachment_id), None
+            )
+            # 先原子更新索引再刪實體檔：中途失敗最多留下孤兒檔，不會留下指向不存在檔案的索引
+            _write_index(case_dir, new_data)
 
-    new_data = []
-    deleted = False
-    for item in data:
-        if item.get("id") == attachment_id:
-            file_path = item.get("file_path")
-            if file_path and os.path.exists(file_path):
-                try:
-                    os.remove(file_path)
-                except OSError:
-                    pass
-            deleted = True
-        else:
-            new_data.append(item)
-
-    if deleted:
-        with open(meta_path, "w", encoding="utf-8") as mf:
-            json.dump(new_data, mf, ensure_ascii=False, indent=2)
+    if removed_path and os.path.exists(removed_path):
+        with contextlib.suppress(OSError):
+            os.remove(removed_path)
 
     return deleted
