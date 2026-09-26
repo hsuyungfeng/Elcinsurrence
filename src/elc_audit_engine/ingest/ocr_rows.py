@@ -23,6 +23,9 @@ from .sampling import (
 # 醫令代碼：健保標準 6 碼（5位數字+1位英文字，如 14050B/64140C/01015C），或 5-6 位英數代碼。
 ORDER_CODE_RE = re.compile(r"(?<![A-Za-z0-9])([A-Za-z0-9]{5,6})(?![A-Za-z0-9])")
 
+# 退路：英文字＋4 位數字＋英文字（非純數字、非一般英文字詞）。
+_FALLBACK_CODE_RE = re.compile(r"[A-Z]\d{4}[A-Z]")
+
 # 單筆醫令名稱的字數上限（OCR 行其餘文字可能夾帶表頭/頁碼雜訊）。
 _MAX_ORDER_NAME_CHARS = 60
 
@@ -42,7 +45,9 @@ def parse_sampling_ocr_text(text: str) -> SamplingImportResult:
         candidates = ORDER_CODE_RE.findall(line)
         if not candidates:
             continue
-        # 優先挑選符合 5數字+1英文字 之標準健保碼
+        # 優先挑選符合 5數字+1英文字 之標準健保碼；退路也必須符合健保代碼
+        # 格式（英文字＋4 數字＋英文字，如 P4401B），不再把 TOTAL、金額
+        # 12345、Page1 之類字詞當醫令代碼（B-WR-19）。
         order_code = None
         for cand in candidates:
             c_upper = cand.upper()
@@ -50,7 +55,18 @@ def parse_sampling_ocr_text(text: str) -> SamplingImportResult:
                 order_code = c_upper
                 break
         if not order_code:
-            order_code = candidates[0].upper()
+            order_code = next(
+                (c.upper() for c in candidates if _FALLBACK_CODE_RE.fullmatch(c.upper())), None
+            )
+        if not order_code:
+            rejected.append(
+                SamplingRejectedRow(
+                    row_number=idx,
+                    reason="非醫令代碼格式（疑似表頭、頁碼或金額）",
+                    raw=(line,),
+                )
+            )
+            continue
         # 只有整行內容相同（分頁重複）才略過（B-CR-04）；同一醫令代碼出現在
         # 不同行代表不同案件，不得以代碼去重而靜默丟棄。
         line_key = " ".join(line.split())

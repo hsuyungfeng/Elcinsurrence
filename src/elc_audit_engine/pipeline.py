@@ -209,6 +209,7 @@ def run_case_pipeline(
     # ③ 逐筆核減醫令 → 申復草稿（Phase 7，D10 每筆獨立）
     opts = appeal_options or {}
     seen: dict[str, int] = {}
+    used_stems: set[str] = set()
     appeal_paths: list[tuple[str, str]] = []
     appeal_drafts: list[AppealDraft] = []
 
@@ -239,12 +240,24 @@ def run_case_pipeline(
             has_attachment=opts.get("has_attachment", False),
         )
 
-        # 同一流水號多筆核減醫令時，file_stem 加醫令碼避免覆寫（C7 保底）
+        # 檔名需唯一，避免後者覆寫前者（C7 保底）。A-WR-09：原本以醫令碼
+        # 區分，同碼不同醫令序仍會撞名；呼叫端給的共用 file_stem 也會讓多筆
+        # 寫到同一檔。先以醫令碼區分，撞名再加醫令序，最後遞增序號，以已用集合保證唯一。
         case_seq = record.case_seq or ""
         seen[case_seq] = seen.get(case_seq, 0) + 1
-        file_stem = opts.get("file_stem")
-        if file_stem is None and seen[case_seq] > 1:
-            file_stem = f"{case_seq}_{order_code or 'x'}"
+        stem_base = opts.get("file_stem") or case_seq or "unknown"
+        stem = stem_base
+        if seen[case_seq] > 1:
+            stem = f"{stem_base}_{order_code or 'x'}"
+        unique = stem
+        if unique in used_stems and record.order_seq:
+            unique = f"{stem}_{record.order_seq}"
+        n = 2
+        while unique in used_stems:
+            unique = f"{stem}_{n}"
+            n += 1
+        used_stems.add(unique)
+        file_stem = unique if (unique != case_seq or opts.get("file_stem")) else None
         md_path, json_path = write_appeal(
             output_dir, case_seq, draft, file_stem=file_stem
         )
