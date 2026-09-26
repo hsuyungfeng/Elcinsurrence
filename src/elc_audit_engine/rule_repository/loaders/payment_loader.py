@@ -8,10 +8,7 @@
     生效迄日     -> effective_to（8 碼西元 YYYYMMDD）
 """
 
-import csv
-
-from elc_audit_engine.rule_repository import db
-from elc_audit_engine.rule_repository.loaders.dates import parse_flexible_date
+from elc_audit_engine.rule_repository.loaders._csv_table import load_rule_csv
 
 
 def load_payment_csv(db_path: str, csv_path: str) -> int:
@@ -24,31 +21,4 @@ def load_payment_csv(db_path: str, csv_path: str) -> int:
     Returns:
         實際插入的資料列數。
     """
-    conn = db.get_connection(db_path)
-    db.init_schema(conn)
-
-    rows = []
-    with open(csv_path, encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        for record in reader:
-            rows.append(
-                (
-                    record["診療項目代碼"],
-                    record["中文項目名稱"],
-                    record["支付規定"],
-                    parse_flexible_date(record["生效起日"]),
-                    parse_flexible_date(record["生效迄日"]),
-                )
-            )
-
-    # 先清空再寫入（同一交易）：新版 CSV 已移除的代碼不得殘留（B-WR-07）。
-    conn.execute("DELETE FROM payment_rules")
-    conn.executemany(
-        "INSERT OR REPLACE INTO payment_rules "
-        "(code, name, payment_text, effective_from, effective_to) "
-        "VALUES (?, ?, ?, ?, ?)",
-        rows,
-    )
-    conn.commit()
-
-    return len(rows)
+    return load_rule_csv(db_path, csv_path, "payment_rules", ('診療項目代碼', '中文項目名稱', '支付規定', '生效起日', '生效迄日'))

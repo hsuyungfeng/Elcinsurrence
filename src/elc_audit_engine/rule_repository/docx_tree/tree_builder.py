@@ -11,7 +11,6 @@
 （對應 02-RESEARCH.md Pitfall 6 的涵蓋率斷言建議）。
 """
 
-import glob
 import os
 
 from elc_audit_engine.rule_repository.docx_tree import doc_converter, extractor
@@ -32,12 +31,9 @@ def build_all_trees(source_dir: str, staging_dir: str) -> dict[str, dict]:
         AssertionError: 若最終處理檔案數與來源檔案數（.doc + .docx glob 數）
             不一致，訊息中會列出缺漏的檔名，避免任何檔案被靜默略過。
     """
-    doc_source_paths = sorted(
-        p
-        for p in glob.glob(os.path.join(source_dir, "*.doc"))
-        if not p.lower().endswith(".docx")
-    )
-    docx_source_paths = sorted(glob.glob(os.path.join(source_dir, "*.docx")))
+    # 副檔名不分大小寫（B-IN-12：.DOC／.DOCX 原本會被 glob 靜默略過）
+    doc_source_paths = doc_converter.list_by_ext(source_dir, ".doc")
+    docx_source_paths = doc_converter.list_by_ext(source_dir, ".docx")
 
     expected_filenames = {os.path.basename(p) for p in doc_source_paths} | {
         os.path.basename(p) for p in docx_source_paths

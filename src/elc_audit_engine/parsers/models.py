@@ -205,12 +205,15 @@ class RejectedRow:
     """核減明細中欄數不符而被拒收的列。
 
     Attributes:
-        row_number: 資料列號（1-based，不含表頭）。
+        row_number: 資料列號（1-based，不含表頭與空白列）。
+        line_number: 原檔行號（1-based，含表頭與空白列；多行欄位取結束行）。
         reason: 拒收原因。
         raw: 原始欄位值（原樣）。
     """
 
     row_number: int = 0
+    # 原檔實際行號（csv reader line_num，含表頭與空白列），供使用者回原檔定位（B-IN-03）
+    line_number: int | None = None
     reason: str = ""
     raw: tuple[str, ...] = ()
 

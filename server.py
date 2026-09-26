@@ -1161,7 +1161,7 @@ def import_appeal_cases():
 
     cases = [_to_appeal_case(i, rec) for i, rec in enumerate(result.records, start=1)]
     rejected = [
-        {'row': r.row_number, 'reason': r.reason, 'raw': list(r.raw)}
+        {'row': r.row_number, 'line': r.line_number, 'reason': r.reason, 'raw': list(r.raw)}
         for r in result.rejected
     ]
     if not cases:

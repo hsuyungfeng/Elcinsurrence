@@ -14,6 +14,7 @@
 
 import hashlib
 import os
+import re
 
 MAPPING_SCHEME = "choice-v2"
 
@@ -27,13 +28,10 @@ def extract_csv_version(csv_path: str) -> str:
     檔案不存在或讀取失敗時拋出 OSError（建置階段 fail-fast）。
     """
     base = os.path.basename(csv_path)
-    digits = "".join(ch for ch in base if ch.isdigit())
-    date_tag = "unknown"
-    for i in range(len(digits) - 5):
-        candidate = digits[i : i + 6]
-        if candidate.isdigit():
-            date_tag = candidate
-            break
+    # 取檔名中第一段「連續」6 位數字（B-IN-11）：原本先把所有數字串接再切，
+    # 「2-2-7手術251027.csv」會得到 227251 而非 251027。
+    m = re.search(r"\d{6}", base)
+    date_tag = m.group(0) if m else "unknown"
 
     # 讀檔失敗直接拋出（B-WR-15）：退回只有日期標籤會讓增量建置誤判「未換版」。
     hasher = hashlib.sha256()
@@ -45,12 +43,12 @@ def extract_csv_version(csv_path: str) -> str:
 
 
 def hash_docx_trees(docx_trees_path: str) -> str:
-    """計算 docx 語料（docx_trees.json）的 SHA-1 前 12 碼。
+    """計算 docx 語料（docx_trees.json）的 SHA-256 前 12 碼（與 CSV 版本一致）。
 
     內容變更（新增/修改條文、表格併入 full_text 等）會改變 hash，
     讓增量建置能偵測到 docx 語料換版。
     """
-    hasher = hashlib.sha1()
+    hasher = hashlib.sha256()
     with open(docx_trees_path, "rb") as f:
         for chunk in iter(lambda: f.read(65536), b""):
             hasher.update(chunk)

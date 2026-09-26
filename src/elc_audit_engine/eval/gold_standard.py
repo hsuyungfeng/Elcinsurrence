@@ -99,6 +99,8 @@ def load_gold_standard(path: str | os.PathLike[str] | None = None) -> tuple[Gold
     if not isinstance(data, list):
         raise GoldStandardError("金標準 fixture 必須是 JSON 陣列")
     for item in data:
+        if not isinstance(item, dict):
+            raise GoldStandardError("金標準案例必須是 JSON 物件")
         case_id = str(item.get("id", "")).strip()
         if not case_id:
             raise GoldStandardError("金標準案例缺少 id")

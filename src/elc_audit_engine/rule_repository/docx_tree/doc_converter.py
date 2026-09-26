@@ -10,7 +10,6 @@ dconf 寫入權限問題而直接失敗（exit 非 0）。因此本模組提供
 為準，而不是 `shutil.which` 或 `--version`。
 """
 
-import glob
 import os
 import shutil
 import subprocess
@@ -84,6 +83,17 @@ def soffice_is_functional() -> bool:
         return False
 
 
+def list_by_ext(source_dir: str, ext: str) -> list[str]:
+    """列出 source_dir 下副檔名（不分大小寫）恰為 ext 的檔案，依路徑排序。"""
+    ext = ext.lower()
+    return sorted(
+        os.path.join(source_dir, name)
+        for name in os.listdir(source_dir)
+        if os.path.splitext(name)[1].lower() == ext
+        and os.path.isfile(os.path.join(source_dir, name))
+    )
+
+
 def convert_doc_files(source_dir: str, staging_dir: str) -> list[str]:
     """將 `source_dir` 內所有 `.doc`（排除 `.docx`）轉換為 `.docx`，輸出至 `staging_dir`。
 
@@ -105,11 +115,7 @@ def convert_doc_files(source_dir: str, staging_dir: str) -> list[str]:
     profile_dir = os.path.join(staging_dir, ".lo_profile")
     os.makedirs(profile_dir, exist_ok=True)
 
-    doc_paths = sorted(
-        p
-        for p in glob.glob(os.path.join(source_dir, "*.doc"))
-        if not p.lower().endswith(".docx")
-    )
+    doc_paths = list_by_ext(source_dir, ".doc")
 
     converted_paths = []
     for doc_path in doc_paths:

@@ -230,21 +230,23 @@ def parse_deduction_file(
         delimiter = _detect_delimiter(text)
 
     reader = csv.reader(io.StringIO(text), delimiter=delimiter)
-    rows = [row for row in reader if any(cell.strip() for cell in row)]
+    numbered = [
+        (reader.line_num, row) for row in reader if any(cell.strip() for cell in row)
+    ]
 
     header: tuple[str, ...] = ()
-    data_rows: list[list[str]] = []
-    if rows:
-        first = rows[0]
+    data_rows: list[tuple[int, list[str]]] = []
+    if numbered:
+        first = numbered[0][1]
         if has_header is True or (has_header is None and _looks_like_header(first)):
             header = tuple(first)
-            data_rows = rows[1:]
+            data_rows = numbered[1:]
         else:
-            data_rows = rows
+            data_rows = numbered
 
     records: list[DeductionRecord] = []
     rejected: list[RejectedRow] = []
-    for idx, row in enumerate(data_rows, start=1):
+    for idx, (line_no, row) in enumerate(data_rows, start=1):
         if len(row) != len(COLUMN_NAMES):
             rejected.append(
                 RejectedRow(
@@ -253,13 +255,16 @@ def parse_deduction_file(
                         f"欄數不符：實際 {len(row)} 欄，預期 {len(COLUMN_NAMES)} 欄"
                     ),
                     raw=tuple(row),
+                    line_number=line_no,
                 )
             )
             continue
         try:
             records.append(_row_to_record(row))
         except AmountParseError as exc:
-            rejected.append(RejectedRow(row_number=idx, reason=str(exc), raw=tuple(row)))
+            rejected.append(
+                RejectedRow(row_number=idx, reason=str(exc), raw=tuple(row), line_number=line_no)
+            )
 
     return DeductionParseResult(
         records=tuple(records),

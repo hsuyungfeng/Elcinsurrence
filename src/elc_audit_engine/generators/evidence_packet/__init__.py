@@ -42,7 +42,8 @@ def render_evidence_packet(
     # Scaffolding DOCX doc using builder.py
     doc, warnings = build_evidence_packet_docx(
         cover_info={
-            "case_class": payload.get("case_class", "01"),
+            # 缺值不捏造（A-IN-03：原預設 "01"）
+            "case_class": payload.get("case_class"),
             "case_seq": payload.get("case_seq", ""),
             "case_record_no": payload.get("case_record_no", ""),
             "visit_date": payload.get("visit_date", ""),

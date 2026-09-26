@@ -10,10 +10,18 @@
 （7 碼 = 民國、8 碼 = 西元）做格式判別，不嘗試用其他方式猜測。
 """
 
+import logging
+import re
 import warnings
 from datetime import date
 
-_EMPTY_SENTINELS = {"", "null", "0", "99991231"}
+logger = logging.getLogger(__name__)
+
+# 無日期／無期限哨兵：西元 99991231 與民國 9991231（藥品 CSV 無迄日常用，B-IN-04）
+_EMPTY_SENTINELS = {"", "null", "0", "99991231", "9991231"}
+
+# 斜線或連字號分隔：民國 RRR/MM/DD（如 115/07/10）、西元 YYYY/MM/DD、ISO YYYY-MM-DD（B-IN-07）
+_SEPARATED_RE = re.compile(r"^(\d{2,4})[/\-](\d{1,2})[/\-](\d{1,2})$")
 
 _ROC_EPOCH_OFFSET = 1911
 
@@ -22,8 +30,10 @@ def parse_flexible_date(raw: str) -> str | None:
     """將原始日期字串正規化為 ISO 8601 (`YYYY-MM-DD`)，或在無效/無日期時回傳 None。
 
     Args:
-        raw: 原始欄位字串。可能是 8 碼西元 `YYYYMMDD`、7 碼民國 `RRRMMDD`，
-            或代表「無日期」的哨兵值（空字串、`"null"`、`"0"`、`"99991231"`）。
+        raw: 原始欄位字串。可能是 8 碼西元 `YYYYMMDD`、7 碼民國 `RRRMMDD`、
+            斜線／連字號分隔（`115/07/10`、`2026/07/10`、`2026-07-10`），
+            或代表「無日期」的哨兵值（空字串、`"null"`、`"0"`、`"99991231"`、
+            `"9991231"`）。
 
     Returns:
         ISO 8601 格式的日期字串（`YYYY-MM-DD`），或 `None`（哨兵值/無法解析）。
@@ -47,7 +57,15 @@ def parse_flexible_date(raw: str) -> str | None:
         year = roc_year + _ROC_EPOCH_OFFSET
         month = int(stripped[3:5])
         day = int(stripped[5:7])
+    elif (m := _SEPARATED_RE.match(stripped)) is not None:
+        year = int(m.group(1))
+        if len(m.group(1)) <= 3:
+            year += _ROC_EPOCH_OFFSET  # 2～3 碼年份為民國
+        month = int(m.group(2))
+        day = int(m.group(3))
     else:
+        # warnings.warn 預設每個呼叫位置只顯示一次；大量錯誤另記 logging 以免被隱藏
+        logger.warning("parse_flexible_date: unrecognized date format, raw value=%r", raw)
         warnings.warn(
             f"parse_flexible_date: unrecognized date format, raw value={raw!r}",
             stacklevel=2,
@@ -57,6 +75,7 @@ def parse_flexible_date(raw: str) -> str | None:
     try:
         return date(year, month, day).isoformat()
     except ValueError:
+        logger.warning("parse_flexible_date: invalid calendar date, raw value=%r", raw)
         warnings.warn(
             f"parse_flexible_date: invalid calendar date, raw value={raw!r}",
             stacklevel=2,

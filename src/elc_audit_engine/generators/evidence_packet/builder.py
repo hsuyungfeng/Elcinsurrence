@@ -42,8 +42,21 @@ def build_evidence_packet_docx(
     doc.add_heading("申復佐證包", level=0)
     
     doc.add_heading("Section 1: Cover Page", level=1)
-    case_seq = cover_info.get("case_seq", "未知")
-    doc.add_paragraph(f"案件流水號: {case_seq}")
+    # A-IN-03：封面實際呈現院所與統計欄位（原本已計算卻未使用）；缺值顯示「—」
+    facility = facility or {}
+    cover_lines = [
+        ("醫療院所", f"{_fmt(facility.get('name'))}（{_fmt(facility.get('code'))}）"),
+        ("案件分類", _fmt(cover_info.get("case_class"))),
+        ("案件流水號", _fmt(cover_info.get("case_seq"))),
+        ("就醫日期", _fmt(cover_info.get("visit_date"))),
+        ("費用年月", _fmt(cover_info.get("fee_year_month"))),
+        ("核減醫令筆數", _fmt(cover_info.get("total_denied_orders"))),
+        ("不予核銷點數合計", _fmt(cover_info.get("total_non_reimbursed_points"))),
+        ("申復點數合計", _fmt(cover_info.get("total_claimed_points"))),
+        ("影像佐證附件數", _fmt(cover_info.get("total_attachments"))),
+    ]
+    for label, value in cover_lines:
+        doc.add_paragraph(f"{label}: {value}")
 
     # Section 2: Audit Trail
     doc.add_heading("Section 2: Audit Trail", level=1)
