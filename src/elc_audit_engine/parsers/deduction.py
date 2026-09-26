@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import csv
+from decimal import Decimal, InvalidOperation
 import io
 import os
 from typing import Sequence
@@ -92,25 +93,53 @@ def _looks_like_header(row: Sequence[str]) -> bool:
     return any(any(kw in (cell or "") for kw in _HEADER_KEYWORDS) for cell in row[:6])
 
 
-def _parse_int(value: str | None) -> int | None:
-    """把欄位值正規化為 int；空值/非數字回傳 None。
+# 欄 1 為 10 碼定寬數字；超過即為異常資料。
+_MAX_AMOUNT = 10**10
 
-    欄 1 為零填補定寬（"0000000300"）、欄 14 為純數字（"300"），兩者皆
-    直接 int()；容許浮點字串（"300.0"）以防其他 HIS 匯出格式。
+
+class AmountParseError(ValueError):
+    """金額欄位非整數（含小數、inf、無法解析）——該列拒收，不靜默截斷（B-WR-01）。"""
+
+
+def _parse_int(value: str | None) -> int | None:
+    """把金額欄位正規化為 int；空值回傳 None。
+
+    欄 1 為零填補定寬（"0000000300"）、欄 14 為純數字（"300"）；容許千分位
+    （"1,200"）與整數值浮點字串（"300.0"）。不予核銷金額是申復值域上界
+    （D-15），小數（"300.7"）、inf、非數字一律拋 AmountParseError 由呼叫端
+    拒收該列，不得截斷或丟成 None。
     """
     if value is None:
         return None
-    stripped = value.strip()
+    stripped = value.strip().replace(",", "")
     if not stripped:
         return None
     try:
-        return int(stripped)
-    except ValueError:
-        pass
-    try:
-        return int(float(stripped))
-    except ValueError:
-        return None
+        d = Decimal(stripped)
+    except InvalidOperation as exc:
+        raise AmountParseError(f"金額非數字：{value!r}") from exc
+    if not d.is_finite() or d != d.to_integral_value():
+        raise AmountParseError(f"金額非整數：{value!r}")
+    if abs(d) >= _MAX_AMOUNT:
+        raise AmountParseError(f"金額超出 10 位數欄寬：{value!r}")
+    return int(d)
+
+
+def _detect_delimiter(text: str) -> str:
+    """選出讓最多列恰為 18 欄的分隔符（B-WR-02）。
+
+    csv.Sniffer 對少量列不穩定，欄 16/18 的自由中文又可能含分號，誤判時
+    整份檔案每列欄數不符而全數拒收。改以實際切分結果評分；平手依
+    逗號→Tab→分號的優先序。
+    """
+    sample_rows = [line for line in text.splitlines()[:200] if line.strip()]
+    best, best_hits = ",", -1
+    for candidate in (",", "\t", ";"):
+        rows = csv.reader(io.StringIO("\n".join(sample_rows)), delimiter=candidate)
+        hits = sum(1 for row in rows if len(row) == len(COLUMN_NAMES))
+        if hits > best_hits:
+            best, best_hits = candidate, hits
+    return best
 
 
 def _split_appeal_item(value: str | None) -> tuple[str | None, str | None]:
@@ -198,11 +227,7 @@ def parse_deduction_file(
     text, encoding_used = _decode(raw, encoding)
 
     if delimiter is None:
-        sample = text[:4096]
-        try:
-            delimiter = csv.Sniffer().sniff(sample, delimiters=",\t;").delimiter
-        except csv.Error:
-            delimiter = ","
+        delimiter = _detect_delimiter(text)
 
     reader = csv.reader(io.StringIO(text), delimiter=delimiter)
     rows = [row for row in reader if any(cell.strip() for cell in row)]
@@ -231,7 +256,10 @@ def parse_deduction_file(
                 )
             )
             continue
-        records.append(_row_to_record(row))
+        try:
+            records.append(_row_to_record(row))
+        except AmountParseError as exc:
+            rejected.append(RejectedRow(row_number=idx, reason=str(exc), raw=tuple(row)))
 
     return DeductionParseResult(
         records=tuple(records),

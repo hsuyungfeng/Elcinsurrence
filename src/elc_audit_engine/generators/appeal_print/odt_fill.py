@@ -38,6 +38,8 @@ import hashlib
 import os
 import re
 import xml.etree.ElementTree as ET
+
+from elc_audit_engine.generators._xmltext import set_odf_paragraph_text
 import zipfile
 
 # ODF 命名空間（實測自官方 content.xml 根元素）。
@@ -141,9 +143,8 @@ def set_cell_text(cell: ET.Element, value: str) -> None:
     p = cell.find(_P)
     if p is None:
         p = ET.SubElement(cell, _P)
-    for child in list(p):
-        p.remove(child)
-    p.text = value
+    # 控制字元過濾＋換行轉 text:line-break（A-WR-07／A-WR-10）
+    set_odf_paragraph_text(p, value)
 
 
 def _fill_header_cells(head_table: ET.Element, header_fields: dict, page_no: int, total_pages: int) -> None:

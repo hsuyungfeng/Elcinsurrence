@@ -272,19 +272,28 @@ def test_draft_validation_errors_wired():
 # ── Task 2: 字數控制器＋p8/p9 切分（C4/Q15）──────────────────
 
 
+def _labelled(draft):
+    from elc_audit_engine.generators.appeal import _join_reason
+
+    return _join_reason(draft.sections)
+
+
 def test_word_limit_under_no_trim():
     draft = _draft()
     assert draft.total_chars <= MAX_TOTAL_CHARS
     assert draft.over_limit is False
     assert all(not s.trimmed for s in draft.sections)
-    full = "".join(s.text for s in draft.sections)
+    # A-WR-10：各段以「標籤：內文」逐行串接，保留段落界線
+    full = _labelled(draft)
     assert draft.reason1 == full
+    assert full.startswith("①案情摘要：")
+    assert "\n②醫療必要性：" in full
     assert draft.reason2 == ""  # ≤1000 字 → p9 免填
 
 
 def test_split_p8_p9_at_1000():
     draft = _draft(evidence=[{"text": "證" * 1500, "rule_location": None}])
-    full = "".join(s.text for s in draft.sections)
+    full = _labelled(draft)
     assert draft.total_chars == len(full)
     assert draft.reason1 == full[:1000]
     assert draft.reason2 == full[1000:]

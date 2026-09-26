@@ -31,11 +31,16 @@ _MARKER_PATTERNS: dict[SOAPCategory, re.Pattern[str]] = {
     "S": re.compile(r"^\s*(?:【S】|S\s*[:：)）]|主訴\s*[:：])"),
     "O": re.compile(r"^\s*(?:【O】|O\s*[:：)）]|客觀\s*[:：])"),
     "A": re.compile(r"^\s*(?:【A】|A\s*[:：)）]|評估\s*[:：])"),
-    "P": re.compile(r"^\s*(?:【P】|P\s*[:：)）]|計劃\s*[:：]|計畫\s*[:：])"),
+    # P 後接「數字＋/min、bpm、次」是脈搏（生命徵象），不是 Plan 標記（B-WR-03）。
+    "P": re.compile(
+        r"^\s*(?:【P】|P\s*[:：)）](?!\s*\d+\s*(?:/\s*(?:min|MIN)|bpm|BPM|次))"
+        r"|計劃\s*[:：]|計畫\s*[:：])"
+    ),
 }
 
-# 關鍵詞分類的斷句分隔符（沿用 JS 版：。.！!？?\n）。
-_SENTENCE_SPLIT_RE = re.compile(r"[。.！!？?\n]+")
+# 關鍵詞分類的斷句分隔符（沿用 JS 版：。.！!？?\n）。半形句點只在後面
+# 不是數字時斷句，避免把 36.5、7.2 等數值切斷（B-WR-04）。
+_SENTENCE_SPLIT_RE = re.compile(r"[。！!？?\n]+|\.(?!\d)")
 
 
 def _classify_sentence(sentence: str) -> tuple[SOAPCategory, float]:

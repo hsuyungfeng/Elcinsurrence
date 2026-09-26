@@ -283,6 +283,30 @@ def validate_appeal_claim(
     return tuple(errors)
 
 
+# p8/p9 內各段的短標籤（送健保署的申復理由需保留段落界線，A-WR-10）。
+_REASON_LABELS = {
+    KEY_CASE_SUMMARY: "①案情摘要",
+    KEY_NECESSITY: "②醫療必要性",
+    KEY_RULE_BASIS: "③規則依據",
+    KEY_EVIDENCE: "④病歷佐證",
+}
+
+
+def _reason_prefix(key: str) -> str:
+    return f"{_REASON_LABELS.get(key, '')}："
+
+
+def _join_reason(sections: tuple[AppealSection, ...]) -> str:
+    """各段以「標籤：內文」逐行串接（空段略過），取代原本無分隔的直接串接。"""
+    return "\n".join(_reason_prefix(s.key) + s.text for s in sections if s.text)
+
+
+def _reason_overhead(sections: tuple[AppealSection, ...]) -> int:
+    """標籤與換行佔用的字數（字數上限需一併計入）。"""
+    nonempty = [s for s in sections if s.text]
+    return sum(len(_reason_prefix(s.key)) for s in nonempty) + max(0, len(nonempty) - 1)
+
+
 def _split_reason(text: str) -> tuple[str, str]:
     """把組裝全文切成 p8/p9（各 ≤1000 字，官方 Q15）。"""
     return text[:MAX_FIELD_CHARS], text[MAX_FIELD_CHARS : MAX_FIELD_CHARS * 2]
@@ -384,10 +408,14 @@ def build_appeal_draft(
         ),
         AppealSection(KEY_EVIDENCE, _TITLES[KEY_EVIDENCE], _build_evidence_text(evidence)),
     )
-    sections, over_limit = _trim_sections(sections)
+    # 字數上限（Q15：合計 2000）需扣除段落標籤與換行的字數
+    sections, over_limit = _trim_sections(
+        sections, limit=MAX_TOTAL_CHARS - _reason_overhead(sections)
+    )
 
-    total_chars = sum(len(s.text) for s in sections)
-    reason1, reason2 = _split_reason("".join(s.text for s in sections))
+    reason_full = _join_reason(sections)
+    total_chars = len(reason_full)
+    reason1, reason2 = _split_reason(reason_full)
     if not is_appealing:
         # Q13：不申覆 → P6 強制 0；p8/p9 免填（△ 無資料者免填）。
         reason1, reason2 = "", ""

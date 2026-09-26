@@ -13,6 +13,8 @@ from __future__ import annotations
 import os
 import xml.etree.ElementTree as ET
 
+from elc_audit_engine.generators._xmltext import xml_safe
+
 _FULLWIDTH_MAP = str.maketrans({
     "<": "＜",
     ">": "＞",
@@ -49,7 +51,8 @@ def _add_fields(parent: ET.Element, fields: dict[str, object]) -> None:
         if val is None or val == "":
             continue
         child = ET.SubElement(parent, key)
-        child.text = str(val)
+        # XML 1.0 非法控制字元會讓整份申復 XML 被拒收（A-WR-07）
+        child.text = xml_safe(str(val))
 
 
 def build_appeal_xml(

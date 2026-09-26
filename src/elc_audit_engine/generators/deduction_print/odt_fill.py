@@ -9,6 +9,8 @@ import copy
 import os
 import re
 import xml.etree.ElementTree as ET
+
+from elc_audit_engine.generators._xmltext import set_odf_paragraph_text
 import zipfile
 
 from .field_mapping import ROW_KEYS, HEADER_KEYS
@@ -39,9 +41,8 @@ def set_cell_text(cell: ET.Element, value: str) -> None:
     p = cell.find(_P)
     if p is None:
         p = ET.SubElement(cell, _P)
-    for child in list(p):
-        p.remove(child)
-    p.text = value
+    # 控制字元過濾＋換行轉 text:line-break（A-WR-07／A-WR-10）
+    set_odf_paragraph_text(p, value)
 
 def fill_template(
     template_odt_path: str,
