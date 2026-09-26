@@ -5,16 +5,13 @@ from config import settings
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    import server
-    from elc_audit_engine.case_store import CaseStore
-
+def client(tmp_path, monkeypatch, make_api_app):
     monkeypatch.setattr(settings, "ATTACHMENTS_DIR", str(tmp_path / "att"))
-    store = CaseStore(db_path=str(tmp_path / "cases.sqlite3"))
-    monkeypatch.setattr(server, "_case_store", store)
-    store.create(case_id="APP-aaa", kind="appeal", case_seq="303", payload={"id": "APP-aaa"})
-    monkeypatch.setitem(server.app.config, "ELC_API_KEYS", {"valid-key-1234567": "his1"})
-    c = server.app.test_client()
+    app = make_api_app({"valid-key-1234567": "his1"})
+    app.extensions["elc"].case_store.create(
+        case_id="APP-aaa", kind="appeal", case_seq="303", payload={"id": "APP-aaa"}
+    )
+    c = app.test_client()
     c.environ_base["HTTP_X_API_KEY"] = "valid-key-1234567"
     return c
 

@@ -157,20 +157,15 @@ _APP_KEY_HIS2 = "fedcba9876543210fedc"
 
 
 @pytest.fixture()
-def app_client(monkeypatch):
-    """server.app test_client，以 his1/his2 兩把測試 key 覆寫認證表。
+def app_client(make_api_app):
+    """create_app test_client，以 his1/his2 兩把測試 key 設定認證表。
 
-    所有需要引擎的端點以替身注入（monkeypatch server 模組命名空間的
-    引用者符號，而非來源模組——from-import 後 patch 來源模組無效）。
+    需要引擎的端點以替身注入：monkeypatch 路由模組命名空間的引用者符號
+    （elc_audit_engine.api.routes.*），而非來源模組——from-import 後 patch
+    來源模組無效。
     """
-    import server as server_mod
-
-    monkeypatch.setitem(
-        server_mod.app.config,
-        "ELC_API_KEYS",
-        {_APP_KEY_HIS1: "his1", _APP_KEY_HIS2: "his2"},
-    )
-    return server_mod.app.test_client()
+    app = make_api_app({_APP_KEY_HIS1: "his1", _APP_KEY_HIS2: "his2"})
+    return app.test_client()
 
 
 def _auth_header(key: str) -> dict:
@@ -215,11 +210,11 @@ def test_correct_key_get_sampling_cases_returns_200(app_client):
 
 def test_no_header_post_sampling_audit_calls_engine(app_client, monkeypatch):
     """免強制認證後，無 header 的請求仍應正常呼叫引擎（不再被攔在 401）。"""
-    import server as server_mod
+    from elc_audit_engine.api.routes import sampling as sampling_routes
 
     calls = []
     monkeypatch.setattr(
-        server_mod, "run_presubmission_check", lambda *a, **k: calls.append((a, k)) or None
+        sampling_routes, "run_presubmission_check", lambda *a, **k: calls.append((a, k)) or None
     )
     r = app_client.post("/api/sampling/audit", json={"order_code": "14050B"})
     assert r.status_code != 401
@@ -256,13 +251,7 @@ def test_health_no_key_returns_200(app_client):
 
 
 def test_audit_log_records_correct_caller_id(app_client, tmp_path, monkeypatch):
-    import server as server_mod
-
-    log_path = str(tmp_path / "access.log")
-    monkeypatch.setattr(
-        "config.settings.AUDIT_LOG_PATH", log_path
-    )
-    monkeypatch.setattr(server_mod, "AUDIT_LOG_PATH", log_path, raising=False)
+    from elc_audit_engine import audit_log
 
     calls = []
 
@@ -270,7 +259,7 @@ def test_audit_log_records_correct_caller_id(app_client, tmp_path, monkeypatch):
         calls.append(kwargs)
         return "line"
 
-    monkeypatch.setattr(server_mod, "record_access", fake_record_access)
+    monkeypatch.setattr(audit_log, "record_access", fake_record_access)
 
     r = app_client.get("/api/sampling/cases", headers=_auth_header(_APP_KEY_HIS2))
     assert r.status_code == 200
@@ -282,20 +271,20 @@ def test_audit_log_records_correct_caller_id(app_client, tmp_path, monkeypatch):
 
 
 def test_audit_log_entry_excludes_soap_content(app_client, tmp_path, monkeypatch):
-    import server as server_mod
+    from elc_audit_engine import audit_log
+    from elc_audit_engine.api.routes import sampling as sampling_routes
 
     log_path = str(tmp_path / "access.log")
+    real_record_access = audit_log.record_access
 
     def fake_record_access(**kwargs):
         # 呼叫端不得把 request.json 塞進 detail；此處僅驗證真實
         # record_access 的行為在端點串接後仍成立（零 PHI）。
-        from elc_audit_engine.audit_log import record_access as real_record_access
-
         return real_record_access(**{**kwargs, "log_path": log_path})
 
-    monkeypatch.setattr(server_mod, "record_access", fake_record_access)
+    monkeypatch.setattr(audit_log, "record_access", fake_record_access)
     monkeypatch.setattr(
-        server_mod,
+        sampling_routes,
         "run_presubmission_check",
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("engine not needed for this test")),
     )

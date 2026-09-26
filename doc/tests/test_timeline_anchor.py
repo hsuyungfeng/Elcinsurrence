@@ -1,10 +1,12 @@
 """B-CR-03：半年病史窗必須以就醫日為迄日，就醫日之後的紀錄不得入窗。"""
+from elc_audit_engine.api.records import parse_visit_date
+from elc_audit_engine.api.records import resolve_records_source
+from elc_audit_engine.api.records import resolve_visit_date
 import json
 from datetime import date
 
 import pytest
 
-import server
 from elc_audit_engine.record_aggregator import LocalFileProvider
 
 
@@ -28,7 +30,7 @@ def provider(tmp_path):
 
 
 def test_window_ends_at_visit_date(provider):
-    timeline, source = server._resolve_records_source(provider, "P001", date(2026, 7, 10))
+    timeline, source = resolve_records_source(provider, "P001", date(2026, 7, 10))
     assert source == "ok"
     assert timeline.window_end == date(2026, 7, 10)
     assert [v.date for v in timeline.visits] == [date(2026, 3, 1)]
@@ -50,13 +52,13 @@ def test_window_ends_at_visit_date(provider):
     ],
 )
 def test_parse_visit_date_formats(raw, expected):
-    assert server._parse_visit_date(raw) == expected
+    assert parse_visit_date(raw) == expected
 
 
-def test_visit_date_falls_back_to_case_payload(client):
-    server._case_store.create(
+def test_visit_date_falls_back_to_case_payload(client, store):
+    store.create(
         case_id="APP-X", kind="appeal", case_seq="1", payload={"visit_date": "2026-07-10"}
     )
-    assert server._resolve_visit_date({}, "APP-X") == date(2026, 7, 10)
-    assert server._resolve_visit_date({"visit_date": "2026-01-02"}, "APP-X") == date(2026, 1, 2)
-    assert server._resolve_visit_date({}, "NOPE") is None
+    assert resolve_visit_date(store, {}, "APP-X") == date(2026, 7, 10)
+    assert resolve_visit_date(store, {"visit_date": "2026-01-02"}, "APP-X") == date(2026, 1, 2)
+    assert resolve_visit_date(store, {}, "NOPE") is None

@@ -3,13 +3,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import server
 from elc_audit_engine.generators.evidence_packet.builder import build_evidence_packet_docx
 
 
 @pytest.fixture
-def appeal_case(client):
-    server._case_store.create(case_id="APP-9", kind="appeal", case_seq="9",
+def appeal_case(client, store):
+    store.create(case_id="APP-9", kind="appeal", case_seq="9",
                               payload={"id": "APP-9", "case_seq": "9"})
     return "APP-9"
 

@@ -15,15 +15,30 @@ os.environ.setdefault("ELC_API_KEYS", "test-suite:0000000000TESTKEY0000")
 
 
 @pytest.fixture
-def client(monkeypatch, tmp_path):
-    import server
+def app(tmp_path):
+    """create_app 隔離實例：暫存 CaseStore／上傳目錄、固定測試 key。"""
+    from elc_audit_engine.api import create_app
     from elc_audit_engine.case_store import CaseStore
 
-    monkeypatch.setattr(server, "_case_store", CaseStore(db_path=str(tmp_path / "cases.sqlite3")))
-    monkeypatch.setattr(server, "_UPLOAD_DIR", str(tmp_path / "uploads"))
-    monkeypatch.setattr(server, "_RAW_DIR", str(tmp_path / "uploads" / "raw"))
-    server.app.config["TESTING"] = True
-    monkeypatch.setitem(server.app.config, "ELC_API_KEYS", {"valid-key-123": "clinic_a"})
-    with server.app.test_client() as c:
+    return create_app(
+        {
+            "TESTING": True,
+            "ELC_API_KEYS": {"valid-key-123": "clinic_a"},
+            "ELC_UPLOAD_DIR": str(tmp_path / "uploads"),
+            "ELC_RAW_DIR": str(tmp_path / "uploads" / "raw"),
+        },
+        case_store=CaseStore(db_path=str(tmp_path / "cases.sqlite3")),
+        migrate_legacy=False,
+    )
+
+
+@pytest.fixture
+def store(app):
+    return app.extensions["elc"].case_store
+
+
+@pytest.fixture
+def client(app):
+    with app.test_client() as c:
         c.environ_base["HTTP_X_API_KEY"] = "valid-key-123"
         yield c

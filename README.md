@@ -121,7 +121,7 @@ HIS 串接時常見的誤用來源：`CaseStore` 中 `case_id` 與 `case_seq` �
 - **比對**：`hmac.compare_digest`（constant-time），不使用 `==`（時序側通道）。
 - **401 回應形狀**（上表必填端點）：`{"status": "error", "message": "認證失敗：缺少或無效的 API key"}`——與「查無資料」（200 + 空陣列）或 404 明確可區分，不得混淆。
 - **真實 key 不得進版控**（`.env` 已在 `.gitignore`；`.env.example` 僅提供格式範例）。
-- 新增端點時**預設受保護**（`before_request` 統一強制）；豁免需顯式列入 `server.py` 的 `_AUTH_EXEMPT_ENDPOINTS`。
+- 新增端點時**預設受保護**（`before_request` 統一強制）；豁免需顯式列入 `src/elc_audit_engine/api/security.py` 的 `AUTH_EXEMPT_ENDPOINTS`（端點名為 blueprint 限定名，如 `sampling.audit_sampling_case`）。
 
 #### 📝 存取審計日誌（Phase 9-01：零 PHI；2026-08-08 修復豁免清單誤用）
 
@@ -526,6 +526,20 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 > **認證「選填」說明**：帶合法 `X-API-Key` 時審計日誌記錄真實 `caller_id`；未帶時記 `anonymous`。「必填」端點缺 key 回 401（2026-09 部分強制，詳見「認證」小節）。
 
 ---
+
+## 🧱 API 程式結構
+
+`server.py` 只是 WSGI／開發伺服器入口（`app = create_app()`）；API 本體位於 `src/elc_audit_engine/api/`：
+
+| 模組 | 職責 |
+|---|---|
+| `app.py` | `create_app(config, *, case_store, migrate_legacy)`：設定、注入 CaseStore、註冊 hooks／錯誤處理／blueprints。匯入套件本身無副作用。 |
+| `security.py` | Host 白名單、API key 認證（豁免清單）、安全標頭、存取審計 |
+| `errors.py` | `ApiError` 與統一錯誤處理（脫敏、4xx 語意） |
+| `cases.py`／`records.py`／`uploads.py`／`validation.py` | 案件轉換與持久化、病史時間窗、上傳暫存、欄位驗證 |
+| `routes/` | `misc`（首頁、健康檢查、PDF 下載）、`sampling`、`appeal`、`attachments`、`printing` 五個 blueprint |
+
+測試以 `create_app(..., case_store=CaseStore(tmp), migrate_legacy=False)` 建立隔離實例（見 `tests/conftest.py` 的 `make_api_app`），不再 monkeypatch 模組全域變數。
 
 ## 📂 專案架構文件參考
 - **開發進度與里程碑**：[`progress.md`](progress.md)

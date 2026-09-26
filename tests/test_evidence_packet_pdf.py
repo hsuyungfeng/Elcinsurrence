@@ -34,26 +34,24 @@ def test_convert_docx_and_merge_pdfs(tmp_path):
     reader = PdfReader(str(output_pdf))
     assert len(reader.pages) >= 1
 
-def test_api_generate_evidence_packet(monkeypatch):
-    import server
+def test_api_generate_evidence_packet(monkeypatch, make_api_app):
     from unittest.mock import MagicMock
     
     mock_case_store = MagicMock()
     mock_case = MagicMock()
     mock_case.payload = {"mock": "data"}
     mock_case_store.get.return_value = mock_case
-    monkeypatch.setattr(server, "_case_store", mock_case_store)
     
     mock_attachment_store = MagicMock()
     mock_attachment_store.list_attachments.return_value = []
-    monkeypatch.setattr(server, "attachment_store", mock_attachment_store)
+    monkeypatch.setattr("elc_audit_engine.api.routes.printing.attachment_store", mock_attachment_store)
     
     # Mock write_evidence_packet to return fake paths
     mock_write = MagicMock(return_value=("/tmp/output/packet.pdf", ["warning1"]))
     # Since write_evidence_packet is imported locally in the endpoint, we need to patch it in the module where it is imported from, or just patch the engine function.
     monkeypatch.setattr("elc_audit_engine.generators.evidence_packet.write_evidence_packet", mock_write)
     
-    client = server.app.test_client()
+    client = make_api_app(case_store=mock_case_store).test_client()
     resp = client.post('/api/appeal/evidence-packet/print', json={"case_id": "TEST-123"})
     assert resp.status_code == 200
     data = resp.get_json()
@@ -62,10 +60,9 @@ def test_api_generate_evidence_packet(monkeypatch):
     assert "warning1" in data["warnings"]
 
 
-def test_api_evidence_packet_looks_up_attachments_by_case_id(monkeypatch):
+def test_api_evidence_packet_looks_up_attachments_by_case_id(monkeypatch, make_api_app):
     """A-CR-03：附件以全域唯一 case_id 為鍵查詢（流水號 case_seq 跨月重複，
     以它查會把別的病患影像併進本案佐證包）；輸出檔名亦以 case_id 命名。"""
-    import server
     from unittest.mock import MagicMock
 
     mock_case_store = MagicMock()
@@ -74,16 +71,15 @@ def test_api_evidence_packet_looks_up_attachments_by_case_id(monkeypatch):
     mock_case.case_id = "TEST-123"
     mock_case.case_seq = "SEQ-999"
     mock_case_store.get.return_value = mock_case
-    monkeypatch.setattr(server, "_case_store", mock_case_store)
 
     mock_attachment_store = MagicMock()
     mock_attachment_store.list_attachments.return_value = []
-    monkeypatch.setattr(server, "attachment_store", mock_attachment_store)
+    monkeypatch.setattr("elc_audit_engine.api.routes.printing.attachment_store", mock_attachment_store)
 
     mock_write = MagicMock(return_value=("/tmp/output/packet.pdf", []))
     monkeypatch.setattr("elc_audit_engine.generators.evidence_packet.write_evidence_packet", mock_write)
 
-    client = server.app.test_client()
+    client = make_api_app(case_store=mock_case_store).test_client()
     resp = client.post('/api/appeal/evidence-packet/print', json={"case_id": "TEST-123"})
     assert resp.status_code == 200
 
@@ -91,9 +87,8 @@ def test_api_evidence_packet_looks_up_attachments_by_case_id(monkeypatch):
     assert mock_write.call_args.kwargs["file_stem"] == "TEST-123"
 
 
-def test_api_evidence_packet_warns_on_legacy_case_seq_attachments(monkeypatch):
+def test_api_evidence_packet_warns_on_legacy_case_seq_attachments(monkeypatch, make_api_app):
     """舊版以流水號存放的附件不自動併入（無法確認病患），但要在 warnings 提示。"""
-    import server
     from unittest.mock import MagicMock
 
     mock_case_store = MagicMock()
@@ -102,17 +97,16 @@ def test_api_evidence_packet_warns_on_legacy_case_seq_attachments(monkeypatch):
     mock_case.case_id = "TEST-123"
     mock_case.case_seq = "SEQ-999"
     mock_case_store.get.return_value = mock_case
-    monkeypatch.setattr(server, "_case_store", mock_case_store)
 
     legacy = MagicMock()
     mock_attachment_store = MagicMock()
     mock_attachment_store.list_attachments.side_effect = lambda key, *a: [legacy] if key == "SEQ-999" else []
-    monkeypatch.setattr(server, "attachment_store", mock_attachment_store)
+    monkeypatch.setattr("elc_audit_engine.api.routes.printing.attachment_store", mock_attachment_store)
 
     mock_write = MagicMock(return_value=("/tmp/output/packet.pdf", []))
     monkeypatch.setattr("elc_audit_engine.generators.evidence_packet.write_evidence_packet", mock_write)
 
-    client = server.app.test_client()
+    client = make_api_app(case_store=mock_case_store).test_client()
     resp = client.post('/api/appeal/evidence-packet/print', json={"case_id": "TEST-123"})
     assert resp.status_code == 200
     assert mock_write.call_args.kwargs["attachments"] == []

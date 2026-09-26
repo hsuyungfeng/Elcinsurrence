@@ -146,17 +146,14 @@ _TEST_API_KEY = "0000000000TESTKEY0000"
 
 
 @pytest.fixture()
-def api(monkeypatch, tmp_path):
-    import server as server_mod
-
-    monkeypatch.setattr(server_mod, "_UPLOAD_DIR", str(tmp_path))
-    monkeypatch.setattr(server_mod, "_RAW_DIR", str(tmp_path / "raw"))
-    # 隔離 CaseStore：否則會寫入專案 data/db/cases.sqlite3，跨次執行殘留案件
-    from elc_audit_engine.case_store import CaseStore
-
-    monkeypatch.setattr(server_mod, "_case_store", CaseStore(db_path=str(tmp_path / "cases.sqlite3")))
-    monkeypatch.setitem(server_mod.app.config, "ELC_API_KEYS", {_TEST_API_KEY: "test-suite"})
-    client = server_mod.app.test_client()
+def api(make_api_app, tmp_path):
+    # 隔離 CaseStore 與上傳目錄（create_app 注入），不寫入專案 data/
+    app = make_api_app(
+        {_TEST_API_KEY: "test-suite"},
+        ELC_UPLOAD_DIR=str(tmp_path),
+        ELC_RAW_DIR=str(tmp_path / "raw"),
+    )
+    client = app.test_client()
     client.environ_base["HTTP_X_API_KEY"] = _TEST_API_KEY
     return client, tmp_path
 
@@ -314,13 +311,13 @@ def test_sampling_import_missing_file(api):
 def test_sampling_import_ocr_no_result(api, monkeypatch):
     """OCR 無可識別醫令代碼 → 400 + 誠實訊息，不覆蓋清單。"""
     client, _ = api
-    # server 以 from-import 直接引用 extract_text，需替身 server 命名空間的符號。
-    import server as server_mod
+    # 路由模組以 from-import 直接引用 extract_text，需替身路由命名空間的符號。
+    from elc_audit_engine.api.routes import sampling as sampling_routes
 
     def fake_extract(path, *, media_type=None):
         return "純文字，沒有醫令代碼", "tesseract"
 
-    monkeypatch.setattr(server_mod, "extract_text", fake_extract)
+    monkeypatch.setattr(sampling_routes, "extract_text", fake_extract)
     r = client.post(
         "/api/sampling/import",
         data={"file": (io.BytesIO(b"\xff\xd8\xff\xe0"), "scan.jpg")},

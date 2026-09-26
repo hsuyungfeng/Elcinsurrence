@@ -1,41 +1,29 @@
-"""Tests for server.py integration with CaseStore."""
+"""Tests for the API (app factory) integration with CaseStore."""
 
 import io
 import json
 import pytest
 
-import server
-from elc_audit_engine.case_store import CaseStore
+from elc_audit_engine.api import cases as api_cases
 from elc_audit_engine.parsers.models import DeductionRecord
 from elc_audit_engine.safe_paths import UnsafeIdentifierError
 
 
-@pytest.fixture(autouse=True)
-def setup_tmp_casestore(tmp_path, monkeypatch):
-    """Isolate CaseStore to a temporary SQLite database for each test."""
-    db_path = str(tmp_path / "cases_test.sqlite3")
-    test_store = CaseStore(db_path=db_path)
-    monkeypatch.setattr(server, "_case_store", test_store)
-    return test_store
-
-
-@pytest.fixture(autouse=True)
-def tmp_upload_dirs(tmp_path, monkeypatch):
-    """把上傳目錄（data/uploads 系）指到 tmp_path，避免測試污染專案 data/。
-
-    沙箱環境中專案 data/ 為唯讀（reasonix bwrap 只對 plan 允許修改的檔案
-    開放寫入），CSV 上傳測試若寫 data/uploads 會以 OSError 500 失敗。此
-    fixture 只改落盤位置、不變更測試斷言語義（既有 import 測試行為不變）。
-    """
-    monkeypatch.setattr(server, "_UPLOAD_DIR", str(tmp_path / "uploads"))
-    monkeypatch.setattr(server, "_RAW_DIR", str(tmp_path / "uploads" / "raw"))
+@pytest.fixture
+def app(make_api_app):
+    """create_app 隔離實例（暫存 CaseStore／上傳目錄，不污染專案 data/）。"""
+    return make_api_app()
 
 
 @pytest.fixture
-def client(monkeypatch):
-    server.app.config["TESTING"] = True
-    monkeypatch.setitem(server.app.config, "ELC_API_KEYS", {"valid-key-123": "clinic_a"})
-    with server.app.test_client() as c:
+def setup_tmp_casestore(app):
+    """app 注入的暫存 CaseStore。"""
+    return app.extensions["elc"].case_store
+
+
+@pytest.fixture
+def client(app):
+    with app.test_client() as c:
         yield c
 
 
@@ -93,20 +81,18 @@ def test_migrate_legacy_uploads_idempotent(setup_tmp_casestore, tmp_path, monkey
     with open(uploads_dir / "sampling_20260101_000000.json", "w", encoding="utf-8") as f:
         json.dump(sample_json, f)
 
-    monkeypatch.setattr(server, "_UPLOAD_DIR", str(uploads_dir))
-
-    res1 = server._migrate_legacy_uploads(setup_tmp_casestore)
+    res1 = api_cases.migrate_legacy_uploads(setup_tmp_casestore, str(uploads_dir))
     assert res1["sampling"] == 1
     assert setup_tmp_casestore.get("SAMP-9999").kind == "sampling"
 
-    res2 = server._migrate_legacy_uploads(setup_tmp_casestore)
+    res2 = api_cases.migrate_legacy_uploads(setup_tmp_casestore, str(uploads_dir))
     assert res2["sampling"] == 0
 
 
 def test_persist_cases_unsafe_identifier_raises(setup_tmp_casestore):
     cases = [{"id": "../unsafe_id", "case_seq": "1", "order_code": "14050B"}]
     with pytest.raises(UnsafeIdentifierError):
-        server._persist_cases("sampling", cases, actor="test")
+        api_cases.persist_cases(setup_tmp_casestore, "sampling", cases, actor="test")
 
 
 def test_get_sampling_cases_reads_from_casestore(client, setup_tmp_casestore):
@@ -235,13 +221,13 @@ def test_to_appeal_case_passthroughs_id_number():
     """W5 數據流（D-05 前置）：_to_appeal_case 透傳 rec.id_number（健保署已遮罩
     後 4 碼，models.py:166/189）——僅透傳不重組；缺省時 None，不捏造。
     """
-    out = server._to_appeal_case(
+    out = api_cases.to_appeal_case(
         1,
         DeductionRecord(id_number="A123****", case_seq="201", order_code="14050B"),
     )
     assert out["id_number"] == "A123****"
 
-    out_missing = server._to_appeal_case(
+    out_missing = api_cases.to_appeal_case(
         1,
         DeductionRecord(case_seq="201", order_code="14050B"),
     )

@@ -1,4 +1,5 @@
 """A-CR-05：列印端點回傳的 pdf_url 必須可下載，且需認證。"""
+from elc_audit_engine.api.routes.misc import output_url
 import pytest
 
 
@@ -33,6 +34,6 @@ def test_download_rejects_non_pdf_and_missing(client, out_dir):
 
 
 def test_print_endpoint_url_matches_route(client, out_dir, monkeypatch):
-    import server
 
-    assert server._output_url(str(out_dir / "核減明細_abc.pdf")) == "/api/output/核減明細_abc.pdf"
+
+    assert output_url(str(out_dir / "核減明細_abc.pdf")) == "/api/output/核減明細_abc.pdf"

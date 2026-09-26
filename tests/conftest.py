@@ -9,7 +9,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-# Phase 9-01：server.py 在 import 期即以 _init_api_keys() 讀取 ELC_API_KEYS
+# Phase 9-01：`server.py`（WSGI 入口）在 import 期即以 create_app() 讀取 ELC_API_KEYS
 # （fail-fast 設計，見 elc_audit_engine.auth）。測試環境若完全不設定此變數，
 # 任何匯入 server 模組的測試檔會在收集階段就以 AuthConfigError 中止。
 # 這裡以 setdefault 提供一組測試用固定 key（非真實憑證，公開於版控中亦
@@ -81,3 +81,34 @@ def sample_appeal_draft():
         return AppealDraft(**base)
 
     return _make
+
+
+# ── API（app factory）fixtures ───────────────────────────────────
+
+
+@pytest.fixture
+def make_api_app(tmp_path):
+    """以 create_app 建立隔離的 API app：暫存 CaseStore、暫存上傳目錄、固定測試 key。
+
+    取代舊寫法（monkeypatch server 模組全域 `_case_store`／`_UPLOAD_DIR`），
+    避免測試寫入專案 data/db/cases.sqlite3。
+    """
+    def _make(api_keys: dict | None = None, *, case_store=None, **config):
+        from elc_audit_engine.api import create_app
+        from elc_audit_engine.case_store import CaseStore
+
+        cfg = {
+            "TESTING": True,
+            "ELC_API_KEYS": api_keys if api_keys is not None else {"valid-key-123": "clinic_a"},
+            "ELC_UPLOAD_DIR": str(tmp_path / "uploads"),
+            "ELC_RAW_DIR": str(tmp_path / "uploads" / "raw"),
+        }
+        cfg.update(config)
+        return create_app(
+            cfg,
+            case_store=case_store or CaseStore(db_path=str(tmp_path / "cases.sqlite3")),
+            migrate_legacy=False,
+        )
+
+    return _make
+

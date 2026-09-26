@@ -1,4 +1,5 @@
 """Warning 第二批：轉檔與附件（A-WR-06/08、B-WR-18/20）。"""
+from elc_audit_engine.api.uploads import import_error_message
 import io
 import os
 import subprocess
@@ -8,7 +9,6 @@ import pytest
 from PIL import Image
 from pypdf import PdfWriter
 
-import server
 from elc_audit_engine.generators import _soffice
 from elc_audit_engine.generators._soffice import SofficeConvertError, convert_to_pdf
 from elc_audit_engine.generators.evidence_packet.builder import build_evidence_packet_docx
@@ -88,7 +88,7 @@ def test_pdf_page_limit(tmp_path, monkeypatch):
     monkeypatch.setattr(media, "pdf_page_count", lambda p: media.MAX_PDF_PAGES + 1)
     with pytest.raises(media.MediaLimitError):
         media.render_pdf_pages("x.pdf", str(tmp_path))
-    msg = server._import_error_message(media.MediaLimitError("PDF 共 51 頁，超過 50 頁上限"))
+    msg = import_error_message(media.MediaLimitError("PDF 共 51 頁，超過 50 頁上限"))
     assert "50 頁上限" in msg
 
 

@@ -180,9 +180,8 @@ def test_deduction_print_security(tmp_path):
     assert "<script>" not in content
     assert "&lt;script&gt;" in content
 
-def test_api_deduction_print(monkeypatch):
-    from server import app
-    client = app.test_client()
+def test_api_deduction_print(monkeypatch, make_api_app):
+    client = make_api_app().test_client()
     
     def mock_write(*args, **kwargs):
         return "/tmp/mocked.pdf", ["Mock warning"]

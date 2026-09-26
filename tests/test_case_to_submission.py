@@ -12,7 +12,7 @@ OFFICIAL_ODT 常量與 `_facility`/`_payload` 自 test_appeal_print.py 複製
 最小量（不 import tests 模組，避免觸發 soffice 探測等模組級副作用）。
 """
 
-import server
+from elc_audit_engine.api.cases import to_appeal_case
 from elc_audit_engine.generators.appeal_print.case_to_submission import (
     build_submission_from_case,
 )
@@ -237,7 +237,7 @@ def test_build_submission_no_order_empty_list():
 
 def test_to_appeal_case_passthroughs_order_seq():
     """11.1-01 Test 1：_to_appeal_case 透傳 rec.order_seq（值=rec.order_seq），並保留既有 deduct_amount。"""
-    out = server._to_appeal_case(
+    out = to_appeal_case(
         1,
         DeductionRecord(
             case_seq="201",
@@ -259,7 +259,7 @@ def test_build_submission_from_real_to_appeal_case_orders():
         order_seq="3",
         non_reimbursed_amount=300,
     )
-    submission, _ = build_submission_from_case(server._to_appeal_case(1, rec))
+    submission, _ = build_submission_from_case(to_appeal_case(1, rec))
     order = submission["orders"][0]
     assert order["code"] == "14050B"
     assert order["seq"] == "3"
@@ -267,7 +267,7 @@ def test_build_submission_from_real_to_appeal_case_orders():
 
 
 def test_build_rows_integration_chain_amount_and_seq():
-    """11.1-01 Test 3（整合鏈，Success Criteria 4）：走真實 server._to_appeal_case
+    """11.1-01 Test 3（整合鏈，Success Criteria 4）：走真實 api.cases.to_appeal_case
     輸出（非手工完整 fixture）→ build_submission_from_case → build_rows，
     金額欄=points、醫令序=seq，warnings 不含「金額」。（build_rows 為純函式，不需 soffice）"""
     from elc_audit_engine.generators.appeal_print.field_mapping import build_rows
@@ -278,7 +278,7 @@ def test_build_rows_integration_chain_amount_and_seq():
         order_seq="3",
         non_reimbursed_amount=300,
     )
-    submission, _ = build_submission_from_case(server._to_appeal_case(1, rec))
+    submission, _ = build_submission_from_case(to_appeal_case(1, rec))
     rows, warnings = build_rows(
         _appeal_payload(order_seq="3", p1_order_seq="3"),
         _facility(),
@@ -297,7 +297,7 @@ def test_build_rows_missing_order_seq_honest_degrade():
     from elc_audit_engine.generators.appeal_print.field_mapping import build_rows
 
     rec = DeductionRecord(case_seq="201", order_code="14050B")
-    out = server._to_appeal_case(1, rec)
+    out = to_appeal_case(1, rec)
     assert out["order_seq"] is None
 
     submission, _ = build_submission_from_case(out)
