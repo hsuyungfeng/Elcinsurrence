@@ -127,6 +127,9 @@ def convert_doc_files(source_dir: str, staging_dir: str) -> list[str]:
 
         base_name = os.path.splitext(os.path.basename(doc_path))[0]
         converted_path = os.path.join(staging_dir, f"{base_name}.docx")
+        # soffice 在另一實例執行中等情況會 exit 0 卻未產出檔案（B-WR-18）
+        if not os.path.isfile(converted_path):
+            raise RuntimeError(f"soffice 未產出轉檔結果：{converted_path}")
         converted_paths.append(converted_path)
 
     return converted_paths

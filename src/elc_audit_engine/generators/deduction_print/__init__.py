@@ -4,10 +4,9 @@ Phase 13-02: ODT 填充與 PDF 渲染引擎入口
 from __future__ import annotations
 
 import os
-import subprocess
 import tempfile
-from pathlib import Path
 
+from elc_audit_engine.generators._soffice import convert_to_pdf
 from elc_audit_engine.safe_paths import safe_filename
 from .field_mapping import build_deduction_header, build_deduction_rows
 from .odt_fill import fill_template
@@ -55,25 +54,7 @@ def write_deduction_print(
         filled_path = os.path.join(tmp, f"核減明細_{stem}.odt")
         with open(filled_path, "wb") as f:
             f.write(filled_odt_bytes)
+        # 私有暫存目錄轉檔＋驗證輸出＋原子替換（A-WR-06）
+        convert_to_pdf(filled_path, pdf_path, timeout=soffice_timeout)
 
-        profile_dir = os.path.join(tmp, "lo_profile")
-        os.makedirs(profile_dir, exist_ok=True)
-        result = subprocess.run(
-            [
-                "soffice",
-                f"-env:UserInstallation={Path(profile_dir).as_uri()}",
-                "--headless",
-                "--norestore",
-                "--nolockcheck",
-                "--convert-to", "pdf",
-                "--outdir", os.fspath(output_dir),
-                filled_path,
-            ],
-            capture_output=True,
-            timeout=soffice_timeout,
-        )
-        
-        if result.returncode != 0:
-            raise RuntimeError(f"LibreOffice 轉換失敗: {result.stderr.decode('utf-8', errors='ignore')}")
-            
     return pdf_path, warnings

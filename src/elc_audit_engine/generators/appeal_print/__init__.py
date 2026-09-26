@@ -13,9 +13,9 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import tempfile
-from pathlib import Path
+
+from elc_audit_engine.generators._soffice import SofficeConvertError, convert_to_pdf
 
 from elc_audit_engine.generators.appeal_print.field_mapping import (
     build_header,
@@ -156,43 +156,15 @@ def write_appeal_print(
 
     try:
         with tempfile.TemporaryDirectory(prefix="elc_appeal_convert_") as tmp:
-            # filled ODT 檔名與目標 PDF 同名（soffice 輸出＝輸入去副檔名＋.pdf）
             filled_path = os.path.join(tmp, f"申復清單_{stem}.odt")
             with open(filled_path, "wb") as f:
                 f.write(filled_odt_bytes)
-
-            profile_dir = os.path.join(tmp, "lo_profile")
-            os.makedirs(profile_dir, exist_ok=True)
-            result = subprocess.run(
-                [
-                    "soffice",
-                    f"-env:UserInstallation={Path(profile_dir).as_uri()}",
-                    "--headless",
-                    "--norestore",
-                    "--nolockcheck",
-                    "--convert-to",
-                    "pdf",
-                    "--outdir",
-                    os.fspath(output_dir),
-                    filled_path,
-                ],
-                capture_output=True,
-                timeout=soffice_timeout,
-            )
-    except subprocess.TimeoutExpired as exc:
+            # 私有暫存目錄轉檔＋驗證輸出＋原子替換（A-WR-06：不再回傳過期 PDF）
+            convert_to_pdf(filled_path, pdf_path, timeout=soffice_timeout)
+    except SofficeConvertError as exc:
         raise AppealPrintFillError(
-            "soffice 轉檔逾時（階段：convert，模板："
-            f"{os.path.basename(template_odt_path)}）"
+            "soffice 轉 PDF 失敗（階段：convert，模板："
+            f"{os.path.basename(template_odt_path)}）：{exc}"
         ) from exc
-    except OSError as exc:
-        raise AppealPrintFillError(
-            "soffice 轉檔環境失敗（階段：convert）"
-        ) from exc
-
-    if result.returncode != 0 or not os.path.isfile(pdf_path):
-        raise AppealPrintFillError(
-            "soffice 轉 PDF 失敗或輸出檔不存在（階段：convert，模板："
-            f"{os.path.basename(template_odt_path)}）"
-        )
 
     return pdf_path, warnings

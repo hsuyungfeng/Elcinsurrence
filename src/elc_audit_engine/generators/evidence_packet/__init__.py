@@ -99,6 +99,8 @@ def write_evidence_packet(
                 if file_path and os.path.isfile(file_path):
                     pdf_attachments.append(file_path)
 
-    convert_docx_and_merge_pdfs(docx_bytes, output_pdf_path, pdf_attachments)
+    warnings = list(warnings) + convert_docx_and_merge_pdfs(
+        docx_bytes, output_pdf_path, pdf_attachments
+    )
     
     return output_pdf_path, warnings

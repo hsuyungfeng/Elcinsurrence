@@ -91,21 +91,29 @@ def build_evidence_packet_docx(
         
         for record in attachment_records:
             file_path = record.get("file_path")
-            filename = record.get("filename", os.path.basename(file_path))
-            
+            filename = record.get("filename") or (
+                os.path.basename(file_path) if file_path else "未知檔名"
+            )
+
             doc.add_heading(f"附件: {filename}", level=2)
-            
+
+            if record.get("mime_type") == "application/pdf":
+                # PDF 附件於文件尾端整份併入（pdf_exporter），不送 PIL（A-WR-08）
+                doc.add_paragraph("PDF 附件，全文附於本佐證包末頁之後。")
+                continue
+
             if not file_path or not os.path.exists(file_path):
                 msg = f"附件檔【{filename}】載入失敗: 檔案不存在"
                 warnings.append(msg)
                 _add_warning_callout(doc, msg)
                 continue
-                
+
             try:
                 buf, w, h = process_and_scale_image(file_path)
                 doc.add_picture(buf, width=Cm(w), height=Cm(h))
             except Exception as e:
-                msg = f"附件檔【{filename}】載入失敗: {e}"
+                # 錯誤訊息不含伺服器路徑（PIL 例外字串常帶完整路徑）
+                msg = f"附件檔【{filename}】載入失敗（{type(e).__name__}）"
                 warnings.append(msg)
                 _add_warning_callout(doc, msg)
 

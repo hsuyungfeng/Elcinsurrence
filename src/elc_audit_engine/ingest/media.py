@@ -76,10 +76,41 @@ def extract_pdf_text(path: str, min_chars: int = _TEXT_PDF_MIN_CHARS) -> str:
     return text if len(text.strip()) >= min_chars else ""
 
 
+MAX_PDF_PAGES = 50
+
+
+class MediaLimitError(MediaExtractError):
+    """輸入超過處理上限（頁數等）——訊息為給使用者的說明，可原樣回傳。"""
+
+
+def pdf_page_count(path: str) -> int:
+    """以 pdfinfo 取得頁數；無法判讀時拋 MediaExtractError。"""
+    proc = _run("pdfinfo", [str(path)])
+    for line in proc.stdout.decode("utf-8", errors="replace").splitlines():
+        if line.startswith("Pages:"):
+            try:
+                return int(line.split(":", 1)[1].strip())
+            except ValueError:
+                break
+    raise MediaExtractError("無法判讀 PDF 頁數（檔案可能損毀）")
+
+
 def render_pdf_pages(path: str, out_dir: str, dpi: int = 200) -> list[str]:
-    """pdftoppm 渲染 PDF 每頁為 PNG；回傳圖片路徑（依頁序）。"""
+    """pdftoppm 渲染 PDF 每頁為 PNG；回傳圖片路徑（依頁序）。
+
+    頁數超過 MAX_PDF_PAGES 直接拒絕（B-WR-20）：數千頁的 PDF 會渲染出大量
+    影像並逐頁 OCR（每頁逾時 120 秒），耗盡磁碟與 worker。
+    """
+    pages_total = pdf_page_count(path)
+    if pages_total > MAX_PDF_PAGES:
+        raise MediaLimitError(
+            f"PDF 共 {pages_total} 頁，超過 {MAX_PDF_PAGES} 頁上限，請分批上傳或改以 CSV 匯出"
+        )
     prefix = os.path.join(out_dir, "page")
-    proc = _run("pdftoppm", ["-png", "-r", str(dpi), str(path), prefix])
+    proc = _run(
+        "pdftoppm",
+        ["-png", "-r", str(dpi), "-f", "1", "-l", str(MAX_PDF_PAGES), str(path), prefix],
+    )
     if proc.returncode != 0:
         raise MediaExtractError(
             "pdftoppm 渲染失敗: "

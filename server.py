@@ -344,6 +344,10 @@ def _import_error_message(exc: Exception) -> str:
     （欄位契約、編碼），照常回傳；但由 OSError 引起者（含暫存路徑）與
     MediaExtractError（pdftotext／tesseract 輸出）一律改為固定訊息，細節只進日誌。
     """
+    from elc_audit_engine.ingest.media import MediaLimitError
+
+    if isinstance(exc, MediaLimitError):
+        return f"匯入失敗：{exc}"
     if isinstance(exc, MediaExtractError) or isinstance(exc.__cause__, OSError):
         return "匯入失敗：檔案內容無法擷取（格式不支援或檔案損毀），請改以 CSV 上傳"
     return f"匯入失敗：{exc}"
