@@ -110,7 +110,7 @@ def test_incremental_skips_codes_with_same_version(tmp_path):
     with open(trees_path, "w", encoding="utf-8") as f:
         json.dump(_CANDIDATE_TREES, f, ensure_ascii=False)
 
-    with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
+    with patch.object(build_mapping.llm_client, "smoke_test", return_value="2"), \
          patch.object(build_mapping.llm_client, "chat_completion") as mock_chat:
         result = build_mapping.build_rule_mapping(
             db_path, trees_path, source_version="v1", incremental=True
@@ -142,7 +142,7 @@ def test_incremental_rebuilds_when_version_changed(tmp_path):
     with open(trees_path, "w", encoding="utf-8") as f:
         json.dump(_CANDIDATE_TREES, f, ensure_ascii=False)
 
-    with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
+    with patch.object(build_mapping.llm_client, "smoke_test", return_value="2"), \
          patch.object(
              build_mapping.llm_client,
              "chat_completion",
@@ -174,7 +174,7 @@ def test_non_incremental_writes_source_version(tmp_path):
     with open(trees_path, "w", encoding="utf-8") as f:
         json.dump(_CANDIDATE_TREES, f, ensure_ascii=False)
 
-    with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
+    with patch.object(build_mapping.llm_client, "smoke_test", return_value="2"), \
          patch.object(
              build_mapping.llm_client,
              "chat_completion",
@@ -223,7 +223,7 @@ def test_incremental_degraded_run_does_not_lock_no_match(tmp_path):
     assert row["source_version"] is None
 
     # 第二次：server 恢復、同版本 v1 → 不應被 skip，應重新處理並配對成功
-    with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
+    with patch.object(build_mapping.llm_client, "smoke_test", return_value="2"), \
          patch.object(
              build_mapping.llm_client,
              "chat_completion",
@@ -266,7 +266,7 @@ def test_per_code_llm_failure_not_locked_but_genuine_no_match_is(tmp_path):
             return "查無相關條文"
         raise RuntimeError("timeout")
 
-    with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
+    with patch.object(build_mapping.llm_client, "smoke_test", return_value="2"), \
          patch.object(build_mapping.llm_client, "chat_completion", side_effect=_fake_chat):
         result = build_mapping.build_rule_mapping(
             db_path, trees_path, source_version="v2", incremental=False
@@ -312,7 +312,7 @@ def test_out_of_range_or_free_text_choice_is_not_trusted(tmp_path):
         _make_db(db_path, [("06012C", "尿一般檢查", None)])
         _write_candidate_trees(trees_path)
 
-        with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
+        with patch.object(build_mapping.llm_client, "smoke_test", return_value="2"), \
              patch.object(build_mapping.llm_client, "chat_completion", return_value=response):
             result = build_mapping.build_rule_mapping(
                 db_path, trees_path, source_version="v3", incremental=False
@@ -341,7 +341,7 @@ def test_no_candidates_skips_llm_and_locks_no_match(tmp_path):
     with open(trees_path, "w", encoding="utf-8") as f:
         json.dump({}, f)
 
-    with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
+    with patch.object(build_mapping.llm_client, "smoke_test", return_value="2"), \
          patch.object(build_mapping.llm_client, "chat_completion") as mock_chat:
         result = build_mapping.build_rule_mapping(
             db_path, trees_path, source_version="v4", incremental=False
@@ -388,7 +388,7 @@ def test_drug_codes_skip_llm_path_and_lock_version(tmp_path):
     with open(trees_path, "w", encoding="utf-8") as f:
         json.dump(_CANDIDATE_TREES, f, ensure_ascii=False)
 
-    with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
+    with patch.object(build_mapping.llm_client, "smoke_test", return_value="2"), \
          patch.object(build_mapping.llm_client, "chat_completion") as mock_chat:
         result = build_mapping.build_rule_mapping(
             db_path, trees_path, source_version="v10", incremental=False
@@ -422,7 +422,7 @@ def test_drug_csv_reuse_still_stamps_csv(tmp_path):
     with open(trees_path, "w", encoding="utf-8") as f:
         json.dump(_CANDIDATE_TREES, f, ensure_ascii=False)
 
-    with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
+    with patch.object(build_mapping.llm_client, "smoke_test", return_value="2"), \
          patch.object(build_mapping.llm_client, "chat_completion") as mock_chat:
         result = build_mapping.build_rule_mapping(
             db_path, trees_path, source_version="v10", incremental=False

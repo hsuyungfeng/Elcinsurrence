@@ -144,6 +144,12 @@ def _is_low_value_article(location: str | None, full_text: str | None) -> bool:
     return False
 
 
+def _smoke_reply_ok(reply) -> bool:
+    """smoke test（1+1）回應須真的含答案 2，且不是 schema 樣板。"""
+    text = str(reply or "")
+    return "2" in text and "string" not in text.lower()
+
+
 _CHOICE_RE = re.compile(r"候選編號\s*[:：]\s*(\d+)")
 
 
@@ -225,9 +231,17 @@ def build_rule_mapping(
 
     # 在真正開始 LLM 呼叫之前，重新驗證一次 smoke test —— 若失敗，
     # 整個 LLM 分支優雅降級（article_source=None），絕不寫入垃圾文字。
+    if incremental and source_version is None:
+        # B-WR-13：無版本時「版本相符即跳過」對所有 NULL 降級列都成立，
+        # P1-4 設計的降級列重試會全部失效。
+        raise ValueError("incremental 建置需要 source_version（或提供 CSV 路徑以推導）")
+
     llm_available = True
     try:
-        llm_client.smoke_test()
+        reply = llm_client.smoke_test()
+        if not _smoke_reply_ok(reply):
+            # Pitfall 5：伺服器回 schema 樣板（"content": string）等非生成文字
+            raise RuntimeError(f"smoke test 回應不符預期：{str(reply)[:80]!r}")
     except Exception as exc:  # noqa: BLE001 - 任何 smoke test 失敗都視為 LLM 不可用
         llm_available = False
         logger.warning(
@@ -255,7 +269,11 @@ def build_rule_mapping(
                     "SELECT source_version FROM rule_mapping WHERE code = ?",
                     (code,),
                 ).fetchone()
-                if existing is not None and existing["source_version"] == source_version:
+                if (
+                    existing is not None
+                    and existing["source_version"] is not None
+                    and existing["source_version"] == source_version
+                ):
                     skipped_count += 1
                     continue
 

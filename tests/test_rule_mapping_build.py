@@ -55,7 +55,7 @@ def test_csv_reuse_fast_path_avoids_llm_call(tmp_path):
     _make_test_db(db_path)
     _make_test_docx_trees(trees_path)
 
-    with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
+    with patch.object(build_mapping.llm_client, "smoke_test", return_value="2"), \
          patch.object(build_mapping.llm_client, "chat_completion") as mock_chat:
         # 06012C 的 payment_text 為 None，會走 LLM path；為了單獨驗證 64140C
         # 不觸發 LLM 呼叫，這裡讓 mock_chat 回傳一個可解析的回應供 06012C 使用。
@@ -88,7 +88,7 @@ def test_llm_path_triggered_for_short_payment_text(tmp_path):
     _make_test_db(db_path)
     _make_test_docx_trees(trees_path)
 
-    with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
+    with patch.object(build_mapping.llm_client, "smoke_test", return_value="2"), \
          patch.object(
              build_mapping.llm_client,
              "chat_completion",
