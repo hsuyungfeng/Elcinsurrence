@@ -228,7 +228,7 @@ HIS 串接時常見的誤用來源：`CaseStore` 中 `case_id` 與 `case_seq` �
   - PDF／影像（紙本）：**優先 PP-StructureV3 表格結構化**（`source: "paddle"`，欄位級：表頭對齊 8 欄契約、日期正規化）；引擎不可用／無表格時**自動降級** tesseract 行解析（`source: "ocr"`，以醫令代碼為錨點結構化「代碼＋名稱」）。每筆保留原始辨識行供人工核對。
   - ⚠️ 表格結構化需 `uv sync --extra ocr`（paddlepaddle==3.2.2 釘版，見 deepflash4improve §8.2）；未裝則全程降級，功能不中斷。
 - **核減清單（`/api/appeal/import`）**：CSV 走 D-14d 18 欄 parser（編碼/分隔符/表頭自動偵測）；**PDF／影像誠實降級- CaseStore 整合 (Phase 9-03)**：匯入解析成功後逐筆持久化至 `CaseStore` (state=`imported`)。若出現同名 `case_id` 重複匯入，不會靜默覆寫，而是明確於 `case_store_conflicts` 回報。
-- **回傳**：`{status, media_type, source, imported, rejected, rejected_rows:[{row,reason,raw}], saved_to, case_store_persisted, case_store_conflicts}`；GET 案例端點優先讀取 CaseStore，並於伺服器啟動時一次性、冪等地將舊 `data/uploads/*.json` 遷移至 CaseStore。
+- **回傳**：`{status, media_type, source, imported, rejected, rejected_rows:[{row,reason,raw}], case_store_persisted, case_store_conflicts}`；案件只存於 CaseStore（2026-09 起不再另存 `data/uploads/*.json` PHI 快照），伺服器啟動時仍會一次性、冪等地將舊快照遷移至 CaseStore。請求大小上限 11MB（超過回 `413`）。
 - **狀態碼**：`400` 缺檔／不支援類型／超過 10MB／未匯入任何案件（含原因）；`500` 其他（已脫敏）。
 
 #### 🔹 [CLI 工具] `scripts/build_appeal_xml.py` — Package Builder (申復 XML 序列化，Phase 9-04)
