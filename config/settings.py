@@ -7,9 +7,10 @@ load_dotenv()
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 DATA_DIR = os.getenv("DATA_DIR", os.path.join(PROJECT_ROOT, "data"))
-DB_DIR = os.getenv("DB_DIR", os.path.join(PROJECT_ROOT, "data/db"))
-RAG_DIR = os.getenv("RAG_DIR", os.path.join(PROJECT_ROOT, "data/rag"))
-OUTPUT_DIR = os.getenv("OUTPUT_DIR", os.path.join(PROJECT_ROOT, "data/output"))
+# 子目錄預設跟隨 DATA_DIR（B-IN-09：只覆寫 DATA_DIR 時，DB／輸出不應仍寫回專案目錄）
+DB_DIR = os.getenv("DB_DIR", os.path.join(DATA_DIR, "db"))
+RAG_DIR = os.getenv("RAG_DIR", os.path.join(DATA_DIR, "rag"))
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", os.path.join(DATA_DIR, "output"))
 RULE_SOURCE_DIR = os.getenv(
     "RULE_SOURCE_DIR", os.path.join(PROJECT_ROOT, "officialdocument/審查注意事項")
 )
@@ -28,7 +29,7 @@ FACILITY_CONFIG_PATH = os.getenv(
 RECORDS_DIR = os.getenv("RECORDS_DIR", os.path.join(DATA_DIR, "samples", "records"))
 
 # Phase 9-01：存取審計日誌路徑（JSON Lines，無 PHI）。
-AUDIT_LOG_PATH = os.getenv("AUDIT_LOG_PATH", os.path.join(PROJECT_ROOT, "data/audit/access.log"))
+AUDIT_LOG_PATH = os.getenv("AUDIT_LOG_PATH", os.path.join(DATA_DIR, "audit", "access.log"))
 
 # Phase 9-02：案件狀態機＋轉換歷史 SQLite 路徑（含 PHI payload，須入 .gitignore）。
 CASES_DB_PATH = os.getenv("CASES_DB_PATH", os.path.join(DB_DIR, "cases.sqlite3"))

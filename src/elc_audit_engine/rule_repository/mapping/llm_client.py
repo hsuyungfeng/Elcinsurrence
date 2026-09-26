@@ -1,7 +1,11 @@
 """llama.cpp OpenAI 相容 chat completion 端點的薄封裝。
 
-僅供 `build_mapping.py` 這個一次性批次建置腳本使用（D-04）。
-查詢階段（Phase 3-5）絕不呼叫此模組（D-05）。
+使用者：`build_mapping.py`（一次性批次建置，D-04），以及執行期的
+comparator 判定器（judger）與候選補強生成器（narratives）。規則查詢
+（`get_rule`）本身不呼叫 LLM（D-05）。
+
+呼叫前一律檢查 LLM 位址為本機／私有網段（`assert_local_llm_url`）：
+判定與補強會送出病歷原文，不得離開本機（D2 紅線）。
 
 RESEARCH.md Pitfall 5 記錄了一個可疑現象：對 live server 做一次
 JSON-mode 的 ad-hoc 測試，回傳看起來像是 OpenAPI schema 樣板
@@ -23,9 +27,38 @@ llama.cpp 的 OpenAI 相容端點支援 `chat_template_kwargs.enable_thinking`
 {"enable_thinking": false}`。
 """
 
+import ipaddress
+import os
+from urllib.parse import urlparse
+
 import requests
 
 from config.settings import LLAMA_CPP_BASE_URL, load_llama_config
+
+
+class RemoteLLMRefusedError(RuntimeError):
+    """LLM 位址不是本機／私有網段——病歷原文不得送出本機（D2 紅線，B-IN-09）。"""
+
+
+def assert_local_llm_url(url: str) -> None:
+    """確認 LLM 位址為 localhost、loopback 或私有網段 IP。
+
+    主機名稱（非 localhost）無法在此判定是否在內網，預設拒絕；確有需要時
+    設定 ELC_ALLOW_REMOTE_LLM=1 明示放行（部署者須自行確保不出內網）。
+    """
+    if os.environ.get("ELC_ALLOW_REMOTE_LLM") == "1":
+        return
+    host = (urlparse(url).hostname or "").strip("[]").lower()
+    if host == "localhost":
+        return
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        raise RemoteLLMRefusedError(
+            f"LLM 位址 {host!r} 非本機／私有 IP，拒絕送出病歷內容（可設 ELC_ALLOW_REMOTE_LLM=1 明示放行）"
+        ) from None
+    if not (ip.is_loopback or ip.is_private):
+        raise RemoteLLMRefusedError(f"LLM 位址 {host!r} 為公網 IP，拒絕送出病歷內容")
 
 
 def chat_completion(
@@ -64,13 +97,15 @@ def chat_completion(
         "chat_template_kwargs": {"enable_thinking": False},
     }
 
+    assert_local_llm_url(LLAMA_CPP_BASE_URL)
     response = requests.post(
         f"{LLAMA_CPP_BASE_URL}/v1/chat/completions",
         json=payload,
         timeout=60,
     )
     response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"]
+    # content 可能為 null（B-IN-13）；以空字串交由呼叫端的解析失敗路徑處理
+    return response.json()["choices"][0]["message"]["content"] or ""
 
 
 def smoke_test() -> str:

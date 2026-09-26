@@ -44,7 +44,14 @@ RuleLookupFn = Callable[[str], RuleResult]
 
 def _to_check_item(rule: RuleResult) -> CheckItem:
     rule_text = rule.article_full_text or rule.payment_text or ""
-    rule_source = rule.article_source or rule.source
+    # CheckItem.rule_source 值域為 csv/docx/unknown（B-IN-13）：原本 article_source
+    # 為空時退回 rule.source（payment/drug），兩種值域混在同一欄位。
+    if rule.article_full_text:
+        rule_source = rule.article_source or "unknown"
+    elif rule.payment_text:
+        rule_source = "csv"
+    else:
+        rule_source = "unknown"
     return CheckItem(
         rule_text=rule_text,
         rule_source=rule_source,

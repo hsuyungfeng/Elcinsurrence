@@ -24,6 +24,9 @@ import os
 import re
 import xml.etree.ElementTree as ET
 
+import defusedxml.ElementTree as DefusedET
+from defusedxml import DefusedXmlException
+
 from .models import OrderRecord, RejectedCase, SubmissionCase, SubmissionParseResult
 
 # 依 D-01 的嘗試順序（宣告編碼優先，其餘為寬容回退）。
@@ -31,7 +34,8 @@ _ENCODING_FALLBACKS = ("big5", "cp950", "big5hkscs", "utf-8")
 
 # XML 宣告的 encoding 屬性（單/雙引號皆可）。
 _DECLARATION_RE = re.compile(rb"<\?xml[^>]*?encoding\s*=\s*[\"']([^\"']+)[\"']", re.IGNORECASE)
-_DECLARATION_FULL_RE = re.compile(r"<\?xml[^>]*\?>")
+# 錨定文件開頭（可含 BOM／空白），避免命中 <?xml-stylesheet …?> 等處理指令（B-IN-02）
+_DECLARATION_FULL_RE = re.compile(r"^\ufeff?\s*<\?xml\s[^>]*\?>")
 
 
 class SubmissionXmlError(Exception):
@@ -264,9 +268,13 @@ def _parse_decoded_text(text: str, warnings: tuple[str, ...] = ()) -> Submission
         SubmissionXmlError: 結構無法解析，或根元素不是 <outpatient>。
     """
     try:
-        root = ET.fromstring(text)
+        # B-IN-01：申報 XML 為外部輸入，改用 defusedxml 並禁止 DTD（申報格式
+        # 不需要 DTD），不依賴執行環境 expat 版本擋 XXE／實體炸彈。
+        root = DefusedET.fromstring(text, forbid_dtd=True)
     except ET.ParseError as exc:
         raise SubmissionXmlError(f"申報 XML 結構無法解析: {exc}") from exc
+    except DefusedXmlException as exc:
+        raise SubmissionXmlError("申報 XML 含 DTD／實體宣告，基於安全拒絕解析") from exc
 
     if root.tag != "outpatient":
         raise SubmissionXmlError(
