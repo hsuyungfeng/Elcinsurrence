@@ -19,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, g, jsonify, request, send_from_directory
+from werkzeug.exceptions import HTTPException
 
 from config import settings
 from elc_audit_engine.record_aggregator import (
@@ -178,7 +179,7 @@ def _enforce_api_key():
                 pass
         return None
     if request.endpoint is None:
-        # 未匹配任何路由（404），交給 Flask 內建處理，不在此攔截。
+        # 未匹配任何路由（404），交給 _handle_http_exception 回 404，不在此攔截。
         return None
     presented_key = request.headers.get(API_KEY_HEADER)
     keys = app.config["ELC_API_KEYS"]
@@ -232,6 +233,16 @@ def _handle_api_error(exc: ApiError):
 @app.errorhandler(UploadFileError)
 def _handle_upload_error(exc: UploadFileError):
     return jsonify({"status": "error", "message": str(exc)}), 400
+
+
+@app.errorhandler(HTTPException)
+def _handle_http_exception(exc: HTTPException):
+    """保留 Flask/werkzeug 的 4xx/405 語意（404 探測、415 Content-Type、400 JSON 語法）。
+
+    Flask 依例外 MRO 選最具體的 handler，故此 handler 優先於下方
+    Exception 兜底；否則呼叫方送錯的請求會被誤報成 500（P0-2）。
+    """
+    return jsonify({"status": "error", "message": exc.description}), exc.code
 
 
 @app.errorhandler(Exception)
