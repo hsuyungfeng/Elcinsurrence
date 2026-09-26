@@ -58,6 +58,21 @@ def _fmt_roc_date_iso(iso: str) -> str:
         return iso
     return f"{int(year) - _ROC_OFFSET}年{int(month)}月{int(day)}日"
 
+def _deduct_amount(record: dict) -> Any:
+    """不予核銷金額：DeductionRecord 形狀用 non_reimbursed_amount，
+    經 case_id 取回的 _to_appeal_case payload 則是 deduct_amount。"""
+    value = record.get("non_reimbursed_amount")
+    return value if value not in (None, "") else record.get("deduct_amount")
+
+def _to_int(value: Any) -> int:
+    """寬鬆轉整數（容忍 None／空字串／千分位）；非數字視為 0，不讓整張表 500。"""
+    if value is None or value == "":
+        return 0
+    try:
+        return int(str(value).replace(",", "").strip())
+    except ValueError:
+        return 0
+
 def build_deduction_header(records: list[dict], facility: dict) -> dict[str, str]:
     # header is derived from the first record if any, plus facility config
     if not records:
@@ -65,13 +80,22 @@ def build_deduction_header(records: list[dict], facility: dict) -> dict[str, str
     
     first = records[0]
     return {
-        "機構代碼": _str_or_empty(facility.get("institution_code") or first.get("institution_code")),
-        "醫療院所名稱": _str_or_empty(facility.get("facility_name")),
+        # facility.json 的正式鍵名為 code／name（settings.REQUIRED_FACILITY_FIELDS）；
+        # institution_code／facility_name 為舊呼叫端鍵名，保留相容。
+        "機構代碼": _str_or_empty(
+            facility.get("code") or facility.get("institution_code") or first.get("institution_code")
+        ),
+        "醫療院所名稱": _str_or_empty(facility.get("name") or facility.get("facility_name")),
         "費用年月": _fmt_roc_year_month(_str_or_empty(first.get("fee_year_month"))),
         "申請申報日期": _fmt_roc_date_iso(_str_or_empty(first.get("submit_date"))),
         "抽審件數": "",  # To be filled by other stats if available, currently empty
-        "核減件數": str(len(set(r.get("case_class", "") + r.get("case_seq", "") for r in records if r.get("case_class") or r.get("case_seq")))),
-        "總核減點數": str(sum(int(r.get("non_reimbursed_amount", 0) or 0) for r in records)),
+        # 以 (案件分類, 流水號) tuple 去重：字串串接會讓 "1"+"23" 與 "12"+"3" 撞在一起，
+        # 且值為 None 時串接會 TypeError。
+        "核減件數": str(len({
+            (_str_or_empty(r.get("case_class")), _str_or_empty(r.get("case_seq")))
+            for r in records if r.get("case_class") or r.get("case_seq")
+        })),
+        "總核減點數": str(sum(_to_int(_deduct_amount(r)) for r in records)),
     }
 
 def build_deduction_rows(records: list[dict], submission: dict | None = None) -> tuple[list[dict[str, str]], list[str]]:
@@ -108,7 +132,7 @@ def build_deduction_rows(records: list[dict], submission: dict | None = None) ->
         row["醫令名稱"] = order_name
         
         row["申報點數/數量"] = f"{_str_or_empty(record.get('claimed_points'))} / {_str_or_empty(record.get('total_qty'))}"
-        row["不予核銷金額/核減點數"] = _str_or_empty(record.get("non_reimbursed_amount"))
+        row["不予核銷金額/核減點數"] = _str_or_empty(_deduct_amount(record))
         
         code = _str_or_empty(record.get("appeal_item_code"))
         desc = _str_or_empty(record.get("appeal_item_desc"))
