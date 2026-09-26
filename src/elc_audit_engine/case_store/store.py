@@ -145,6 +145,9 @@ class CaseStore:
         conn = self._connect()
         try:
             with conn:
+                # BEGIN IMMEDIATE：SELECT 與 INSERT 在同一寫鎖內，併發建案時
+                # 不會兩邊都通過存在檢查（A-WR-01）。
+                conn.execute("BEGIN IMMEDIATE")
                 existing = conn.execute(
                     "SELECT case_id FROM cases WHERE case_id = ?", (validated_case_id,)
                 ).fetchone()
@@ -174,6 +177,11 @@ class CaseStore:
                     "VALUES (?, NULL, ?, NULL, ?, ?)",
                     (validated_case_id, STATE_IMPORTED, actor, now),
                 )
+        except sqlite3.IntegrityError as exc:
+            # 保底：主鍵衝突一律以業務例外呈現，不以 500 穿透 _persist_cases
+            raise DuplicateCaseError(
+                f"案件已存在，拒絕覆寫：case_id={validated_case_id!r}"
+            ) from exc
         finally:
             conn.close()
 
