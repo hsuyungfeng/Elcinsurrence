@@ -15,7 +15,7 @@
 import json
 import os
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from flask import Flask, g, jsonify, request, send_from_directory
@@ -36,6 +36,8 @@ from elc_audit_engine.auth import (
     resolve_caller,
 )
 from elc_audit_engine.audit_log import record_access
+from elc_audit_engine.rule_repository.loaders.dates import parse_flexible_date
+from elc_audit_engine.safe_paths import UnsafeIdentifierError
 from elc_audit_engine.case_store import (
     CaseNotFoundError,
     CaseStore,
@@ -466,10 +468,50 @@ def _records_provider() -> LocalFileProvider | None:
     return None
 
 
+def _parse_visit_date(raw) -> date | None:
+    """就醫日期 → date。接受 ISO、西元 8 碼、民國 7 碼，以及「115/07/10」斜線民國格式。
+
+    無法解析回 None（呼叫端決定是否退回今天）。
+    """
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    text = raw.strip()
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        pass
+    parts = text.split("/")
+    if len(parts) == 3 and all(p.isdigit() for p in parts):
+        year = int(parts[0])
+        year = year + 1911 if year < 1911 else year
+        try:
+            return date(year, int(parts[1]), int(parts[2]))
+        except ValueError:
+            return None
+    iso = parse_flexible_date(text)
+    return date.fromisoformat(iso) if iso else None
+
+
+def _resolve_visit_date(data: dict, case_id: str) -> date | None:
+    """病史時間窗錨點（B-CR-03）：請求 visit_date 優先，其次 CaseStore 案件 payload。"""
+    visit = _parse_visit_date(data.get("visit_date"))
+    if visit is None and case_id:
+        try:
+            payload = _case_store.get(case_id).payload or {}
+        except (CaseNotFoundError, UnsafeIdentifierError):
+            payload = {}
+        visit = _parse_visit_date(payload.get("visit_date"))
+    return visit
+
+
 def _resolve_records_source(
-    provider: LocalFileProvider | None, record_no: str
+    provider: LocalFileProvider | None, record_no: str, visit_date: date | None = None
 ) -> tuple[PatientTimeline | None, str]:
     """依 Provider 具現化與 record_no 解析 timeline 與 records_source 四態。
+
+    visit_date：半年病史窗的迄日（B-CR-03）。必須是就醫日而非今天——
+    就醫日之後的紀錄不能證明當次醫令的必要性。未知時才退回今天
+    （build_timeline 預設），並由呼叫端在回應標示 records_window_anchor。
 
     Returns:
         (timeline, records_source)：timeline 為 PatientTimeline | None；
@@ -477,7 +519,7 @@ def _resolve_records_source(
     """
     timeline = None
     if provider is not None and record_no:
-        agg = build_timeline(provider, record_no)
+        agg = build_timeline(provider, record_no, end_date=visit_date)
         timeline = agg.timeline
         return timeline, ("absent" if agg.degraded else "ok")
     if provider is not None:
@@ -579,7 +621,8 @@ def audit_sampling_case():
         # errorhandler 統一 500（P0-2/T-1112-03）；PatientRecordsNotFound 由
         # build_timeline 內捕為 degraded=True（C5 正常降級）。
         provider = _records_provider()
-        timeline, records_source = _resolve_records_source(provider, record_no)
+        visit_date = _resolve_visit_date(data, case_id)
+        timeline, records_source = _resolve_records_source(provider, record_no, visit_date)
         result = run_presubmission_check(case, soap_doc, timeline)
     except RuleRepositoryError as exc:
         # D-06/P0-2：規則庫故障不得偽裝成「查無規則」或「裸奔」。
@@ -633,6 +676,7 @@ def audit_sampling_case():
         ],
         "records_degraded": result.comparison.records_degraded,
         "records_source": records_source,
+        "records_window_anchor": "visit_date" if visit_date else "today",
         # 降級原因文案（固定中文模板，不含路徑／病歷號，T-1112-01）；
         # 僅 records_degraded=True 時提供，否則 None。
         "records_degraded_reason": (
@@ -876,7 +920,8 @@ def generate_appeal_draft():
     # build_timeline 內捕降級；RecordProviderError（infra 故障）向外穿透
     # 統一 500，不吞成業務結論（P0-2/T-1112-03）。
     provider = _records_provider()
-    timeline, records_source = _resolve_records_source(provider, record_no)
+    visit_date = _resolve_visit_date(data, _clean_str(data, 'case_id'))
+    timeline, records_source = _resolve_records_source(provider, record_no, visit_date)
 
     draft = build_appeal_draft(
         record,
@@ -913,6 +958,7 @@ def generate_appeal_draft():
     # 不含路徑／病歷號（T-1112-01），僅降級時提供否則 None。
     payload["records_degraded"] = timeline is None
     payload["records_source"] = records_source
+    payload["records_window_anchor"] = "visit_date" if visit_date else "today"
     payload["records_degraded_reason"] = (
         _RECORDS_DEGRADED_REASONS.get(records_source) if timeline is None else None
     )
