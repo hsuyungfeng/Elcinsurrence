@@ -55,7 +55,7 @@ def test_import_sampling_cases_persists_to_casestore(client, setup_tmp_casestore
 
     records = setup_tmp_casestore.list_all(kind="sampling")
     assert len(records) == 1
-    assert records[0].case_id == "SAMP-0001"
+    assert records[0].case_id.startswith("SAMP-")
     assert records[0].state == "imported"
 
 
@@ -74,7 +74,9 @@ def test_duplicate_import_reports_conflicts(client, setup_tmp_casestore):
     assert resp2.status_code == 200
     res_json2 = resp2.get_json()
     assert res_json2["case_store_persisted"] == 0
-    assert "SAMP-0001" in res_json2["case_store_conflicts"]
+    # 同內容重複匯入：內容雜湊 id 相同 → 冪等、回報衝突（A-CR-02）
+    first_id = setup_tmp_casestore.list_all(kind="sampling")[0].case_id
+    assert res_json2["case_store_conflicts"] == [first_id]
 
 
 def test_migrate_legacy_uploads_idempotent(setup_tmp_casestore, tmp_path, monkeypatch):

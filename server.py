@@ -12,6 +12,8 @@
    - 生成 4 段式申復理由草稿 (≤2000字) 與申復 XML 欄位
 """
 
+import dataclasses
+import hashlib
 import json
 import os
 import uuid
@@ -386,10 +388,29 @@ _migration_result = _migrate_legacy_uploads(_case_store)
 app.logger.info("啟動期遷移 data/uploads/*.json → CaseStore：%s", _migration_result)
 
 
+def _content_case_id(prefix: str, rec) -> str:
+    """以記錄業務內容雜湊產生 case_id（A-CR-02）。
+
+    原本 f"{prefix}-{idx:04d}" 每次匯入都從 0001 起算，第二批不同內容的案件
+    會全數被當成重複而靜默拒收。改以內容雜湊：
+    - 不同批次、不同內容 → 不同 id，不再撞號；
+    - 同一份檔案重複匯入 → 同 id，由 CaseStore 回報 conflicts（冪等）。
+    raw／ocr_line／source 為來源格式資訊，不參與雜湊。
+    """
+    fields = {
+        k: v for k, v in dataclasses.asdict(rec).items()
+        if k not in {"raw", "ocr_line", "source"}
+    }
+    digest = hashlib.sha256(
+        json.dumps(fields, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
+    ).hexdigest()[:16]
+    return f"{prefix}-{digest}"
+
+
 def _to_sampling_case(idx: int, rec) -> dict:
     """SamplingCaseRecord → 前端列表契約 dict。"""
     return {
-        "id": f"SAMP-{idx:04d}",
+        "id": _content_case_id("SAMP", rec),
         "demo": False,
         "case_seq": rec.case_seq or str(idx),
         "record_no": rec.record_no,
@@ -416,7 +437,7 @@ def _to_appeal_case(idx: int, rec) -> dict:
     except RuleRepositoryError:
         pass  # 名稱缺失不阻斷導入，前端以代碼顯示
     return {
-        "id": f"APP-{idx:04d}",
+        "id": _content_case_id("APP", rec),
         "demo": False,
         "case_seq": rec.case_seq or str(idx),
         "record_no": None,
