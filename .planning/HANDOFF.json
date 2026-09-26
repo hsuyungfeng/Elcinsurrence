@@ -1,41 +1,40 @@
 {
   "version": "1.0",
-  "timestamp": "2026-08-11T07:22:01.376Z",
-  "phase": "14",
-  "phase_name": "evidence-packet-print",
-  "phase_dir": ".planning/phases/14-evidence-packet-print",
-  "plan": 3,
-  "task": 3,
-  "total_tasks": 3,
-  "status": "complete",
+  "timestamp": "2026-09-26T15:59:36.843Z",
+  "phase": null,
+  "phase_name": "code-review-remediation",
+  "phase_dir": null,
+  "plan": null,
+  "task": 5,
+  "total_tasks": 5,
+  "status": "paused",
   "completed_tasks": [
-    {"id": 1, "name": "Evidence Packet DOCX Builder & Image Processor", "status": "done", "commit": "4dcab73"},
-    {"id": 2, "name": "PDF Exporter, PDF Concatenator & CLI Tool", "status": "done", "commit": "6e3a15e"},
-    {"id": 3, "name": "Flask API Route Wiring & Verification", "status": "done", "commit": "9c0114d"}
+    {"id": 1, "name": "全專案 code review 報告", "status": "done", "commit": "66ed880"},
+    {"id": 2, "name": "Critical 16 項修正＋認證部分強制", "status": "done", "commit": "3c0adfc"},
+    {"id": 3, "name": "Warning 35 項修正", "status": "done", "commit": "0f7d6f9"},
+    {"id": 4, "name": "Info 21 項修正", "status": "done", "commit": "cffadca"},
+    {"id": 5, "name": "第 5 步：app factory＋blueprints、附件索引 SQLite", "status": "done", "commit": "ee7483f"}
   ],
-  "remaining_tasks": [],
-  "blockers": [],
+  "remaining_tasks": [
+    {"id": 6, "name": "rule_mapping 補建 458 筆（需 Ornith LLM）", "status": "not_started"},
+    {"id": 7, "name": "B-WR-17 docx 標題深度重排（需使用者確認）", "status": "not_started"}
+  ],
+  "blockers": [
+    {"description": "Ornith-1.0-9B 模型不在本機、llama.cpp 未啟動", "type": "external", "workaround": "rule_mapping 先只做 CSV 部分；458 筆 source_version=NULL 待增量重試"},
+    {"description": "Phase 10 外部依賴（NHI_EIIAPI、VPN）", "type": "external", "workaround": "none"}
+  ],
   "human_actions_pending": [
-    {
-      "action": "Replace placeholder RCPI2012R01_核減明細表_print_base.odt with real NHI official form",
-      "context": "Current ODT is a hand-crafted minimal scaffold. The real NHI RCPI2012R01 form layout has not been obtained. The deduction print output is functional but visually differs from official paper.",
-      "blocking": false
-    }
+    {"action": "提供 Ornith 模型或啟動 llama-server 後執行 build_mapping", "context": "補齊 458 筆 docx 條文 mapping", "blocking": false},
+    {"action": "部署時設定 ELC_ALLOWED_HOSTS／ELC_ALLOW_REMOTE_LLM", "context": "Host 白名單與 LLM 本機限制預設只允許 localhost", "blocking": false},
+    {"action": "通知 HIS 端附件 API 改以 case_id 為鍵", "context": "README §1.1；case_seq 僅唯一對應時相容", "blocking": false}
   ],
   "decisions": [
-    {
-      "decision": "Built minimal ODT scaffold for RCPI2012R01 deduction print template",
-      "rationale": "Official NHI form was not available. Placeholder ensures API works end-to-end; can be swapped for real form when obtained.",
-      "phase": "13"
-    },
-    {
-      "decision": "Added facility as optional param to build_evidence_packet_docx",
-      "rationale": "render_evidence_packet passed facility kwarg but builder signature didn't accept it; fixed without breaking existing tests.",
-      "phase": "14"
-    }
+    {"decision": "認證部分強制＋Host 白名單", "rationale": "PHI 批次讀取與刪除須認證；使用者選項 2", "phase": null},
+    {"decision": "附件與輸出一律以 case_id 為鍵", "rationale": "case_seq 跨月重複造成跨病患混用", "phase": null},
+    {"decision": "rule_mapping 只做 CSV 部分", "rationale": "本機無 Ornith，不以 gemma 污染結果", "phase": null},
+    {"decision": "LLM 只選候選編號，條文取 docx 原文", "rationale": "避免 LLM 摘要被當法規原文", "phase": null}
   ],
   "uncommitted_files": [],
-  "milestone": "v1.1 shipped 2026-08-11",
-  "next_action": "Run /gsd-complete-milestone to archive v1.1 and plan v1.2, or run /gsd-verify-work for interactive UAT of Phase 13/14 PDF outputs",
-  "context_notes": "Milestone v1.1 完整交付：三項輸出（影像佐證上傳 Phase 12、核減明細列印 Phase 13、申復佐證包 Phase 14）全部完成。458 passed, 2 skipped, 0 failed。Server running at http://127.0.0.1:5000 with ELC_API_KEYS=clinic:dev-key-for-local-dev-001。Deduction print ODT is a placeholder — real NHI form pending."
+  "next_action": "有 Ornith 時執行 build_mapping 補齊 458 筆；否則與使用者確認下一個里程碑",
+  "context_notes": "所有修正已合入 main 並 push；回歸測試在 doc/tests；API 位於 src/elc_audit_engine/api"
 }
