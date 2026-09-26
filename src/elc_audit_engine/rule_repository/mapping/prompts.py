@@ -10,14 +10,16 @@ from elc_audit_engine.prompt_safety import DATA_ISOLATION_NOTICE, fence
 
 SYSTEM_PROMPT = (
     "你是健保醫療給付規則比對助手。你會收到一個醫令/藥品代碼與其名稱，"
-    "以及若干候選條文樹節點（含標題與路徑）。請從候選節點中選出最相關的一個，"
-    "並以此格式回答：條文位置：<path>\n條文摘要：<最相關的一段全文，至多200字>。"
-    "若候選節點都不相關，回答：查無相關條文。\n"
+    "以及若干編號的候選條文樹節點（含路徑與全文開頭）。請從候選節點中選出"
+    "最相關的一個，**只回答一行**：候選編號：<編號>。"
+    "若候選節點都不相關，回答：候選編號：0。"
+    "不要摘要、不要改寫或補充條文內容——條文原文由系統依編號取用。\n"
     + DATA_ISOLATION_NOTICE
 )
 
 _MAX_CANDIDATES = 5
-_FULL_TEXT_PREVIEW_LEN = 100
+# 只供 LLM 判斷相關性；寫入規則庫的一律是節點原文（B-CR-02）。
+_FULL_TEXT_PREVIEW_LEN = 300
 
 
 def build_candidate_matching_prompt(

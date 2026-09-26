@@ -36,7 +36,7 @@ def _make_test_docx_trees(path: str) -> None:
                     "title": "第一節 檢驗",
                     "level": 1,
                     "path": "第一節 檢驗",
-                    "full_text": "尿一般檢查相關規定內容...",
+                    "full_text": "尿一般檢查相關規定：尿液檢查應有臨床適應症，並於病歷記載檢查理由與結果判讀。",
                     "children": [],
                     "table_refs": [],
                 }
@@ -59,7 +59,7 @@ def test_csv_reuse_fast_path_avoids_llm_call(tmp_path):
          patch.object(build_mapping.llm_client, "chat_completion") as mock_chat:
         # 06012C 的 payment_text 為 None，會走 LLM path；為了單獨驗證 64140C
         # 不觸發 LLM 呼叫，這裡讓 mock_chat 回傳一個可解析的回應供 06012C 使用。
-        mock_chat.return_value = "條文位置：測試路徑\n條文摘要：本條文規範尿液一般檢查之審查原則與給付規定，適用於門診及住院申報案件。"
+        mock_chat.return_value = "候選編號：1"
         result = build_mapping.build_rule_mapping(db_path, trees_path)
 
     conn = db.get_connection(db_path)
@@ -82,7 +82,7 @@ def test_csv_reuse_fast_path_avoids_llm_call(tmp_path):
 
 
 def test_llm_path_triggered_for_short_payment_text(tmp_path):
-    """Test 2: 短/空 payment_text 的代碼觸發 LLM 路徑，並正確解析回應。"""
+    """Test 2: 短/空 payment_text 的代碼觸發 LLM 路徑；LLM 只選編號，內容取節點原文。"""
     db_path = str(tmp_path / "test_rules.sqlite3")
     trees_path = str(tmp_path / "docx_trees.json")
     _make_test_db(db_path)
@@ -92,7 +92,7 @@ def test_llm_path_triggered_for_short_payment_text(tmp_path):
          patch.object(
              build_mapping.llm_client,
              "chat_completion",
-             return_value="條文位置：測試路徑\n條文摘要：本條文規範尿液一般檢查之審查原則與給付規定，適用於門診及住院申報案件。",
+             return_value="候選編號：1",
          ):
         build_mapping.build_rule_mapping(db_path, trees_path)
 
@@ -104,8 +104,9 @@ def test_llm_path_triggered_for_short_payment_text(tmp_path):
     conn.close()
 
     assert row is not None
-    assert row["article_location"] == "測試路徑"
-    assert row["article_full_text"] == "本條文規範尿液一般檢查之審查原則與給付規定，適用於門診及住院申報案件。"
+    # B-CR-02：位置與全文取自被選中節點原文，不採用 LLM 生成內容
+    assert row["article_location"] == "第一節 檢驗"
+    assert row["article_full_text"] == "尿一般檢查相關規定：尿液檢查應有臨床適應症，並於病歷記載檢查理由與結果判讀。"
     assert row["article_source"] == "docx"
 
 

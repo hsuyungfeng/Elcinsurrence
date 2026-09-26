@@ -22,6 +22,7 @@ LLM 僅在此建置步驟使用一次；查詢階段（Phase 3-5）完全零 LLM
 
 import json
 import logging
+import re
 
 from elc_audit_engine.rule_repository import db
 from elc_audit_engine.rule_repository.mapping import llm_client, prompts, versions
@@ -124,8 +125,8 @@ def _is_low_value_article(location: str | None, full_text: str | None) -> bool:
     正式 docx 匹配，應降級為無匹配（待日後改進語料/候選後重試）。
 
     Args:
-        location: LLM 回報的條文位置。
-        full_text: LLM 回報的條文摘要/全文。
+        location: 被選中節點的條文位置（path）。
+        full_text: 被選中節點的原文全文。
 
     Returns:
         `True` 表示低價值（應降級）。
@@ -143,28 +144,36 @@ def _is_low_value_article(location: str | None, full_text: str | None) -> bool:
     return False
 
 
-def _parse_llm_response(response_text: str) -> tuple[str | None, str | None]:
-    """解析 LLM 回應，取出 `條文位置：`/`條文摘要：` 兩個欄位。
+_CHOICE_RE = re.compile(r"候選編號\s*[:：]\s*(\d+)")
 
-    若回應為「查無相關條文」或格式無法解析，回傳 `(None, None)`。
+
+def _parse_llm_choice(response_text: str, n_candidates: int) -> int | None:
+    """解析 LLM 選出的候選編號（B-CR-02）。
+
+    LLM 只負責「選擇」，不負責「生成」：條文位置與全文一律取自被選中的
+    docx 節點原文，不採用 LLM 自由生成的摘要或路徑。
+
+    Returns:
+        1..n_candidates：選中的候選；0：LLM 明示查無相關條文；
+        None：回應無法解析或編號超出範圍（視為模型故障，不鎖版本、待重試）。
     """
-    if not response_text or "查無相關條文" in response_text:
-        return None, None
-
-    location = None
-    summary = None
-    for line in response_text.splitlines():
-        line = line.strip()
-        if line.startswith("條文位置："):
-            location = line[len("條文位置："):].strip() or None
-        elif line.startswith("條文摘要："):
-            summary = line[len("條文摘要："):].strip() or None
-
-    if location is None and summary is None:
-        # 完全無法解析出預期格式 —— 視為不可信回應，優雅降級。
-        return None, None
-
-    return location, summary
+    if not response_text:
+        return None
+    if "查無相關條文" in response_text:
+        return 0
+    m = _CHOICE_RE.search(response_text)
+    if m is None:
+        stripped = response_text.strip()
+        if not stripped.isdigit():
+            return None
+        choice = int(stripped)
+    else:
+        choice = int(m.group(1))
+    if choice == 0:
+        return 0
+    if 1 <= choice <= n_candidates:
+        return choice
+    return None
 
 
 def build_rule_mapping(
@@ -295,25 +304,46 @@ def build_rule_mapping(
                 degraded_count += 1
                 continue
 
-            candidates = _select_top_candidates(all_nodes, name)
+            candidates = _select_top_candidates(all_nodes, name)[: prompts._MAX_CANDIDATES]
+            if not candidates:
+                # 無候選節點時不呼叫 LLM：沒有可選的原文，任何回答都只能是編造。
+                db.upsert_rule_mapping(
+                    conn,
+                    code=code,
+                    article_location=None,
+                    article_full_text=None,
+                    article_source=None,
+                    source_version=source_version,
+                )
+                no_match_count += 1
+                continue
+
             system_prompt, user_prompt = prompts.build_candidate_matching_prompt(
                 code=code,
                 name=name,
                 category_hint=table_name,
                 candidate_nodes=candidates,
             )
-            llm_failed = False
             try:
                 response_text = llm_client.chat_completion(system_prompt, user_prompt)
             except Exception as exc:  # noqa: BLE001 - LLM 呼叫失敗，優雅降級為單一代碼的 no-match
                 logger.warning("LLM call failed for code %s: %s", code, exc)
                 response_text = ""
-                llm_failed = True
 
-            location, summary = _parse_llm_response(response_text)
-            if location is None and summary is None or _is_low_value_article(location, summary):
-                # 單一碼故障（llm_failed）不寫版本，下次增量重試；
-                # 真正「查無相關條文」或「低價值條文（僅標題）」才寫版本鎖定（P1-4）。
+            choice = _parse_llm_choice(response_text, len(candidates))
+            if choice is None:
+                # 呼叫失敗或回應無法解析：模型故障，不寫版本，下次增量重試（P1-4）。
+                logger.warning("LLM choice unparseable for code %s", code)
+                chosen = None
+                llm_failed = True
+            else:
+                chosen = candidates[choice - 1] if choice > 0 else None
+                llm_failed = False
+
+            location = chosen.get("path") if chosen else None
+            full_text = chosen.get("full_text") if chosen else None
+            if chosen is None or _is_low_value_article(location, full_text):
+                # 真正「查無相關條文」或「低價值條文（僅標題）」才寫版本鎖定。
                 db.upsert_rule_mapping(
                     conn,
                     code=code,
@@ -330,7 +360,7 @@ def build_rule_mapping(
                     conn,
                     code=code,
                     article_location=location,
-                    article_full_text=summary,
+                    article_full_text=full_text,
                     article_source="docx",
                     source_version=source_version,
                 )

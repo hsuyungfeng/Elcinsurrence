@@ -55,10 +55,27 @@ def test_build_source_version_format(tmp_path):
     v = versions.build_source_version(str(pay), str(drug), str(trees))
     assert v.startswith("251027:")
     parts = v.split("|")
-    assert len(parts) == 3
+    assert len(parts) == 4
     assert parts[0].startswith("251027:")
     assert parts[1].startswith("260605:")
     assert len(parts[2]) == 12
+    assert parts[3] == versions.MAPPING_SCHEME
+
+
+_CANDIDATE_TREES = {
+    "sample.docx": {
+        "title": "sample", "level": 0, "path": "sample", "full_text": "", "table_refs": [],
+        "children": [{
+            "title": "第一節 尿液檢查", "level": 1, "path": "第一節 尿液檢查",
+            "full_text": "尿一般檢查相關規定：尿液檢查應有臨床適應症，並於病歷記載檢查理由與結果判讀。", "children": [], "table_refs": [],
+        }],
+    }
+}
+
+
+def _write_candidate_trees(path):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(_CANDIDATE_TREES, f, ensure_ascii=False)
 
 
 def _make_db(db_path, codes, source_version=None):
@@ -91,7 +108,7 @@ def test_incremental_skips_codes_with_same_version(tmp_path):
         source_version="v1",
     )
     with open(trees_path, "w", encoding="utf-8") as f:
-        json.dump({}, f)
+        json.dump(_CANDIDATE_TREES, f, ensure_ascii=False)
 
     with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
          patch.object(build_mapping.llm_client, "chat_completion") as mock_chat:
@@ -123,13 +140,13 @@ def test_incremental_rebuilds_when_version_changed(tmp_path):
         source_version="old-version",
     )
     with open(trees_path, "w", encoding="utf-8") as f:
-        json.dump({}, f)
+        json.dump(_CANDIDATE_TREES, f, ensure_ascii=False)
 
     with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
          patch.object(
              build_mapping.llm_client,
              "chat_completion",
-             return_value="條文位置：測試路徑\n條文摘要：本條文規範尿液一般檢查之審查原則與給付規定，適用於門診及住院申報案件。",
+             return_value="候選編號：1",
          ):
         result = build_mapping.build_rule_mapping(
             db_path, trees_path, source_version="new-version", incremental=True
@@ -144,7 +161,7 @@ def test_incremental_rebuilds_when_version_changed(tmp_path):
         ("06012C",),
     ).fetchone()
     conn.close()
-    assert row["article_location"] == "測試路徑"
+    assert row["article_location"] == "第一節 尿液檢查"
     assert row["article_source"] == "docx"
     assert row["source_version"] == "new-version"
 
@@ -155,13 +172,13 @@ def test_non_incremental_writes_source_version(tmp_path):
     trees_path = str(tmp_path / "docx_trees.json")
     _make_db(db_path, [("06012C", "尿一般檢查", None)])
     with open(trees_path, "w", encoding="utf-8") as f:
-        json.dump({}, f)
+        json.dump(_CANDIDATE_TREES, f, ensure_ascii=False)
 
     with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
          patch.object(
              build_mapping.llm_client,
              "chat_completion",
-             return_value="條文位置：測試路徑\n條文摘要：本條文規範尿液一般檢查之審查原則與給付規定，適用於門診及住院申報案件。",
+             return_value="候選編號：1",
          ):
         result = build_mapping.build_rule_mapping(
             db_path, trees_path, source_version="v9", incremental=False
@@ -186,7 +203,7 @@ def test_incremental_degraded_run_does_not_lock_no_match(tmp_path):
     trees_path = str(tmp_path / "docx_trees.json")
     _make_db(db_path, [("06012C", "尿一般檢查", None)])
     with open(trees_path, "w", encoding="utf-8") as f:
-        json.dump({}, f)
+        json.dump(_CANDIDATE_TREES, f, ensure_ascii=False)
 
     # 第一次：server 掛掉（smoke 失敗）→ 降級寫入，source_version 必須為 None
     with patch.object(build_mapping.llm_client, "smoke_test", side_effect=RuntimeError("down")), \
@@ -210,7 +227,7 @@ def test_incremental_degraded_run_does_not_lock_no_match(tmp_path):
          patch.object(
              build_mapping.llm_client,
              "chat_completion",
-             return_value="條文位置：測試路徑\n條文摘要：本條文規範尿液一般檢查之審查原則與給付規定，適用於門診及住院申報案件。",
+             return_value="候選編號：1",
          ):
         result = build_mapping.build_rule_mapping(
             db_path, trees_path, source_version="v1", incremental=True
@@ -225,7 +242,7 @@ def test_incremental_degraded_run_does_not_lock_no_match(tmp_path):
         ("06012C",),
     ).fetchone()
     conn.close()
-    assert row["article_location"] == "測試路徑"
+    assert row["article_location"] == "第一節 尿液檢查"
     assert row["source_version"] == "v1"
 
 
@@ -242,7 +259,7 @@ def test_per_code_llm_failure_not_locked_but_genuine_no_match_is(tmp_path):
         ],
     )
     with open(trees_path, "w", encoding="utf-8") as f:
-        json.dump({}, f)
+        json.dump(_CANDIDATE_TREES, f, ensure_ascii=False)
 
     def _fake_chat(system_prompt, user_prompt):
         if "06013C" in user_prompt:
@@ -286,39 +303,67 @@ def test_select_top_candidates_filters_title_only_nodes():
     assert picked[0]["title"] == "第一節 尿液檢查"
 
 
-def test_low_value_article_heading_only_is_degraded(tmp_path):
-    """LLM 回報「全文等於標題」的低價值條文：不寫成 docx 匹配，應降級為無匹配。"""
+def test_out_of_range_or_free_text_choice_is_not_trusted(tmp_path):
+    """B-CR-02：LLM 回超出範圍的編號或自由文字（含自編路徑／摘要）時，
+    不得寫入任何條文；視為模型故障，不鎖版本、待重試。"""
+    for response in ("候選編號：9", "條文位置：婦產科\n條文摘要：婦產科"):
+        db_path = str(tmp_path / f"rules_{abs(hash(response))}.sqlite3")
+        trees_path = str(tmp_path / "docx_trees.json")
+        _make_db(db_path, [("06012C", "尿一般檢查", None)])
+        _write_candidate_trees(trees_path)
+
+        with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
+             patch.object(build_mapping.llm_client, "chat_completion", return_value=response):
+            result = build_mapping.build_rule_mapping(
+                db_path, trees_path, source_version="v3", incremental=False
+            )
+
+        conn = db.get_connection(db_path)
+        row = conn.execute(
+            "SELECT article_source, article_location, article_full_text, source_version "
+            "FROM rule_mapping WHERE code=?", ("06012C",)
+        ).fetchone()
+        conn.close()
+
+        assert row["article_source"] is None
+        assert row["article_location"] is None
+        assert row["article_full_text"] is None
+        assert row["source_version"] is None
+        assert result["llm_matched_count"] == 0
+        assert result["degraded_count"] == 1
+
+
+def test_no_candidates_skips_llm_and_locks_no_match(tmp_path):
+    """無候選節點時不得呼叫 LLM（沒有原文可選，回答只能是編造）。"""
     db_path = str(tmp_path / "rules.sqlite3")
     trees_path = str(tmp_path / "docx_trees.json")
     _make_db(db_path, [("06012C", "尿一般檢查", None)])
     with open(trees_path, "w", encoding="utf-8") as f:
         json.dump({}, f)
 
-    # LLM 回傳「條文位置只有一層、全文就是標題」
     with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
-         patch.object(
-             build_mapping.llm_client,
-             "chat_completion",
-             return_value="條文位置：婦產科\n條文摘要：婦產科",
-         ):
+         patch.object(build_mapping.llm_client, "chat_completion") as mock_chat:
         result = build_mapping.build_rule_mapping(
-            db_path, trees_path, source_version="v3", incremental=False
+            db_path, trees_path, source_version="v4", incremental=False
         )
 
-    conn = db.get_connection(db_path)
-    row = conn.execute(
-        "SELECT article_source, article_location, article_full_text, source_version "
-        "FROM rule_mapping WHERE code=?", ("06012C",)
-    ).fetchone()
-    conn.close()
-
-    assert row["article_source"] is None
-    assert row["article_location"] is None
-    assert row["article_full_text"] is None
-    # 鎖定版本：下次同版本不重試（這是「查無」而非故障）
-    assert row["source_version"] == "v3"
-    assert result["llm_matched_count"] == 0
+    assert mock_chat.call_count == 0
     assert result["no_match_count"] == 1
+    conn = db.get_connection(db_path)
+    row = conn.execute("SELECT source_version, article_source FROM rule_mapping WHERE code=?", ("06012C",)).fetchone()
+    conn.close()
+    assert row["article_source"] is None
+    assert row["source_version"] == "v4"
+
+
+def test_parse_llm_choice():
+    assert build_mapping._parse_llm_choice("候選編號：2", 3) == 2
+    assert build_mapping._parse_llm_choice("候選編號: 0", 3) == 0
+    assert build_mapping._parse_llm_choice("查無相關條文", 3) == 0
+    assert build_mapping._parse_llm_choice("1", 3) == 1
+    assert build_mapping._parse_llm_choice("候選編號：4", 3) is None
+    assert build_mapping._parse_llm_choice("條文位置：x", 3) is None
+    assert build_mapping._parse_llm_choice("", 3) is None
 
 
 def _make_db_with_drug(db_path, codes):
@@ -341,7 +386,7 @@ def test_drug_codes_skip_llm_path_and_lock_version(tmp_path):
     trees_path = str(tmp_path / "docx_trees.json")
     _make_db_with_drug(db_path, [("AC10000100", "測試藥品", None)])
     with open(trees_path, "w", encoding="utf-8") as f:
-        json.dump({}, f)
+        json.dump(_CANDIDATE_TREES, f, ensure_ascii=False)
 
     with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
          patch.object(build_mapping.llm_client, "chat_completion") as mock_chat:
@@ -375,7 +420,7 @@ def test_drug_csv_reuse_still_stamps_csv(tmp_path):
     trees_path = str(tmp_path / "docx_trees.json")
     _make_db_with_drug(db_path, [("AC10000200", "長規定藥品", "給付規定：" + ("藥" * 100))])
     with open(trees_path, "w", encoding="utf-8") as f:
-        json.dump({}, f)
+        json.dump(_CANDIDATE_TREES, f, ensure_ascii=False)
 
     with patch.object(build_mapping.llm_client, "smoke_test", return_value="1"), \
          patch.object(build_mapping.llm_client, "chat_completion") as mock_chat:

@@ -5,11 +5,17 @@
 快取表加了 `source_version` 欄位後，增量建置可以判斷「來源是否換版」：
 版本不符（或舊版 NULL）的碼需要重算，版本相符的碼直接沿用。
 
-版本字串格式：`{payment_csv_version}|{drug_csv_version}|{docx_trees_hash}`
+版本字串格式：`{payment_csv_version}|{drug_csv_version}|{docx_trees_hash}|{MAPPING_SCHEME}`
+
+`MAPPING_SCHEME` 為比對演算法版本：演算法語意改變時遞增，讓增量建置把
+舊演算法產出的列一律視為過期而重算（例：choice-v2 起 article_full_text
+改取 docx 節點原文，舊版列為 LLM 生成摘要，不可沿用——B-CR-02）。
 """
 
 import hashlib
 import os
+
+MAPPING_SCHEME = "choice-v2"
 
 
 def extract_csv_version(csv_path: str) -> str:
@@ -62,10 +68,11 @@ def build_source_version(payment_csv_path: str, drug_csv_path: str, docx_trees_p
         docx_trees_path: docx 樹狀索引 JSON 路徑。
 
     Returns:
-        `{payment版本}|{drug版本}|{docx hash}`。
+        `{payment版本}|{drug版本}|{docx hash}|{MAPPING_SCHEME}`。
     """
     return (
         f"{extract_csv_version(payment_csv_path)}|"
         f"{extract_csv_version(drug_csv_path)}|"
-        f"{hash_docx_trees(docx_trees_path)}"
+        f"{hash_docx_trees(docx_trees_path)}|"
+        f"{MAPPING_SCHEME}"
     )
