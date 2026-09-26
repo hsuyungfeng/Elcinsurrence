@@ -14,11 +14,13 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Callable
 
 from elc_audit_engine.parsers.models import SOAPDocument, SubmissionCase
 from elc_audit_engine.record_aggregator.models import PatientTimeline
-from elc_audit_engine.rule_repository import get_rule
+from elc_audit_engine.rule_repository import get_rule, is_effective_on
+from elc_audit_engine.rule_repository.loaders.dates import parse_flexible_date
 from elc_audit_engine.rule_repository.errors import RuleRepositoryError
 from elc_audit_engine.rule_repository.models import RuleResult
 
@@ -48,6 +50,18 @@ def _to_check_item(rule: RuleResult) -> CheckItem:
         rule_source=rule_source,
         rule_location=rule.article_location,
     )
+
+
+def _case_visit_date(case: SubmissionCase) -> date | None:
+    """SubmissionCase.visit_date（民國 7 碼原樣，或 API 帶入的 ISO）→ date。"""
+    raw = (case.visit_date or "").strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        iso = parse_flexible_date(raw)
+        return date.fromisoformat(iso) if iso else None
 
 
 def compare_case(
@@ -85,6 +99,7 @@ def compare_case(
     generate = create_generator(narrative_fn)
 
     evidence = build_evidence_blocks(case, soap_doc, timeline)
+    visit_date = _case_visit_date(case)
 
     order_judgments: list[OrderJudgment] = []
     unknown_orders: list[str] = []
@@ -119,7 +134,17 @@ def compare_case(
             continue
 
         check_item = _to_check_item(rule)
-        if not check_item.rule_text.strip():
+        if visit_date is not None and is_effective_on(rule, visit_date) is False:
+            # 規則在就醫日不在生效期間（B-WR-07）：不得拿失效／未生效規則判定。
+            judgment = Judgment(
+                verdict=VERDICT_MANUAL,
+                quote="",
+                reason=(
+                    f"規則生效期間 {rule.effective_from or '—'}～{rule.effective_to or '—'} "
+                    f"不含就醫日 {visit_date.isoformat()}，改待人工"
+                ),
+            )
+        elif not check_item.rule_text.strip():
             # 規則全文缺漏時不送 LLM（B-WR-06）：沒有要求可比對，任何判定都無意義。
             judgment = Judgment(
                 verdict=VERDICT_MANUAL, quote="", reason="規則全文缺漏，無法判定，改待人工"

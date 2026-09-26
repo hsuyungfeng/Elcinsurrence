@@ -713,6 +713,9 @@ def audit_sampling_case():
         provider = _records_provider()
         visit_date = _resolve_visit_date(data, case_id)
         timeline, records_source = _resolve_records_source(provider, record_no, visit_date)
+        if visit_date is not None:
+            # 供比對器檢查規則在就醫日是否生效（B-WR-07）
+            case = dataclasses.replace(case, visit_date=visit_date.isoformat())
         result = run_presubmission_check(case, soap_doc, timeline)
     except RuleRepositoryError as exc:
         # D-06/P0-2：規則庫故障不得偽裝成「查無規則」或「裸奔」。

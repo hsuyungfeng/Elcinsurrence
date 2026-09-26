@@ -53,6 +53,21 @@ _SELECT_BY_CODE_QUERIES = {
 }
 
 
+def get_readonly_connection(db_path: str) -> sqlite3.Connection:
+    """查詢路徑專用的唯讀連線（B-WR-08）。
+
+    `get_connection` 會 makedirs 並由 sqlite3.connect 建立空檔；查詢路徑若
+    路徑設錯，會在任意位置留下空的 rules.sqlite3，建置腳本也可能誤判 DB
+    已存在。唯讀 URI 在檔案不存在時直接拋 sqlite3.OperationalError。
+    """
+    from pathlib import Path
+
+    uri = Path(db_path).resolve().as_uri() + "?mode=ro"
+    conn = sqlite3.connect(uri, uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 def get_connection(db_path: str) -> sqlite3.Connection:
     """建立（或開啟）SQLite 連線，回傳前確保父目錄存在。
 

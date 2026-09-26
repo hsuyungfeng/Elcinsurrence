@@ -26,13 +26,33 @@ def _resolve_db_path(db_path: str | None) -> str:
     return os.path.join(settings.DB_DIR, "rules.sqlite3")
 
 
+def is_effective_on(rule: models.RuleResult, on: "date") -> bool | None:
+    """規則在 `on` 當日是否生效；生效起迄皆缺時回 None（無法判斷）。
+
+    effective_from／effective_to 為 ISO 字串（迄日缺值視為無期限）。
+    """
+    if not rule.effective_from and not rule.effective_to:
+        return None
+    iso = on.isoformat()
+    if rule.effective_from and iso < rule.effective_from:
+        return False
+    if rule.effective_to and iso > rule.effective_to:
+        return False
+    return True
+
+
 def get_rule(code: str, db_path: str | None = None) -> models.RuleResult:
     """依醫令代碼／藥品代號查詢規則庫，回傳單一結構化結果（D-07/D-08）。
 
     內部依序查詢 `payment_rules`／`drug_rules`（基礎資料）與
     `rule_mapping`（Plan 04 預編譯的條文位置/全文快取）；查詢路徑完全
-    零 LLM 呼叫（D-05）。任何 SQLite 層級的錯誤都會被捕捉並降級為
-    「查無」結果，絕不將原始例外向呼叫端拋出。
+    零 LLM 呼叫（D-05）。SQLite 層級錯誤（含 DB 檔不存在）一律轉為
+    `RuleRepositoryError` 拋出，不降級為「查無」（P0-2）。查詢以唯讀
+    連線進行，不會建立空的資料庫檔。
+
+    代碼會先 strip＋轉大寫（健保代碼皆為大寫英數），避免 XML／CSV 夾帶
+    空白而落入「查無規則」（B-WR-07）。生效期間由呼叫端依就醫日判斷
+    （見 `is_effective_on`）。
 
     Args:
         code: 醫令代碼（診療項目代碼）或藥品代號。
@@ -53,9 +73,10 @@ def get_rule(code: str, db_path: str | None = None) -> models.RuleResult:
             infra 故障誤判為「該醫令無規則」（P0-2）。
     """
     resolved_path = _resolve_db_path(db_path)
+    code = (code or "").strip().upper()
 
     try:
-        conn = db.get_connection(resolved_path)
+        conn = db.get_readonly_connection(resolved_path)
         try:
             row = db.query_by_code(conn, "payment_rules", code)
             source = "payment"

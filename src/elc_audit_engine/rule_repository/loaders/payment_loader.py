@@ -41,6 +41,8 @@ def load_payment_csv(db_path: str, csv_path: str) -> int:
                 )
             )
 
+    # 先清空再寫入（同一交易）：新版 CSV 已移除的代碼不得殘留（B-WR-07）。
+    conn.execute("DELETE FROM payment_rules")
     conn.executemany(
         "INSERT OR REPLACE INTO payment_rules "
         "(code, name, payment_text, effective_from, effective_to) "
