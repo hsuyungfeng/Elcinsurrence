@@ -31,6 +31,8 @@ data/output/*
 !data/output/.gitkeep
 # 匯入暫存檔與案件清單快照（含 PHI）
 data/uploads/
+# 影像佐證附件（病歷影像／PDF，含 PHI）
+data/attachments/
 logs/
 # 存取審計日誌（含存取行為紀錄，不入版控；內容設計上不含 PHI，但仍屬機敏）
 data/audit/
