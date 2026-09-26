@@ -631,6 +631,43 @@ def get_sampling_cases():
     ])
 
 
+_SAMPLING_REVIEW_PATH = ("parsed", "reviewing", "reviewed")
+
+
+def _advance_sampling_case(case_id: str, *, failed_reason: str | None) -> str | None:
+    """推進抽樣案件狀態，回傳結果供回應揭露（不再只寫 warning 靜默吞掉）。
+
+    Returns:
+        None（未帶 case_id）／"ok"／"failed"（已轉入 failed）／
+        "skipped"（已在 reviewed 或之後，重複預審不回退狀態）／
+        "not_found"／"conflict"（並行請求改動了狀態）。
+    """
+    if not case_id:
+        return None
+    actor = getattr(g, "caller_id", None)
+    try:
+        current = _case_store.get(case_id).state
+        if failed_reason:
+            _case_store.transition(case_id, "failed", reason=failed_reason, actor=actor)
+            return "failed"
+        if current in ("imported", "failed"):
+            steps = _SAMPLING_REVIEW_PATH
+        elif current in _SAMPLING_REVIEW_PATH:
+            steps = _SAMPLING_REVIEW_PATH[_SAMPLING_REVIEW_PATH.index(current) + 1:]
+        else:
+            steps = ()
+        if not steps:
+            return "skipped"
+        _case_store.advance(case_id, steps, actor=actor)
+        return "ok"
+    except CaseNotFoundError:
+        app.logger.warning("sampling case_id=%s 不存在，未推進狀態", case_id)
+        return "not_found"
+    except IllegalTransitionError as exc:
+        app.logger.warning("sampling case_id=%s 狀態轉換衝突：%s", case_id, exc)
+        return "conflict"
+
+
 @app.route('/api/sampling/audit', methods=['POST'])
 def audit_sampling_case():
     """執行事前預審支持度評估與病歷補強建議（接 run_presubmission_check）。
@@ -651,6 +688,13 @@ def audit_sampling_case():
     soap_text = _clean_str(data, 'soap_text', max_len=_MAX_SOAP_CHARS)
     record_no = _clean_str(data, 'record_no')
     case_id = _clean_str(data, 'case_id')
+
+    if case_id:
+        try:
+            if _case_store.get(case_id).kind != "sampling":
+                raise ApiError(f"案件 '{case_id}' 不是抽樣預審案件", status=409)
+        except CaseNotFoundError:
+            pass  # 查無案件不阻斷預審（向後相容），state_transition 會標 not_found
 
     case = SubmissionCase(
         record_no=record_no,
@@ -675,19 +719,20 @@ def audit_sampling_case():
         app.logger.error("rule repository failure during presubmission: %s", exc)
         raise ApiError("規則庫暫時無法查詢，請稍後再試或聯繫系統管理員", status=503)
 
-    if case_id:
-        actor = getattr(g, "caller_id", None)
-        try:
-            _case_store.transition(case_id, "parsed", actor=actor)
-            _case_store.transition(case_id, "reviewing", actor=actor)
-            _case_store.transition(case_id, "reviewed", actor=actor)
-        except (CaseNotFoundError, IllegalTransitionError) as exc:
-            app.logger.warning("sampling case_id=%s 狀態轉換失敗（不阻斷回應）：%s", case_id, exc)
-
     judgments = result.comparison.order_judgments
     if not judgments:
         raise ApiError("無有效醫令可預審")
     oj = judgments[0]
+
+    # A-CR-09：狀態轉換放在判定完成之後——判定服務異常（support_level=None 且
+    # 有規則）轉 failed，不得記成「已完成預審」（P1-1）；多步轉換單一交易。
+    state_transition = _advance_sampling_case(
+        case_id,
+        failed_reason=(
+            "LLM 判定服務異常，未完成預審"
+            if oj.support_level is None and oj.rule_found else None
+        ),
+    )
 
     if not oj.rule_found:
         advice = "查無此醫令的規則依據，建議人工查核後再送件。"
@@ -701,6 +746,7 @@ def audit_sampling_case():
     return jsonify({
         "status": "success",
         "case_id": case_id or None,
+        "state_transition": state_transition,
         "order_code": order_code,
         "order_name": order_name,
         # support_level=null 代表「待判定」（系統未能判定），前端須與
@@ -991,12 +1037,22 @@ def generate_appeal_draft():
         has_attachment=has_attachment,
     )
 
+    # A-CR-09：草稿驗證未過（如申覆未填點數、點數超過上界）不得推進 appealed。
+    state_transition = None
     if case_id:
         actor = getattr(g, "caller_id", None)
-        try:
-            _case_store.transition(case_id, "appealed", actor=actor)
-        except (CaseNotFoundError, IllegalTransitionError) as exc:
-            app.logger.warning("appeal case_id=%s 狀態轉換至 appealed 失敗（不阻斷回應）：%s", case_id, exc)
+        if draft.validation_errors:
+            state_transition = "skipped"
+        else:
+            try:
+                _case_store.transition(case_id, "appealed", actor=actor)
+                state_transition = "ok"
+            except CaseNotFoundError:
+                state_transition = "not_found"
+                app.logger.warning("appeal case_id=%s 不存在，未推進狀態", case_id)
+            except IllegalTransitionError as exc:
+                state_transition = "conflict"
+                app.logger.warning("appeal case_id=%s 狀態轉換至 appealed 失敗：%s", case_id, exc)
 
     # W4 契約橋（D-03）：回應主體為 render_appeal_json 標準契約
     # （sections/word_stats/p1-p9），前端可直接落盤 appeal_{流水號}.json
@@ -1009,6 +1065,7 @@ def generate_appeal_draft():
     # records_degraded/records_source/records_degraded_reason 三鍵。
     payload["status"] = "success"
     payload["case_id"] = case_id or None
+    payload["state_transition"] = state_transition
     payload["rule_found"] = rule.found
     # 11.1-02（BLOCKER-1）：records_degraded＝timeline is None（與 comparator
     # records_degraded = timeline is None 同語意）；原因文案固定中文模板，

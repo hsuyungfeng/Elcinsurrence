@@ -168,7 +168,8 @@ def test_audit_sampling_case_nonexistent_case_id_warning_logged(client, setup_tm
     }
     resp = client.post("/api/sampling/audit", json=body, headers=headers)
     assert resp.status_code == 200
-    assert "狀態轉換失敗" in caplog.text
+    assert resp.get_json()["state_transition"] == "not_found"
+    assert "不存在" in caplog.text
 
 
 def test_generate_appeal_draft_with_optional_case_id(client, setup_tmp_casestore):
@@ -186,12 +187,16 @@ def test_generate_appeal_draft_with_optional_case_id(client, setup_tmp_casestore
         "case_seq": "201",
         "order_code": "14050B",
         "deduction_reason": "超過次數",
+        # A-CR-09：草稿須通過硬檢查（申覆須填點數且不超過不予核銷金額）才推進 appealed
+        "deduct_amount": 300,
+        "claimed_points": 300,
     }
     resp = client.post("/api/appeal/generate", json=body, headers=headers)
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["status"] == "success"
     assert data["case_id"] == "APP-2001"
+    assert data["state_transition"] == "ok"
     assert isinstance(data["rule_found"], bool)
 
     # W4 契約橋（D-03）：回應主體為 render_appeal_json 標準契約鍵，無舊鍵。

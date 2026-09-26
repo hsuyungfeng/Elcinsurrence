@@ -147,7 +147,8 @@ HIS 串接時常見的誤用來源：`CaseStore` 中 `case_id` 與 `case_seq` �
     "case_id": "SAMP-0001"
   }
   ```
-  * `case_id`（選填）：提供時會嘗試觸發案件狀態機轉入 `reviewed` 狀態；未提供則維持無狀態行為（向後相容）。
+  * `case_id`（選填）：提供時於判定完成後推進案件狀態（單一交易）：正常判定 → `reviewed`；LLM 判定服務異常（`undetermined=true`）→ `failed`（附原因，可重試）。非抽樣案件回 `409`。回應 `state_transition` 揭露結果：`ok`／`failed`／`skipped`（已在 reviewed 或之後）／`not_found`／`conflict`；未帶 `case_id` 時為 `null`。
+  * `/api/appeal/generate` 同樣回傳 `state_transition`；草稿 `validation_errors` 非空時不推進 `appealed`（`skipped`）。
 
 - **回傳內容 (JSON)**:
   ```json

@@ -204,10 +204,7 @@ class CaseStore:
         reason: str | None = None,
         actor: str | None = None,
     ) -> CaseRecord:
-        """將案件由目前狀態轉換至 `to_state`。
-
-        狀態更新與轉換歷史寫入在**同一交易**內完成（`with conn:`），
-        確保原子性——非法轉換或寫入失敗不會留下部分寫入的狀態。
+        """將案件由目前狀態轉換至 `to_state`（單步版 `advance`）。
 
         Raises:
             CaseNotFoundError: 案件不存在。
@@ -215,36 +212,65 @@ class CaseStore:
             UnknownStateError: `to_state` 不是已知狀態。
             MissingFailureReasonError: 轉入 `failed` 但未附 `reason`。
         """
-        current = self.get(case_id)
-        assert_transition_allowed(current.state, to_state)
+        return self.advance(case_id, [to_state], reason=reason, actor=actor)
 
-        if requires_reason(to_state) and not reason:
-            raise MissingFailureReasonError(
-                f"轉入 {to_state} 必須附失敗原因：case_id={case_id!r}"
-            )
+    def advance(
+        self,
+        case_id: str,
+        to_states: list[str] | tuple[str, ...],
+        *,
+        reason: str | None = None,
+        actor: str | None = None,
+    ) -> CaseRecord:
+        """依序走完多步轉換，全部在**同一個 IMMEDIATE 交易**內完成。
 
-        now = _now_iso()
-        # 非 failed 狀態時 failure_reason 寫回 NULL，避免舊失敗原因黏在
-        # 之後的成功狀態上（例：failed → parsed 後不應仍顯示舊的失敗原因）。
-        new_failure_reason = reason if to_state == "failed" else None
+        目前狀態的讀取與寫入在同一交易（BEGIN IMMEDIATE 取得寫鎖），
+        避免兩個請求同時讀到舊狀態各自寫入（TOCTOU）；任一步不合法或
+        寫入失敗則整批回滾，不會卡在中間狀態（A-CR-09）。
+
+        Raises:
+            CaseNotFoundError / IllegalTransitionError / UnknownStateError /
+            MissingFailureReasonError：同 `transition`。
+        """
+        if not to_states:
+            return self.get(case_id)
+        for to_state in to_states:
+            if requires_reason(to_state) and not reason:
+                raise MissingFailureReasonError(
+                    f"轉入 {to_state} 必須附失敗原因：case_id={case_id!r}"
+                )
 
         conn = self._connect()
         try:
             with conn:
-                conn.execute(
-                    "UPDATE cases SET state = ?, updated_at = ?, failure_reason = ? "
-                    "WHERE case_id = ?",
-                    (to_state, now, new_failure_reason, case_id),
-                )
-                self._insert_transition(
-                    conn,
-                    case_id=case_id,
-                    from_state=current.state,
-                    to_state=to_state,
-                    reason=reason,
-                    actor=actor,
-                    created_at=now,
-                )
+                conn.execute("BEGIN IMMEDIATE")
+                row = conn.execute(
+                    "SELECT state FROM cases WHERE case_id = ?", (case_id,)
+                ).fetchone()
+                if row is None:
+                    raise CaseNotFoundError(f"查無案件：case_id={case_id!r}")
+                from_state = row["state"]
+                for to_state in to_states:
+                    assert_transition_allowed(from_state, to_state)
+                    now = _now_iso()
+                    # 非 failed 狀態時 failure_reason 寫回 NULL，避免舊失敗原因黏在
+                    # 之後的成功狀態上（例：failed → parsed 後不應仍顯示舊的失敗原因）。
+                    new_failure_reason = reason if to_state == "failed" else None
+                    conn.execute(
+                        "UPDATE cases SET state = ?, updated_at = ?, failure_reason = ? "
+                        "WHERE case_id = ?",
+                        (to_state, now, new_failure_reason, case_id),
+                    )
+                    self._insert_transition(
+                        conn,
+                        case_id=case_id,
+                        from_state=from_state,
+                        to_state=to_state,
+                        reason=reason,
+                        actor=actor,
+                        created_at=now,
+                    )
+                    from_state = to_state
         finally:
             conn.close()
 
