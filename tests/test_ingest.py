@@ -292,8 +292,8 @@ def test_sampling_import_csv_endpoint(api):
     assert len(cases) == 2
     assert cases[0]["order_code"] == "14050B"
     assert cases[0]["demo"] is False
-    # 落盤檔案存在
-    assert list(Path(tmp_path).glob("sampling_*.json"))
+    # A-WR-11：不再另存 PHI 快照（CaseStore 為單一真實來源）
+    assert not list(Path(tmp_path).glob("sampling_*.json"))
 
 
 def test_sampling_import_unsupported_ext(api):
@@ -351,4 +351,4 @@ def test_appeal_import_csv_endpoint(api):
     assert cases[0]["order_code"] == "64140C"
     assert cases[0]["deduct_amount"] == 300
     assert cases[0]["demo"] is False
-    assert list(Path(tmp_path).glob("appeal_*.json"))
+    assert not list(Path(tmp_path).glob("appeal_*.json"))  # A-WR-11

@@ -72,6 +72,9 @@ from elc_audit_engine import attachment_store
 from elc_audit_engine.attachment_store import AttachmentStoreError, InvalidAttachmentError
 
 app = Flask(__name__, static_folder='static')
+# 請求大小上限（A-WR-04）：單檔上限 10MB，另留 1MB 給 multipart 欄位與 JSON。
+# 超過時 werkzeug 於讀取前即回 413，不會先把整個請求讀進記憶體。
+app.config["MAX_CONTENT_LENGTH"] = 11 * 1024 * 1024
 
 # 入參長度上限（P1-5：端點原本零校驗）。SOAP 全文取 10KB，
 # 其餘識別欄位取短上限——正常值都是代碼/流水號等級的長度。
@@ -334,14 +337,16 @@ def _save_upload(file_storage) -> tuple[str, str]:
     return dest, filename
 
 
-def _save_cases_json(kind: str, cases: list[dict]) -> str:
-    """把導入的案件清單落盤 data/uploads/{kind}_{timestamp}.json。"""
-    os.makedirs(_UPLOAD_DIR, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = os.path.join(_UPLOAD_DIR, f"{kind}_{ts}.json")
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(cases, f, ensure_ascii=False, indent=2)
-    return path
+def _import_error_message(exc: Exception) -> str:
+    """匯入失敗的對外訊息（A-WR-02）：不回傳外部工具 stderr、暫存路徑等內部細節。
+
+    SamplingImportError／DeductionFileError 的訊息是給使用者看的業務說明
+    （欄位契約、編碼），照常回傳；但由 OSError 引起者（含暫存路徑）與
+    MediaExtractError（pdftotext／tesseract 輸出）一律改為固定訊息，細節只進日誌。
+    """
+    if isinstance(exc, MediaExtractError) or isinstance(exc.__cause__, OSError):
+        return "匯入失敗：檔案內容無法擷取（格式不支援或檔案損毀），請改以 CSV 上傳"
+    return f"匯入失敗：{exc}"
 
 
 def _load_latest_cases(kind: str) -> list[dict] | None:
@@ -796,7 +801,6 @@ def import_sampling_cases():
     以 OCR 行解析——僅結構化醫令代碼＋名稱，其餘欄位留空供前端人工補齊
     （誠實降級：OCR 猜欄位比留空更危險）。匯入成功後覆蓋案例清單並落盤。
     """
-    global _sampling_cases
     file = request.files.get('file')
     if file is None or not (file.filename or '').strip():
         raise ApiError('缺少上傳檔案（multipart 欄位名 file）')
@@ -834,7 +838,7 @@ def import_sampling_cases():
                     source = 'ocr'
     except (MediaExtractError, SamplingImportError) as exc:
         app.logger.warning('sampling import failed: %s', exc)
-        raise ApiError(f'匯入失敗：{exc}')
+        raise ApiError(_import_error_message(exc))
     finally:
         os.remove(path)  # 暫存檔即時清除（PHI 最小化）
 
@@ -861,8 +865,7 @@ def import_sampling_cases():
             ),
         }), 400
 
-    saved = _save_cases_json('sampling', cases)
-    _sampling_cases = cases
+    # A-WR-11：不再另存 data/uploads/*.json PHI 快照（CaseStore 為單一真實來源）。
     persisted, conflicts = _persist_cases('sampling', cases, getattr(g, "caller_id", None))
     return jsonify({
         'status': 'success',
@@ -871,7 +874,6 @@ def import_sampling_cases():
         'imported': len(cases),
         'rejected': len(rejected),
         'rejected_rows': rejected,
-        'saved_to': saved,
         'case_store_persisted': persisted,
         'case_store_conflicts': conflicts,
     })
@@ -1100,7 +1102,6 @@ def import_appeal_cases():
     文字供參考並提示改用 CSV；不自動產生可能錯誤的記錄（P0-1 教訓：
     錯誤的資料比沒有資料更危險）。
     """
-    global _appeal_cases
     file = request.files.get('file')
     if file is None or not (file.filename or '').strip():
         raise ApiError('缺少上傳檔案（multipart 欄位名 file）')
@@ -1127,7 +1128,7 @@ def import_appeal_cases():
         result = parse_deduction_file(path)
     except (MediaExtractError, DeductionFileError) as exc:
         app.logger.warning('appeal import failed: %s', exc)
-        raise ApiError(f'匯入失敗：{exc}')
+        raise ApiError(_import_error_message(exc))
     finally:
         if os.path.exists(path):
             os.remove(path)  # 暫存檔即時清除（PHI 最小化）
@@ -1147,8 +1148,7 @@ def import_appeal_cases():
             'message': '未匯入任何案件（請檢查核減明細欄位數是否為 18 欄）。',
         }), 400
 
-    saved = _save_cases_json('appeal', cases)
-    _appeal_cases = cases
+    # A-WR-11：不再另存 data/uploads/*.json PHI 快照（CaseStore 為單一真實來源）。
     persisted, conflicts = _persist_cases('appeal', cases, getattr(g, "caller_id", None))
     return jsonify({
         'status': 'success',
@@ -1157,7 +1157,6 @@ def import_appeal_cases():
         'imported': len(cases),
         'rejected': len(rejected),
         'rejected_rows': rejected,
-        'saved_to': saved,
         'case_store_persisted': persisted,
         'case_store_conflicts': conflicts,
     })
@@ -1277,6 +1276,9 @@ def delete_appeal_attachment(case_ref: str, attachment_id: str):
     })
 
 
+_MAX_PRINT_RECORDS = 500
+
+
 def _output_url(pdf_path: str) -> str:
     """產出 PDF 的下載 URL（對應 download_output 路由）。"""
     return f"/api/output/{os.path.basename(pdf_path)}"
@@ -1309,6 +1311,11 @@ def generate_deduction_print():
 
     records = []
     if payload_records and isinstance(payload_records, list):
+        # A-WR-04：限制筆數與元素型別（非 dict 會 AttributeError；過多列會長時間佔用 soffice）
+        if len(payload_records) > _MAX_PRINT_RECORDS or not all(
+            isinstance(r, dict) for r in payload_records
+        ):
+            raise ApiError(f"records 必須為物件陣列，且不超過 {_MAX_PRINT_RECORDS} 筆")
         records = payload_records
     elif case_id:
         try:
@@ -1345,8 +1352,10 @@ def generate_deduction_print():
             facility,
             template_odt_path=PRINT_BASE_ODT,
         )
-    except Exception as exc:
-        raise ApiError(f"產生 PDF 失敗: {exc}")
+    except Exception:
+        # A-WR-02：soffice stderr、暫存路徑、模板 hash 只進日誌，不回給呼叫端
+        app.logger.exception("deduction print failed")
+        raise ApiError("產生 PDF 失敗，請聯繫系統管理員", status=500)
 
     pdf_url = _output_url(pdf_path)
     
@@ -1420,8 +1429,9 @@ def generate_evidence_packet_print():
             attachments=attachments,
             file_stem=safe_case,
         )
-    except Exception as exc:
-        raise ApiError(f"產生 PDF 失敗: {exc}")
+    except Exception:
+        app.logger.exception("evidence packet print failed")
+        raise ApiError("產生 PDF 失敗，請聯繫系統管理員", status=500)
     warnings = legacy_warnings + list(warnings)
 
     pdf_url = _output_url(pdf_path)
