@@ -254,7 +254,11 @@ def fill_template(
             "無法讀取模板 content.xml（zip 結構異常）", stage="read_template"
         ) from exc
 
-    _register_namespaces(re.search(r"<office:document-content[^>]*>", content_raw).group(0))
+    root_match = re.search(r"<office:document-content[^>]*>", content_raw)
+    if root_match is None:
+        # A-WR-14：非預期模板不得以 AttributeError 冒出
+        raise AppealPrintFillError("模板 content.xml 缺少 office:document-content 根元素", stage="parse")
+    _register_namespaces(root_match.group(0))
 
     try:
         tree = ET.fromstring(content_raw)
@@ -279,6 +283,9 @@ def fill_template(
         # 定位「標題 p」（頭表前一個兄弟）與「空 p」（頭表後一個兄弟）。
         children = list(body)
         head_pos = children.index(head_table)
+        if not 0 < head_pos < len(children) - 1:
+            # head_pos=0 時 children[-1] 會取到最後一個元素，造成錯位複製（A-WR-14）
+            raise AppealPrintFillError("模板結構不符：頭表前後缺少標題／間隔段落", stage="fill")
         title_p = children[head_pos - 1]
         gap_p = children[head_pos + 1]
 

@@ -596,6 +596,30 @@ def health():
 # ==============================================================================
 # 1. 抽樣事前預審 API
 # ==============================================================================
+_CASE_LIST_MAX_LIMIT = 1000
+
+
+def _case_list_response(kind: str):
+    """案件清單（A-WR-12）：維持陣列格式，但每筆附 state／failure_reason，
+    支援 ?limit=&offset= 分頁，並以 X-Total-Count 揭露總數（不再靜默截斷）。"""
+    try:
+        limit = int(request.args.get("limit", _CASE_LIST_MAX_LIMIT))
+        offset = int(request.args.get("offset", 0))
+    except ValueError:
+        raise ApiError("limit／offset 必須為整數")
+    if not (1 <= limit <= _CASE_LIST_MAX_LIMIT) or offset < 0:
+        raise ApiError(f"limit 須介於 1～{_CASE_LIST_MAX_LIMIT}，offset 不得為負")
+    records = _case_store.list_all(kind=kind, limit=limit, offset=offset)
+    items = [
+        {**r.payload, "id": r.case_id, "state": r.state, "failure_reason": r.failure_reason}
+        for r in records
+        if r.payload is not None
+    ]
+    resp = jsonify(items)
+    resp.headers["X-Total-Count"] = str(_case_store.count(kind=kind))
+    return resp
+
+
 @app.route('/api/sampling/cases', methods=['GET'])
 def get_sampling_cases():
     """回傳門診抽樣事前預審案例。
@@ -603,9 +627,8 @@ def get_sampling_cases():
     優先改讀 CaseStore.list_all(kind='sampling') 為單一真實來源；
     若 CaseStore 中無案件，才 fallback 至示範資料。
     """
-    records = _case_store.list_all(kind="sampling")
-    if records:
-        return jsonify([r.payload for r in records if r.payload is not None])
+    if _case_store.count(kind="sampling"):
+        return _case_list_response("sampling")
     return jsonify([
         {
             "id": "SAMP-001",
@@ -893,9 +916,8 @@ def get_appeal_cases():
     優先改讀 CaseStore.list_all(kind='appeal') 為單一真實來源；
     若 CaseStore 中無案件，才 fallback 至示範資料。
     """
-    records = _case_store.list_all(kind="appeal")
-    if records:
-        return jsonify([r.payload for r in records if r.payload is not None])
+    if _case_store.count(kind="appeal"):
+        return _case_list_response("appeal")
     return jsonify([
         {
             "id": "APP-001",

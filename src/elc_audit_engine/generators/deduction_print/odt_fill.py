@@ -57,7 +57,10 @@ def fill_template(
     except (KeyError, OSError) as exc:
         raise DeductionPrintFillError("無法讀取模板 content.xml", stage="read_template") from exc
 
-    _register_namespaces(re.search(r"<office:document-content[^>]*>", content_raw).group(0))
+    root_match = re.search(r"<office:document-content[^>]*>", content_raw)
+    if root_match is None:
+        raise DeductionPrintFillError("模板 content.xml 缺少 office:document-content 根元素", stage="parse")
+    _register_namespaces(root_match.group(0))
 
     try:
         tree = ET.fromstring(content_raw)

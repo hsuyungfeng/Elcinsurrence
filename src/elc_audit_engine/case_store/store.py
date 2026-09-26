@@ -386,22 +386,41 @@ class CaseStore:
             conn.close()
         return tuple(_row_to_case_record(row) for row in rows)
 
-    def list_all(self, *, kind: str | None = None, limit: int = 1000) -> tuple[CaseRecord, ...]:
-        """回傳所有案件（供 GET 案例清單端點使用），依 `created_at` 升冪。"""
+    def list_all(
+        self, *, kind: str | None = None, limit: int = 1000, offset: int = 0
+    ) -> tuple[CaseRecord, ...]:
+        """回傳案件（供 GET 案例清單端點使用），依 `created_at` 升冪，支援分頁。
+
+        呼叫端應以 `count` 取得總數並揭露給使用者，避免超過 limit 時靜默截斷（A-WR-12）。
+        """
         conn = self._connect()
         try:
             if kind is not None:
                 rows = conn.execute(
-                    "SELECT * FROM cases WHERE kind = ? ORDER BY created_at ASC LIMIT ?",
-                    (kind, limit),
+                    "SELECT * FROM cases WHERE kind = ? ORDER BY created_at ASC, case_id ASC "
+                    "LIMIT ? OFFSET ?",
+                    (kind, limit, offset),
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT * FROM cases ORDER BY created_at ASC LIMIT ?", (limit,)
+                    "SELECT * FROM cases ORDER BY created_at ASC, case_id ASC LIMIT ? OFFSET ?",
+                    (limit, offset),
                 ).fetchall()
         finally:
             conn.close()
         return tuple(_row_to_case_record(row) for row in rows)
+
+    def count(self, *, kind: str | None = None) -> int:
+        """案件總數（分頁用）。"""
+        conn = self._connect()
+        try:
+            if kind is not None:
+                row = conn.execute("SELECT COUNT(*) AS n FROM cases WHERE kind = ?", (kind,)).fetchone()
+            else:
+                row = conn.execute("SELECT COUNT(*) AS n FROM cases").fetchone()
+        finally:
+            conn.close()
+        return row["n"]
 
     def counts_by_state(self, *, kind: str | None = None) -> dict[str, int]:
         """回傳各狀態筆數，供佇列深度觀測。"""
