@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import html as html_lib
+import logging
 import os
 import re
 
@@ -39,22 +40,31 @@ _CACHE_HOME = os.path.expanduser("~/.cache/elc-paddlex")
 _TR_ROW_RE = re.compile(r"<tr[^>]*>(.*?)</tr>", re.S | re.I)
 _TD_CELL_RE = re.compile(r"<t[dh][^>]*>(.*?)</t[dh]>", re.S | re.I)
 
+logger = logging.getLogger(__name__)
+
 _engine = None  # 惰性單例（延遲載入）
+_engine_failed = False  # 載入失敗快取：避免每次匯入都重試 import／初始化（B-IN-06）
 
 
 def _get_engine():
     """建立（或取用）PP-StructureV3 引擎；不可用回 None。"""
-    global _engine
+    global _engine, _engine_failed
     if _engine is not None:
         return _engine
+    if _engine_failed:
+        return None
     try:
+        # PaddleX 於 import 時讀取此環境變數（無對應建構參數）；setdefault
+        # 不覆寫使用者既有設定。
         os.environ.setdefault("PADDLE_PDX_CACHE_HOME", _CACHE_HOME)
         from paddleocr import PPStructureV3
 
         _engine = PPStructureV3(lang="ch")
         return _engine
-    except Exception:
+    except Exception as exc:
         # 未安裝／依賴缺失／初始化失敗 → 呼叫端降級 tesseract（不拋異常）。
+        _engine_failed = True
+        logger.info("PP-StructureV3 不可用，表格 OCR 降級為 tesseract：%s", exc)
         return None
 
 

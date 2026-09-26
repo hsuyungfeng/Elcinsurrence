@@ -43,20 +43,55 @@ _MARKER_PATTERNS: dict[SOAPCategory, re.Pattern[str]] = {
 _SENTENCE_SPLIT_RE = re.compile(r"[。！!？?\n]+|\.(?!\d)")
 
 
+# 關鍵詞比對表（最長優先）：(keyword, 類別, 權重, 編譯後 pattern)。
+# 英文關鍵詞要求 ASCII 字詞邊界，避免 CT 命中 "ACTIVE"、Hb 命中 "HbA1c" 以外字串（B-IN-05）。
+def _keyword_pattern(kw: str) -> re.Pattern[str]:
+    if kw.isascii():
+        return re.compile(rf"(?<![A-Za-z]){re.escape(kw)}(?![A-Za-z])")
+    return re.compile(re.escape(kw))
+
+
+_KEYWORD_TABLE = sorted(
+    (
+        (kw, cat, data["weight"], _keyword_pattern(kw))
+        for cat, data in SOAP_KEYWORDS.items()
+        for kw in data["keywords"]
+    ),
+    key=lambda item: len(item[0]),
+    reverse=True,
+)
+
+
 def _classify_sentence(sentence: str) -> tuple[SOAPCategory, float]:
     """以關鍵詞計分分類單句（D-12：無命中回傳 UNKNOWN，非 subjective）。
+
+    最長匹配優先（B-IN-05）：已被較長關鍵詞覆蓋的位置不再計分，避免
+    「止痛」同時讓單字「痛」替主觀段加分。同一關鍵詞跨類別（運動、甲狀腺）
+    仍各自計分。
 
     Returns:
         (類別字母或 UNKNOWN, 最高分數)。同分時依主觀→客觀→評估→計劃
         的順序取先者（沿用 JS reduce 的 > 語意）。
     """
+    # covered[i]＝覆蓋該字元的關鍵詞；同一關鍵詞（跨類別）可重複計分
+    covered: list[str | None] = [None] * len(sentence)
+    scores: dict[str, float] = {cat: 0.0 for cat in SOAP_KEYWORDS}
+    for kw, cat, weight, pattern in _KEYWORD_TABLE:
+        for m in pattern.finditer(sentence):
+            span = range(m.start(), m.end())
+            if any(covered[i] not in (None, kw) for i in span):
+                continue  # 此處已被較長的其他關鍵詞覆蓋，找下一個出現位置
+            for i in span:
+                covered[i] = kw
+            scores[cat] += weight  # 每個關鍵詞每類別只計一次（沿用原語意）
+            break
+
     best_cat: str | None = None
     best_score = 0.0
-    for cat, data in SOAP_KEYWORDS.items():
-        score = sum(data["weight"] for kw in data["keywords"] if kw in sentence)
-        if score > best_score:
+    for cat in SOAP_KEYWORDS:  # 維持原類別順序作同分決勝
+        if scores[cat] > best_score:
             best_cat = cat
-            best_score = score
+            best_score = scores[cat]
     if best_cat is None or best_score <= 0:
         return "UNKNOWN", 0.0
     return _CATEGORY_LETTERS[best_cat], best_score

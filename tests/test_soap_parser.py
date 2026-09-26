@@ -113,8 +113,9 @@ def test_keyword_weight_scoring():
     text = "患者主訴頭痛與咳嗽。"
     doc = parse_soap_text(text)
     assert doc.segments[0].category == "S"
-    # 頭痛(1.0) + 咳嗽(1.0) + 痛(1.0) + 咳(1.0) = 4.0（JS 原表即含 咳）
-    assert doc.segments[0].score == 4.0
+    # 最長匹配優先（B-IN-05）：頭痛(1.0) + 咳嗽(1.0) = 2.0；
+    # 「痛」「咳」已被較長關鍵詞覆蓋，不再重複計分（原實作為 4.0）。
+    assert doc.segments[0].score == 2.0
 
 
 def test_empty_text():

@@ -68,3 +68,35 @@ def test_cover_does_not_fabricate_case_class_and_shows_facility():
     text = "\n".join(p.text for p in Document(io.BytesIO(docx_bytes)).paragraphs)
     assert "案件分類: —" in text
     assert "示例醫療院所" in text and "不予核銷點數合計: 300" in text
+
+
+def test_soap_keywords_longest_match_and_ascii_boundaries():
+    """B-IN-05"""
+    from elc_audit_engine.parsers.soap import _classify_sentence
+
+    assert _classify_sentence("開立止痛藥")[0] == "P"          # 「痛」不替 S 加分
+    assert _classify_sentence("ACTIVE lifestyle")[0] == "UNKNOWN"  # CT 不命中 ACTIVE
+    assert _classify_sentence("安排CT檢查")[0] == "O"
+
+
+def test_table_ocr_engine_failure_cached(monkeypatch):
+    """B-IN-06"""
+    import builtins
+
+    from elc_audit_engine.ingest import table_ocr
+
+    monkeypatch.setattr(table_ocr, "_engine", None)
+    monkeypatch.setattr(table_ocr, "_engine_failed", False)
+    calls = []
+    real_import = builtins.__import__
+
+    def fake_import(name, *a, **k):
+        if name == "paddleocr":
+            calls.append(1)
+            raise ImportError("no paddle")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    assert table_ocr._get_engine() is None
+    assert table_ocr._get_engine() is None
+    assert calls == [1]
