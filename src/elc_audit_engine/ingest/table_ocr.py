@@ -93,7 +93,9 @@ def parse_sampling_tables(htmls: list[str]) -> SamplingImportResult:
     """
     records: list[SamplingCaseRecord] = []
     rejected: list[SamplingRejectedRow] = []
-    seen_codes: set[str] = set()
+    # 去重鍵為整列業務內容（B-CR-04）：同一醫令必然出現在多個案件，只以代碼去重
+    # 會把其他病患的案件靜默丟棄；只有整列完全相同（跨頁重複）才略過。
+    seen_rows: set[tuple] = set()
     row_no = 0
 
     for html_text in htmls:
@@ -128,16 +130,20 @@ def parse_sampling_tables(htmls: list[str]) -> SamplingImportResult:
                     )
                 )
                 continue
-            if rec.order_code in seen_codes:
+            row_key = (
+                rec.case_seq, rec.record_no, rec.patient_name, rec.order_code,
+                rec.order_name, rec.visit_date, rec.clinic, rec.soap_text,
+            )
+            if row_key in seen_rows:
                 rejected.append(
                     SamplingRejectedRow(
                         row_number=row_no,
-                        reason="重複的醫令代碼（跨頁/重複表頭，已略過）",
+                        reason="與先前列內容完全相同（跨頁重複，已略過）",
                         raw=tuple(cells),
                     )
                 )
                 continue
-            seen_codes.add(rec.order_code)
+            seen_rows.add(row_key)
             records.append(rec)
 
     return SamplingImportResult(

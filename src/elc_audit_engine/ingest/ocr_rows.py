@@ -51,17 +51,19 @@ def parse_sampling_ocr_text(text: str) -> SamplingImportResult:
                 break
         if not order_code:
             order_code = candidates[0].upper()
-        # 同名代碼重複行（表頭範例／分頁重複）只取第一筆，其餘列 rejected。
-        if order_code in seen:
+        # 只有整行內容相同（分頁重複）才略過（B-CR-04）；同一醫令代碼出現在
+        # 不同行代表不同案件，不得以代碼去重而靜默丟棄。
+        line_key = " ".join(line.split())
+        if line_key in seen:
             rejected.append(
                 SamplingRejectedRow(
                     row_number=idx,
-                    reason="重複的醫令代碼（OCR 重複行，已略過）",
+                    reason="與先前行內容完全相同（OCR 重複行，已略過）",
                     raw=(line,),
                 )
             )
             continue
-        seen.add(order_code)
+        seen.add(line_key)
         # 尋找 order_code（忽略大小寫）在行內的位置
         m_lower = re.search(re.escape(order_code), line, re.IGNORECASE)
         rest = line[m_lower.end() :].strip() if m_lower else ""

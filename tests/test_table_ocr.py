@@ -51,6 +51,20 @@ def test_parse_sampling_tables_duplicate_code_rejected():
     assert "重複" in result.rejected[0].reason
 
 
+def test_parse_sampling_tables_same_code_different_cases_kept():
+    """B-CR-04：不同病患使用同一醫令是不同案件，不得以代碼去重。"""
+    html = (
+        "<table>"
+        "<tr><td>流水號</td><td>病歷號</td><td>醫令代碼</td></tr>"
+        "<tr><td>1</td><td>A1</td><td>00109C</td></tr>"
+        "<tr><td>2</td><td>B2</td><td>00109C</td></tr>"
+        "</table>"
+    )
+    result = parse_sampling_tables([html])
+    assert [r.case_seq for r in result.records] == ["1", "2"]
+    assert result.rejected == ()
+
+
 def test_parse_sampling_tables_missing_code_rejected():
     html = (
         "<table>"

@@ -84,12 +84,20 @@ def test_ocr_text_extracts_order_codes():
     assert all(r.ocr_line for r in result.records)
 
 
-def test_ocr_text_duplicate_code_rejected():
-    text = "14050B 糖化血色素\n14050B 糖化血色素（重複）"
+def test_ocr_text_duplicate_line_rejected():
+    text = "14050B 糖化血色素\n14050B  糖化血色素"
     result = parse_sampling_ocr_text(text)
     assert len(result.records) == 1
     assert len(result.rejected) == 1
     assert "重複" in result.rejected[0].reason
+
+
+def test_ocr_text_same_code_different_lines_both_kept():
+    """B-CR-04：同一醫令出現在不同案件行，不得以代碼去重。"""
+    text = "001 A1 14050B 糖化血色素\n002 B2 14050B 糖化血色素"
+    result = parse_sampling_ocr_text(text)
+    assert len(result.records) == 2
+    assert result.rejected == ()
 
 
 def test_ocr_text_no_code_returns_empty():
