@@ -78,20 +78,21 @@ def _parse_with_markers(lines: list[str]) -> tuple[list[SOAPSegment], list[str]]
                 break
 
         if matched is not None:
-            if current is not None:
+            if current is not None and current["text"]:
                 segments.append(_finish_segment(current))
             content = _MARKER_PATTERNS[matched].sub("", stripped, count=1).strip()
+            # 標記行本身無內容（如「S：」獨佔一行，HIS 常見排版）時仍開啟該段，
+            # 後續行歸入此段；若直到下個標記都無內文，則不產出空段。
             current = {"cat": matched, "text": content, "method": "marker"}
-            if not content:
-                # 標記行本身無內容（如「S：」）——不產出空段，繼續等待內文
-                current = None
         elif current is not None:
             # 標記段落內的多行內文，以換行連接
-            current["text"] = current["text"] + "\n" + stripped  # type: ignore[operator]
+            current["text"] = (  # type: ignore[operator]
+                current["text"] + "\n" + stripped if current["text"] else stripped
+            )
         else:
             unclassified.append(stripped)
 
-    if current is not None:
+    if current is not None and current["text"]:
         segments.append(_finish_segment(current))
     return segments, unclassified
 
@@ -150,7 +151,8 @@ def parse_soap_text(text: str) -> SOAPDocument:
     if has_marker:
         segments, unclassified = _parse_with_markers(lines)
         method = "marker"
-        confidence = "high"
+        # 有標記卻分不出任何段落（例如只有空標記）時不得宣稱高信度。
+        confidence = "high" if segments else "low"
     else:
         segments, unclassified = _parse_with_keywords(text)
         method = "keyword"
