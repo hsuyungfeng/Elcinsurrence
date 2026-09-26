@@ -393,6 +393,7 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 
 ### 安全設計
 - **Magic Bytes 驗證**：PNG/JPEG/HEIC/PDF 各有 Header Bytes 硬性比對，副檔名偽造無效。
+- **索引存於 SQLite**（`ATTACHMENTS_DIR/attachments.sqlite3`，交易保證一致性；檔案路徑由目錄＋檔名組出，搬移目錄仍有效）。升級前的每案 `meta.json` 於首次存取該案時自動匯入並改名為 `meta.json.migrated`；`meta.json` 損毀時回報錯誤，不當成「沒有附件」。
 - **`safe_filename()` 路徑穿越防護**：白名單校驗（ASCII 英數＋`_-`＋CJK），包含 `../` 等穿越組件直接拒絕。
 - **PHI-zero 審計**：附件操作記錄於存取日誌，**只記錄操作不留檔名內容**（T-12-03）。
 

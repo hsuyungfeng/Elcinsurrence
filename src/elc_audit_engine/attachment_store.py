@@ -1,16 +1,22 @@
-import os
-import json
-import uuid
-import mimetypes
-import contextlib
-import tempfile
-from datetime import datetime, timezone
-from dataclasses import dataclass, asdict, fields
+"""影像佐證附件儲存（Phase 12）。
 
-try:  # POSIX 檔案鎖；Windows 無 fcntl 時退化為不加鎖（單機單程序部署）
-    import fcntl
-except ImportError:  # pragma: no cover
-    fcntl = None
+檔案存於 `ATTACHMENTS_DIR/<case_key>/`；索引存於 `ATTACHMENTS_DIR/attachments.sqlite3`
+（review 第 5 步：原本每案一份 meta.json，靠 flock＋原子替換維持一致；改用
+SQLite 交易）。case_key 一律為 CaseStore 的 case_id（A-CR-03）。
+
+升級相容：某案目錄仍有舊版 meta.json 時，第一次存取該案會把其內容匯入
+SQLite 並改名為 meta.json.migrated；meta.json 損毀時拋
+AttachmentIndexCorruptError（不當成「沒有附件」，A-CR-10）。
+"""
+
+import contextlib
+import json
+import mimetypes
+import os
+import sqlite3
+import uuid
+from datetime import datetime, timezone
+from dataclasses import dataclass, fields
 from PIL import Image
 import pillow_heif
 from pypdf import PdfReader
@@ -101,25 +107,63 @@ def io_bytes(b: bytes):
 
 _RECORD_FIELDS = {f.name for f in fields(AttachmentRecord)}
 
+_SCHEMA = (
+    "CREATE TABLE IF NOT EXISTS attachments ("
+    "id TEXT PRIMARY KEY, "
+    "case_key TEXT NOT NULL, "
+    "order_seq TEXT, "
+    "order_code TEXT, "
+    "filename TEXT NOT NULL, "
+    "file_size INTEGER NOT NULL, "
+    "mime_type TEXT NOT NULL, "
+    "created_at TEXT NOT NULL"
+    ")"
+)
+_SCHEMA_INDEX = "CREATE INDEX IF NOT EXISTS idx_attachments_case ON attachments (case_key, order_seq)"
+_LEGACY_META = "meta.json"
+
+
+def _db_path() -> str:
+    return os.path.join(settings.ATTACHMENTS_DIR, "attachments.sqlite3")
+
 
 @contextlib.contextmanager
-def _locked_index(case_dir: str):
-    """以 case 目錄下的 .meta.lock 對 meta.json 讀-改-寫加獨占鎖。"""
-    os.makedirs(case_dir, exist_ok=True)
-    with open(os.path.join(case_dir, ".meta.lock"), "a") as lock:
-        if fcntl is not None:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            if fcntl is not None:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+def _connect():
+    os.makedirs(settings.ATTACHMENTS_DIR, exist_ok=True)
+    conn = sqlite3.connect(_db_path(), timeout=10)
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute(_SCHEMA)
+        conn.execute(_SCHEMA_INDEX)
+        yield conn
+    finally:
+        conn.close()
 
 
-def _read_index(case_dir: str) -> list[dict]:
-    meta_path = os.path.join(case_dir, "meta.json")
+def _case_dir(case_key: str) -> str:
+    return os.path.join(settings.ATTACHMENTS_DIR, case_key)
+
+
+def _row_to_record(row: sqlite3.Row) -> AttachmentRecord:
+    # 路徑於讀取時由目錄＋檔名組出（不存絕對路徑，ATTACHMENTS_DIR 搬移後仍有效）
+    return AttachmentRecord(
+        id=row["id"],
+        case_seq=row["case_key"],
+        order_seq=row["order_seq"],
+        order_code=row["order_code"],
+        filename=row["filename"],
+        file_path=os.path.join(_case_dir(row["case_key"]), row["filename"]),
+        file_size=row["file_size"],
+        mime_type=row["mime_type"],
+        created_at=row["created_at"],
+    )
+
+
+def _migrate_legacy_meta(conn: sqlite3.Connection, case_key: str) -> None:
+    """把舊版 `<case_dir>/meta.json` 匯入 SQLite（冪等），完成後改名保留。"""
+    meta_path = os.path.join(_case_dir(case_key), _LEGACY_META)
     if not os.path.isfile(meta_path):
-        return []
+        return
     try:
         with open(meta_path, "r", encoding="utf-8") as mf:
             data = json.load(mf)
@@ -127,26 +171,22 @@ def _read_index(case_dir: str) -> list[dict]:
         raise AttachmentIndexCorruptError(f"附件索引無法讀取：{meta_path}：{exc}") from exc
     if not isinstance(data, list):
         raise AttachmentIndexCorruptError(f"附件索引格式錯誤（非陣列）：{meta_path}")
-    return data
-
-
-def _write_index(case_dir: str, meta_list: list[dict]) -> None:
-    """寫入暫存檔後 os.replace，崩潰時不會留下半截 JSON。"""
-    fd, tmp_path = tempfile.mkstemp(dir=case_dir, prefix=".meta.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as mf:
-            json.dump(meta_list, mf, ensure_ascii=False, indent=2)
-            mf.flush()
-            os.fsync(mf.fileno())
-        os.replace(tmp_path, os.path.join(case_dir, "meta.json"))
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.remove(tmp_path)
-        raise
-
-
-def _to_record(item: dict) -> AttachmentRecord:
-    return AttachmentRecord(**{k: item.get(k) for k in _RECORD_FIELDS})
+    with conn:
+        for item in data:
+            if not isinstance(item, dict) or not item.get("id") or not item.get("filename"):
+                raise AttachmentIndexCorruptError(f"附件索引項目格式錯誤：{meta_path}")
+            conn.execute(
+                "INSERT OR IGNORE INTO attachments "
+                "(id, case_key, order_seq, order_code, filename, file_size, mime_type, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    item["id"], case_key, item.get("order_seq"), item.get("order_code"),
+                    item["filename"], int(item.get("file_size") or 0),
+                    item.get("mime_type") or "application/octet-stream",
+                    item.get("created_at") or "",
+                ),
+            )
+    os.replace(meta_path, meta_path + ".migrated")
 
 
 def save_attachment(
@@ -156,8 +196,8 @@ def save_attachment(
     order_seq: str | None = None,
     order_code: str | None = None,
 ) -> AttachmentRecord:
-    """Validate and save an evidence attachment file for a given case_seq and optional order_seq."""
-    safe_case = safe_filename(case_seq, "case_seq")
+    """驗證並儲存附件；case_seq 參數為案件鍵（呼叫端傳 CaseStore case_id）。"""
+    case_key = safe_filename(case_seq, "case_seq")
     safe_order = safe_filename(order_seq, "order_seq") if order_seq else None
 
     if not file_bytes or len(file_bytes) > _MAX_ATTACHMENT_BYTES:
@@ -168,20 +208,36 @@ def save_attachment(
 
     att_id = uuid.uuid4().hex[:12]
     now_iso = datetime.now(timezone.utc).isoformat()
-
-    case_dir = os.path.join(settings.ATTACHMENTS_DIR, safe_case)
+    case_dir = _case_dir(case_key)
     os.makedirs(case_dir, exist_ok=True)
-
     prefix = f"{safe_order}_" if safe_order else ""
     target_filename = f"{prefix}{now_iso[:10]}_{att_id}{ext.lower()}"
     file_path = os.path.join(case_dir, target_filename)
 
-    with open(file_path, "wb") as f:
+    # 先寫暫存檔再改名；索引寫入失敗時移除檔案，不留孤兒
+    tmp_path = file_path + ".part"
+    with open(tmp_path, "wb") as f:
         f.write(file_bytes)
+    os.replace(tmp_path, file_path)
+    try:
+        with _connect() as conn:
+            _migrate_legacy_meta(conn, case_key)
+            with conn:
+                conn.execute(
+                    "INSERT INTO attachments "
+                    "(id, case_key, order_seq, order_code, filename, file_size, mime_type, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (att_id, case_key, safe_order, order_code, target_filename,
+                     len(file_bytes), mime_type, now_iso),
+                )
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(file_path)
+        raise
 
-    rec = AttachmentRecord(
+    return AttachmentRecord(
         id=att_id,
-        case_seq=safe_case,
+        case_seq=case_key,
         order_seq=safe_order,
         order_code=order_code,
         filename=target_filename,
@@ -191,68 +247,51 @@ def save_attachment(
         created_at=now_iso,
     )
 
-    with _locked_index(case_dir):
-        meta_list = _read_index(case_dir)
-        meta_list.append(asdict(rec))
-        _write_index(case_dir, meta_list)
-
-    return rec
-
-def has_attachment(case_seq: str, order_seq: str | None = None) -> bool:
-    """Check if physical attachments exist for the specified case_seq (and optional order_seq)."""
-    try:
-        safe_case = safe_filename(case_seq, "case_seq")
-    except Exception:
-        return False
-
-    case_dir = os.path.join(settings.ATTACHMENTS_DIR, safe_case)
-    if not os.path.isdir(case_dir):
-        return False
-
-    records = list_attachments(case_seq, order_seq)
-    return len(records) > 0
 
 def list_attachments(case_seq: str, order_seq: str | None = None) -> list[AttachmentRecord]:
-    """List all valid attachment records for a case_seq."""
+    """列出案件（可再依醫令序過濾）且實體檔仍存在的附件，依建立時間排序。"""
     try:
-        safe_case = safe_filename(case_seq, "case_seq")
+        case_key = safe_filename(case_seq, "case_seq")
     except Exception:
         return []
-
-    case_dir = os.path.join(settings.ATTACHMENTS_DIR, safe_case)
-    data = _read_index(case_dir)  # 損毀時拋 AttachmentIndexCorruptError，不回 []
-
-    res = []
     safe_order = safe_filename(order_seq, "order_seq") if order_seq else None
 
-    for item in data:
-        rec = _to_record(item)
-        if os.path.exists(rec.file_path):
-            if safe_order is None or rec.order_seq == safe_order:
-                res.append(rec)
-    return res
+    with _connect() as conn:
+        _migrate_legacy_meta(conn, case_key)
+        if safe_order is None:
+            rows = conn.execute(
+                "SELECT * FROM attachments WHERE case_key = ? ORDER BY created_at, id",
+                (case_key,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM attachments WHERE case_key = ? AND order_seq = ? "
+                "ORDER BY created_at, id",
+                (case_key, safe_order),
+            ).fetchall()
+    records = [_row_to_record(r) for r in rows]
+    return [r for r in records if os.path.exists(r.file_path)]
+
+
+def has_attachment(case_seq: str, order_seq: str | None = None) -> bool:
+    """案件（可再依醫令序過濾）是否有實體存在的附件。"""
+    return bool(list_attachments(case_seq, order_seq))
+
 
 def delete_attachment(case_seq: str, attachment_id: str) -> bool:
-    """Delete a specified attachment record and file."""
-    safe_case = safe_filename(case_seq, "case_seq")
-    case_dir = os.path.join(settings.ATTACHMENTS_DIR, safe_case)
-    if not os.path.isdir(case_dir):
-        return False
-
-    removed_path = None
-    with _locked_index(case_dir):
-        data = _read_index(case_dir)
-        new_data = [item for item in data if item.get("id") != attachment_id]
-        deleted = len(new_data) != len(data)
-        if deleted:
-            removed_path = next(
-                (item.get("file_path") for item in data if item.get("id") == attachment_id), None
-            )
-            # 先原子更新索引再刪實體檔：中途失敗最多留下孤兒檔，不會留下指向不存在檔案的索引
-            _write_index(case_dir, new_data)
-
-    if removed_path and os.path.exists(removed_path):
-        with contextlib.suppress(OSError):
-            os.remove(removed_path)
-
-    return deleted
+    """刪除附件：先在交易內移除索引，再刪實體檔（中途失敗最多留下孤兒檔）。"""
+    case_key = safe_filename(case_seq, "case_seq")
+    with _connect() as conn:
+        _migrate_legacy_meta(conn, case_key)
+        with conn:
+            row = conn.execute(
+                "SELECT * FROM attachments WHERE case_key = ? AND id = ?",
+                (case_key, attachment_id),
+            ).fetchone()
+            if row is None:
+                return False
+            conn.execute("DELETE FROM attachments WHERE id = ?", (attachment_id,))
+    path = _row_to_record(row).file_path
+    with contextlib.suppress(OSError):
+        os.remove(path)
+    return True
