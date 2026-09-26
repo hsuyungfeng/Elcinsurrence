@@ -21,8 +21,8 @@ def _add_warning_callout(doc: Document, text: str):
 
 def build_evidence_packet_docx(
     cover_info: dict,
-    tracking_data: dict,
-    timeline_data: dict,
+    tracking_data: dict | None,
+    timeline_data: dict | None,
     appeal_draft: dict,
     attachment_records: list,
     facility: dict | None = None,
@@ -47,17 +47,33 @@ def build_evidence_packet_docx(
 
     # Section 2: Audit Trail
     doc.add_heading("Section 2: Audit Trail", level=1)
-    entries = tracking_data.get("entries", [])
+    entries = (tracking_data or {}).get("entries", [])
     if not entries:
         doc.add_paragraph("無審核軌跡")
     for entry in entries:
-        doc.add_paragraph(f"醫令: {entry.get('order_code', '')}, 狀態: {entry.get('status', '')}")
+        if "to_state" in entry:
+            # CaseStore 轉換歷史（TransitionRecord）
+            line = (
+                f"{_fmt(entry.get('created_at'))}  "
+                f"{_fmt(entry.get('from_state'))} → {_fmt(entry.get('to_state'))}  "
+                f"操作者: {_fmt(entry.get('actor'))}"
+            )
+            if entry.get("reason"):
+                line += f"  原因: {entry['reason']}"
+            doc.add_paragraph(line)
+        else:
+            doc.add_paragraph(f"醫令: {entry.get('order_code', '')}, 狀態: {entry.get('status', '')}")
 
     # Section 3: Record Summary
     doc.add_heading("Section 3: Record Summary", level=1)
-    events = timeline_data.get("events", [])
-    if not events:
-        doc.add_paragraph("無就醫紀錄")
+    if timeline_data is None:
+        # 「未查詢」與「查無紀錄」必須可區分（P1-1）
+        doc.add_paragraph("病史未查詢（本佐證包未附病歷摘要）")
+        events = []
+    else:
+        events = timeline_data.get("events", [])
+        if not events:
+            doc.add_paragraph("查詢期間無就醫紀錄")
     for event in events:
         doc.add_paragraph(f"{event.get('date', '')}: {event.get('desc', '')}")
 

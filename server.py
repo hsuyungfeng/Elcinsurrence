@@ -1060,6 +1060,10 @@ def generate_appeal_draft():
     # reason2/p6_points/total_char_count/xml_p8_p9_valid/record_no/頂層
     # over_limit/case_seq/order_code）已整段移除——單一契約、不做雙契約兼容。
     payload = json.loads(render_appeal_json(draft))
+    # A-CR-04：通過驗證的草稿寫回 CaseStore，供佐證包列印讀取（原本從未保存，
+    # 佐證包拿到的是匯入 payload，草稿段恆為空白）。
+    if state_transition == "ok":
+        _case_store.set_artifact(case_id, "appeal_draft", payload)
     # 僅併入補充鍵：status/case_id/rule_found（rule_found 來自規則庫
     # get_rule 的 :754 rule.found，不在 AppealDraft 內）＋11.1-02 新增
     # records_degraded/records_source/records_degraded_reason 三鍵。
@@ -1365,6 +1369,14 @@ def generate_evidence_packet_print():
     if not case.payload:
         raise ApiError("案件 payload 為空")
 
+    # A-CR-04：佐證包的申復理由段取自已保存的草稿；尚未生成就明說，不印空白段。
+    draft = _case_store.get_artifact(safe_case, "appeal_draft")
+    if draft is None:
+        raise ApiError("本案尚未生成（或未通過驗證的）申復草稿，請先呼叫 /api/appeal/generate", status=409)
+    tracking = {
+        "entries": [dataclasses.asdict(t) for t in _case_store.history(safe_case)]
+    }
+
     from config import settings
     facility = settings.load_facility_config()
     # A-CR-03：附件以 case_id 為鍵（流水號跨月重複，會混入他人影像）。
@@ -1391,9 +1403,11 @@ def generate_evidence_packet_print():
     try:
         pdf_path, warnings = write_evidence_packet(
             settings.OUTPUT_DIR,
-            case.payload,
+            {**case.payload, **draft},
             facility,
-            tracking=case.history if hasattr(case, "history") else None,
+            tracking=tracking,
+            # 病史未於此端點查詢：傳 None 讓佐證包標示「未查詢」，
+            # 而非把「沒去查」印成「無就醫紀錄」。
             timeline=None,
             attachments=attachments,
             file_stem=safe_case,

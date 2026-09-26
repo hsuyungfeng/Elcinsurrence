@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
             payload=payload,
             facility=facility,
             tracking={},
-            timeline={},
+            timeline=None,  # CLI 未查詢病史：標示「未查詢」而非「無就醫紀錄」
             attachments=[]
         )
         print(f"Successfully generated: {out_path}")

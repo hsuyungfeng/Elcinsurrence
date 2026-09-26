@@ -26,8 +26,18 @@ def render_evidence_packet(
         raise TypeError(f"facility 必須為 dict，收到 {type(facility).__name__}")
 
     tracking = tracking or {}
-    timeline = timeline or {}
+    # timeline 保留 None（＝未查詢）與 {}／空 events（＝查詢後無紀錄）的差別
     attachments = attachments or []
+    orders = payload.get("orders")
+    if orders:
+        total_orders = len(orders)
+        total_deducted = sum(order.get("deduct_amount", 0) or 0 for order in orders)
+        total_claimed = sum(order.get("p6", 0) or 0 for order in orders)
+    else:
+        # 單筆申復草稿（render_appeal_json 契約）：一筆醫令
+        total_orders = 1 if payload.get("order_code") else 0
+        total_deducted = payload.get("deduction_upper_bound") or payload.get("deduct_amount") or 0
+        total_claimed = payload.get("p6_points") or 0
 
     # Scaffolding DOCX doc using builder.py
     doc, warnings = build_evidence_packet_docx(
@@ -37,9 +47,9 @@ def render_evidence_packet(
             "case_record_no": payload.get("case_record_no", ""),
             "visit_date": payload.get("visit_date", ""),
             "fee_year_month": payload.get("fee_year_month", ""),
-            "total_denied_orders": len(payload.get("orders", [])),
-            "total_non_reimbursed_points": sum(order.get("deduct_amount", 0) for order in payload.get("orders", [])),
-            "total_claimed_points": sum(order.get("p6", 0) for order in payload.get("orders", [])),
+            "total_denied_orders": total_orders,
+            "total_non_reimbursed_points": total_deducted,
+            "total_claimed_points": total_claimed,
             "total_attachments": len(attachments)
         },
         facility=facility,

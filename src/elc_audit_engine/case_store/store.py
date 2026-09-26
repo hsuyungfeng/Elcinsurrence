@@ -295,6 +295,38 @@ class CaseStore:
             (case_id, from_state, to_state, reason, actor, created_at),
         )
 
+    def set_artifact(self, case_id: str, name: str, content: dict) -> None:
+        """寫入（覆寫）案件衍生產物，例如 `appeal_draft`。
+
+        Raises:
+            CaseNotFoundError: 案件不存在（不替不存在的案件留孤兒資料）。
+        """
+        self.get(case_id)
+        conn = self._connect()
+        try:
+            with conn:
+                conn.execute(
+                    "INSERT INTO case_artifacts (case_id, name, content_json, updated_at) "
+                    "VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(case_id, name) DO UPDATE SET "
+                    "content_json = excluded.content_json, updated_at = excluded.updated_at",
+                    (case_id, name, json.dumps(content, ensure_ascii=False), _now_iso()),
+                )
+        finally:
+            conn.close()
+
+    def get_artifact(self, case_id: str, name: str) -> dict | None:
+        """讀取案件衍生產物；尚未產生時回 None（呼叫端決定如何誠實呈現）。"""
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT content_json FROM case_artifacts WHERE case_id = ? AND name = ?",
+                (case_id, name),
+            ).fetchone()
+        finally:
+            conn.close()
+        return json.loads(row["content_json"]) if row is not None else None
+
     def history(self, case_id: str) -> tuple[TransitionRecord, ...]:
         """依 `id` 升冪回傳案件的完整轉換歷史。
 

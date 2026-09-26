@@ -51,6 +51,20 @@ SCHEMA_TRANSITIONS = (
     ")"
 )
 
+# case_artifacts：案件衍生產物（目前為 appeal_draft：/api/appeal/generate
+# 產出的 render_appeal_json 契約），供佐證包列印等下游讀取（A-CR-04）。
+# 每案每種產物一列，重新生成即覆寫（updated_at 記最後生成時間）。
+# 內容含 PHI，與 cases.payload_json 同屬 cases.sqlite3，不進版控。
+SCHEMA_ARTIFACTS = (
+    "CREATE TABLE IF NOT EXISTS case_artifacts ("
+    "case_id TEXT NOT NULL, "
+    "name TEXT NOT NULL, "
+    "content_json TEXT NOT NULL, "
+    "updated_at TEXT NOT NULL, "
+    "PRIMARY KEY (case_id, name)"
+    ")"
+)
+
 # 同步版任務佇列的主查詢路徑：依 (state, kind) 取件。
 SCHEMA_INDEX_CASES_STATE_KIND = (
     "CREATE INDEX IF NOT EXISTS idx_cases_state_kind ON cases (state, kind)"
@@ -63,7 +77,7 @@ SCHEMA_INDEX_TRANSITIONS_CASE = (
 # SQL 表名一律寫死於靜態語句，不動態組裝——與 rule_repository 同慣例
 # （T-09-13 mitigation）。目前本模組內部查詢皆為靜態字串，此白名單
 # 供未來新增查詢介面時比照 rule_repository 的防線沿用。
-_ALLOWED_TABLES = {"cases", "case_transitions"}
+_ALLOWED_TABLES = {"cases", "case_transitions", "case_artifacts"}
 
 
 def get_connection(db_path: str) -> sqlite3.Connection:
@@ -85,11 +99,12 @@ def get_connection(db_path: str) -> sqlite3.Connection:
 
 
 def init_schema(db_path: str) -> None:
-    """在 `db_path` 指向的資料庫建立 `cases`／`case_transitions` 兩表與索引（冪等）。"""
+    """在 `db_path` 指向的資料庫建立 `cases`／`case_transitions`／`case_artifacts` 表與索引（冪等）。"""
     conn = get_connection(db_path)
     try:
         conn.execute(SCHEMA_CASES)
         conn.execute(SCHEMA_TRANSITIONS)
+        conn.execute(SCHEMA_ARTIFACTS)
         conn.execute(SCHEMA_INDEX_CASES_STATE_KIND)
         conn.execute(SCHEMA_INDEX_TRANSITIONS_CASE)
         conn.commit()

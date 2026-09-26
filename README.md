@@ -484,7 +484,7 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
     "case_id": "APP-0001"
   }
   ```
-  亦接受完整 payload（`case_seq`、`orders`、`sections` 等），`case_id` 優先從 `CaseStore` 讀取案件資料。
+  申復理由段取自該案最近一次**通過驗證**的 `/api/appeal/generate` 草稿（保存於 CaseStore `case_artifacts`）；審核軌跡取自 CaseStore 狀態轉換歷史。病史段目前不在此端點查詢，會標示「病史未查詢」。
 - **回傳**：
   ```json
   {
@@ -494,7 +494,7 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
   }
   ```
 - **CLI 替代方案**：`python scripts/build_evidence_packet.py --case-id APP-0001`
-- **狀態碼**：`400` 缺案件資料；`500` 合成失敗（含錯誤說明）。
+- **狀態碼**：`400` 缺案件資料；`404` 查無案件；`409` 尚未生成（或未通過驗證的）申復草稿；`500` 合成失敗（含錯誤說明）。
 - **附件查詢鍵**：以 `case_id` 查詢 Phase 12 附件，輸出檔名亦以 `case_id` 命名——見上方「案件識別欄位對接注意事項」。
 
 #### 🔹 [GET] `/api/output/<檔名>.pdf` — 下載列印產出
