@@ -100,11 +100,27 @@ def _get_tuple(obj: dict[str, Any], key: str) -> tuple[str, ...]:
     return ()
 
 
+_TRUE_STRINGS = {"true", "1", "y", "yes"}
+_FALSE_STRINGS = {"false", "0", "n", "no"}
+
+
 def _get_bool_or_none(obj: dict[str, Any], key: str) -> bool | None:
+    """只接受明確的布林表示；無法辨識回 None（未知），不猜成 True（B-WR-12）。
+
+    HIS／雲端匯出常用字串布林；bool("false") 為 True 會把正常檢驗標成異常。
+    """
     value = obj.get(key)
-    if value is None:
-        return None
-    return bool(value)
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in _TRUE_STRINGS:
+            return True
+        if v in _FALSE_STRINGS:
+            return False
+    return None
 
 
 class LocalFileProvider(RecordProvider):

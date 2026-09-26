@@ -91,8 +91,18 @@ def compare_case(
     manual_review_orders: list[str] = []
 
     for order in case.orders:
-        code = order.code or ""
+        code = (order.code or "").strip()
         if not code:
+            # 不靜默略過（B-WR-05）：報告上必須看得出有一筆醫令未被審查。
+            order_judgments.append(
+                OrderJudgment(
+                    order_code="",
+                    order_seq=order.seq,
+                    rule_found=False,
+                    note="醫令代碼缺漏，建議人工查核",
+                )
+            )
+            unknown_orders.append("")
             continue
 
         rule = lookup(code)  # RuleRepositoryError 穿透（D-06）
@@ -109,15 +119,26 @@ def compare_case(
             continue
 
         check_item = _to_check_item(rule)
-        judgment = judge(check_item, evidence)
+        if not check_item.rule_text.strip():
+            # 規則全文缺漏時不送 LLM（B-WR-06）：沒有要求可比對，任何判定都無意義。
+            judgment = Judgment(
+                verdict=VERDICT_MANUAL, quote="", reason="規則全文缺漏，無法判定，改待人工"
+            )
+        else:
+            judgment = judge(check_item, evidence)
         support_level, manual = classify_support([judgment])
 
         narratives: list[CandidateNarrative] = []
+        narrative_error = False
         if support_level in (SUPPORT_WEAK, SUPPORT_NONE):
             # support_level=None（全部待人工，P1-1）不生成候選補強：判定
             # 階段的 LLM 已失敗，補強階段沒有可靠的缺口可寫，再呼叫一次
             # 只會是注定失敗的重試，且會讓「待判定」看起來像有具體缺漏。
-            narratives = generate(check_item, evidence, support_level)
+            try:
+                narratives = generate(check_item, evidence, support_level)
+            except Exception:  # 生成失敗 ≠ 沒有建議（B-WR-10）
+                narratives = []
+                narrative_error = True
 
         order_judgments.append(
             OrderJudgment(
@@ -130,6 +151,7 @@ def compare_case(
                 support_level=support_level,
                 manual_review=manual,
                 narratives=tuple(narratives),
+                narrative_error=narrative_error,
             )
         )
         if manual:

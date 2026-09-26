@@ -15,7 +15,14 @@ from typing import Callable
 from elc_audit_engine.prompt_safety import DATA_ISOLATION_NOTICE, fence
 from elc_audit_engine.rule_repository.mapping.llm_client import chat_completion
 
-from .models import CheckItem, Judgment, VERDICTS, VERDICT_MANUAL
+from .models import (
+    CheckItem,
+    Judgment,
+    VERDICTS,
+    VERDICT_MANUAL,
+    VERDICT_PARTIAL,
+    VERDICT_SUPPORTED,
+)
 
 _SYSTEM_PROMPT = (
     "你是病歷佐證判定助手。你會收到一個「檢核項」（健保規則要求，在 <rule> "
@@ -74,6 +81,31 @@ def _to_judgment(data: dict | None) -> Judgment | None:
 
 JudgeFn = Callable[[CheckItem, str], Judgment]
 
+_WS_RE = re.compile(r"\s+")
+
+
+def _normalize(text: str) -> str:
+    return _WS_RE.sub("", text or "")
+
+
+def _verify_quote(judgment: Judgment, evidence: str) -> Judgment:
+    """C1「引用病歷原文」的硬檢查（B-WR-09）。
+
+    支持／部分支持的判定必須附上確實出自病歷段落的引文（忽略空白比對）；
+    否則 LLM 捏造的引文會直接出現在報告與申復書中。不符時降為待人工。
+    """
+    if judgment.verdict not in (VERDICT_SUPPORTED, VERDICT_PARTIAL):
+        return judgment
+    quote = _normalize(judgment.quote)
+    if quote and quote in _normalize(evidence):
+        return judgment
+    return Judgment(
+        verdict=VERDICT_MANUAL,
+        quote="",
+        reason="LLM 引文無法在病歷段落中找到原文，改待人工",
+    )
+
+
 
 class LLMJudger:
     """以 llama.cpp chat_completion 為後端的判定器（C1 JSON schema）。"""
@@ -82,7 +114,10 @@ class LLMJudger:
         self._max_tokens = max_tokens
 
     def _call(self, system_prompt: str, user_prompt: str) -> str:
-        return chat_completion(system_prompt, user_prompt, max_tokens=self._max_tokens)
+        # temperature=0：判定需可重現（同案重跑、金標準回放結果一致，B-WR-09）
+        return chat_completion(
+            system_prompt, user_prompt, max_tokens=self._max_tokens, temperature=0
+        )
 
     def judge(self, check_item: CheckItem, evidence: str) -> Judgment:
         # P1-2：rule_text（LLM 生成後回流）與病歷原文（使用者可控）皆為
@@ -97,12 +132,12 @@ class LLMJudger:
             raw = self._call(_SYSTEM_PROMPT, user_prompt)
             judgment = _to_judgment(_parse_json_response(raw))
             if judgment is not None:
-                return judgment
+                return _verify_quote(judgment, evidence)
             # 換措辭重試一次（C1：解析失敗換措辭重試）
             raw = self._call(_RETRY_SYSTEM_PROMPT, user_prompt)
             judgment = _to_judgment(_parse_json_response(raw))
             if judgment is not None:
-                return judgment
+                return _verify_quote(judgment, evidence)
         except Exception as exc:  # 網路/JSON/伺服器異常皆降級待人工（C5）
             return Judgment(
                 verdict=VERDICT_MANUAL,

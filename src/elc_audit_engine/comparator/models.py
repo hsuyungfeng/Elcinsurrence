@@ -68,6 +68,7 @@ class OrderJudgment:
         manual_review: 是否有「待人工」判定（C5 降級，不阻斷）。
         note: 補充說明（未知醫令→「查無規則依據，建議人工查核」）。
         narratives: 候選補強敘述清單（僅薄弱/裸奔生成，0~3 條）。
+        narrative_error: 候選補強生成失敗（LLM 故障），與「無建議」區分。
     """
 
     order_code: str = ""
@@ -80,6 +81,7 @@ class OrderJudgment:
     manual_review: bool = False
     note: str = ""
     narratives: tuple["CandidateNarrative", ...] = ()
+    narrative_error: bool = False
 
 
 @dataclass(frozen=True)

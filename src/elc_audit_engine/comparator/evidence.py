@@ -40,19 +40,22 @@ def _timeline_block(timeline: PatientTimeline | None) -> list[str]:
     if timeline is None:
         return []
     lines = [f"【半年病史 {timeline.window_start}~{timeline.window_end}】"]
-    for record in list(timeline.visits)[:_MAX_ITEMS_PER_CATEGORY]:
+    # 時間軸依日期遞增；取最後 N 筆＝最接近就醫日的紀錄（B-WR-11），
+    # 原本 [:N] 取到的是半年前最舊的紀錄。
+    n = _MAX_ITEMS_PER_CATEGORY
+    for record in list(timeline.visits)[-n:]:
         clinic = record.clinic or "（無科別）"
         soap = record.soap_text or "（無 SOAP 內容）"
         lines.append(f"[就診 {record.date} {clinic}] {_truncate(soap)}")
-    for record in list(timeline.labs)[:_MAX_ITEMS_PER_CATEGORY]:
+    for record in list(timeline.labs)[-n:]:
         abnormal = "（異常）" if record.abnormal is True else ""
+        unit = f" {record.unit}" if record.unit else ""
         lines.append(
-            f"[檢驗 {record.date}] {record.test_name} = {record.result} "
-            f"{record.unit}{abnormal}"
+            f"[檢驗 {record.date}] {record.test_name} = {record.result}{unit}{abnormal}"
         )
-    for record in list(timeline.exams)[:_MAX_ITEMS_PER_CATEGORY]:
+    for record in list(timeline.exams)[-n:]:
         lines.append(f"[檢查 {record.date}] {record.exam_name}：{_truncate(record.finding)}")
-    for record in list(timeline.imaging)[:_MAX_ITEMS_PER_CATEGORY]:
+    for record in list(timeline.imaging)[-n:]:
         lines.append(
             f"[影像 {record.date}] {record.modality} {record.body_part}："
             f"{_truncate(record.impression)}"

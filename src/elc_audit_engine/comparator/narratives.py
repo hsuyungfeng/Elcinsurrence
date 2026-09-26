@@ -58,6 +58,25 @@ def _parse_json_array(text: str) -> list[dict] | None:
 
 NarrativeFn = Callable[[CheckItem, str, str], list[CandidateNarrative]]
 
+_PROMPT_PREFIX = "若實際有執行，請補充："
+_OVERLAP_NGRAM = 4
+
+
+def _parse_bool(value) -> bool:
+    """只把布林 True 或字串 "true" 視為真（bool("false") 為 True，B-WR-10）。"""
+    if isinstance(value, bool):
+        return value
+    return isinstance(value, str) and value.strip().lower() == "true"
+
+
+def _has_overlap(text: str, evidence: str, n: int = _OVERLAP_NGRAM) -> bool:
+    """敘述與病歷段落是否共享至少一段連續 n 字（去空白）——C2「只能基於既有線索擴寫」的近似檢查。"""
+    t = "".join(text.split())
+    e = "".join(evidence.split())
+    if len(t) < n:
+        return t in e if t else False
+    return any(t[i : i + n] in e for i in range(len(t) - n + 1))
+
 
 class LLMNarrativeGenerator:
     """以 llama.cpp chat_completion 為後端的候選補強生成器（C2）。"""
@@ -80,13 +99,12 @@ class LLMNarrativeGenerator:
             "病歷段落：\n"
             f"{fence(evidence, 'record')}"
         )
-        try:
-            raw = chat_completion(
-                _SYSTEM_PROMPT, user_prompt, max_tokens=self._max_tokens
-            )
-            items = _parse_json_array(raw)
-        except Exception:
-            return []
+        # LLM 呼叫失敗不再吞成 []：交由 compare_case 標記 narrative_error，
+        # 讓「生成失敗」與「沒有建議」可區分（B-WR-10）。
+        raw = chat_completion(_SYSTEM_PROMPT, user_prompt, max_tokens=self._max_tokens)
+        items = _parse_json_array(raw)
+        if items is None:
+            raise ValueError("候選補強回覆無法解析為 JSON 陣列")
         if not items:
             return []
 
@@ -95,7 +113,14 @@ class LLMNarrativeGenerator:
             text = str(item.get("text", "") or "").strip()
             if not text:
                 continue
-            prompt_only = bool(item.get("prompt_only", False))
+            prompt_only = _parse_bool(item.get("prompt_only", False)) or text.startswith(_PROMPT_PREFIX)
+            if not prompt_only and not _has_overlap(text, evidence):
+                # 宣稱基於病歷線索卻與病歷段落毫無重疊：視為可能捏造的事實，
+                # 強制改為提示型，事實留給醫師確認（C2）。
+                text = _PROMPT_PREFIX + text
+                prompt_only = True
+            elif prompt_only and not text.startswith(_PROMPT_PREFIX):
+                text = _PROMPT_PREFIX + text
             narratives.append(
                 CandidateNarrative(
                     text=text,

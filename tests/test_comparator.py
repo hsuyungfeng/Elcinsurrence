@@ -314,10 +314,12 @@ def test_judger_parses_valid_json():
         "elc_audit_engine.comparator.judger.chat_completion",
         return_value=_verdict_json(),
     ) as mocked:
-        judgment = judger.judge(CheckItem("規則"), "病歷")
+        judgment = judger.judge(CheckItem("規則"), "病歷有記載")
     assert judgment.verdict == VERDICT_SUPPORTED
     assert judgment.quote == "有記載"
     mocked.assert_called_once()
+    # 判定需可重現（B-WR-09）
+    assert mocked.call_args.kwargs["temperature"] == 0
 
 
 def test_judger_tolerates_code_fence_wrapping():
@@ -326,7 +328,7 @@ def test_judger_tolerates_code_fence_wrapping():
     with mock.patch(
         "elc_audit_engine.comparator.judger.chat_completion", return_value=wrapped
     ):
-        judgment = judger.judge(CheckItem("規則"), "病歷")
+        judgment = judger.judge(CheckItem("規則"), "病歷 部分 記載")
     assert judgment.verdict == VERDICT_PARTIAL
 
 
@@ -361,7 +363,7 @@ def test_judger_invalid_verdict_retries():
             _verdict_json(),
         ],
     ):
-        judgment = judger.judge(CheckItem("規則"), "病歷")
+        judgment = judger.judge(CheckItem("規則"), "病歷有記載")
     assert judgment.verdict == VERDICT_SUPPORTED
 
 
@@ -396,7 +398,7 @@ def test_generator_parses_json_array():
             ensure_ascii=False,
         ),
     ):
-        items = gen(CheckItem("規則", rule_location="loc"), "病歷", SUPPORT_WEAK)
+        items = gen(CheckItem("規則", rule_location="loc"), "病歷已記載疼痛三天", SUPPORT_WEAK)
     assert len(items) == 2
     assert items[0].rule_location == "loc"
     assert items[0].prompt_only is False
@@ -422,14 +424,15 @@ def test_generator_no_narratives_for_sufficient():
     assert items == []
 
 
-def test_generator_failure_returns_empty():
+def test_generator_failure_raises_for_comparator_to_flag():
+    """B-WR-10：生成失敗不得吞成 []（與「沒有建議」無法區分），交由 compare_case 標記。"""
     gen = create_generator()
     with mock.patch(
         "elc_audit_engine.comparator.narratives.chat_completion",
         side_effect=RuntimeError("timeout"),
     ):
-        items = gen(CheckItem("規則"), "病歷", SUPPORT_NONE)
-    assert items == []
+        with pytest.raises(RuntimeError):
+            gen(CheckItem("規則"), "病歷", SUPPORT_NONE)
 
 
 def test_generator_skips_empty_text():

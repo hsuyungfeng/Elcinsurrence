@@ -740,8 +740,13 @@ def audit_sampling_case():
         advice = "系統未能完成判定（判定服務異常），請人工複核後再送件。"
     elif oj.narratives:
         advice = "\n".join(f"- {n.text}" for n in oj.narratives)
-    else:
+    elif oj.support_level == "充分":
         advice = "病歷記載足以支撐本醫令，可逕行送出抽審。"
+    elif oj.narrative_error:
+        # 薄弱／裸奔但補強建議生成失敗：不得說成「足以支撐」
+        advice = "病歷記載不足，但補強建議生成失敗（判定服務異常），請人工補強後再送件。"
+    else:
+        advice = "病歷記載不足以支撐本醫令，請人工補強後再送件。"
 
     return jsonify({
         "status": "success",
