@@ -80,58 +80,71 @@ def build_chroma_collection(
         collection.add 等）皆會被捕捉並回傳 "skipped"，本函式絕不拋出
         未捕捉例外（D-09 non-blocking 合約）。
     """
-    with open(docx_trees_path, "r", encoding="utf-8") as f:
-        docx_trees = json.load(f)
-
-    all_chunks: list[dict] = []
-    for doc_label, tree in docx_trees.items():
-        all_chunks.extend(flatten_tree_nodes(tree, doc_label=doc_label))
-
-    if not all_chunks:
-        return {"status": "ok", "chunks_ingested": 0, "reason": None}
-
-    # Attach source_version to chunk metadata if provided (P1-4)
-    if source_version:
-        for chunk in all_chunks:
-            chunk["metadata"]["source_version"] = source_version
-
-    # ChromaDB requires globally-unique ids within a collection.add() call.
-    seen_id_counts: dict[str, int] = {}
-    for chunk in all_chunks:
-        base_id = chunk["id"]
-        count = seen_id_counts.get(base_id, 0)
-        seen_id_counts[base_id] = count + 1
-        if count > 0:
-            chunk["id"] = f"{base_id}::dup{count}"
-
+    # B-WR-14：
+    # (a) 先寫入 staging collection，全部成功才刪舊並改名替換——中途失敗
+    #     （embedding 下載失敗等）時舊索引完整保留；
+    # (b) 未帶版本時一律重建（原本 add 同 id 會被忽略，內容永遠停在舊版）；
+    # (c) 讀檔也納入 try，維持「絕不拋出」的 D-09 合約。
+    staging_name = f"{collection_name}__staging"
+    client = None
     try:
+        with open(docx_trees_path, "r", encoding="utf-8") as f:
+            docx_trees = json.load(f)
+
+        all_chunks: list[dict] = []
+        for doc_label, tree in docx_trees.items():
+            all_chunks.extend(flatten_tree_nodes(tree, doc_label=doc_label))
+
+        if not all_chunks:
+            return {"status": "ok", "chunks_ingested": 0, "reason": None}
+
+        # Attach source_version to chunk metadata if provided (P1-4)
+        if source_version:
+            for chunk in all_chunks:
+                chunk["metadata"]["source_version"] = source_version
+
+        # ChromaDB requires globally-unique ids within a collection.add() call.
+        seen_id_counts: dict[str, int] = {}
+        for chunk in all_chunks:
+            base_id = chunk["id"]
+            count = seen_id_counts.get(base_id, 0)
+            seen_id_counts[base_id] = count + 1
+            if count > 0:
+                chunk["id"] = f"{base_id}::dup{count}"
+
         import chromadb
 
         client = chromadb.PersistentClient(path=persist_dir)
-        collection = client.get_or_create_collection(collection_name)
+        existing_names = {c if isinstance(c, str) else c.name for c in client.list_collections()}
 
-        # If collection exists and source_version is given, check existing version (P1-4)
-        # If version matches and item count matches, skip redundant embedding
-        if source_version and collection.count() > 0:
-            existing = collection.get(limit=1, include=["metadatas"])
-            if existing and existing.get("metadatas") and existing["metadatas"][0]:
-                existing_ver = existing["metadatas"][0].get("source_version")
-                if existing_ver == source_version and collection.count() == len(all_chunks):
+        if source_version and collection_name in existing_names:
+            current = client.get_collection(collection_name)
+            if current.count() == len(all_chunks):
+                existing = current.get(limit=1, include=["metadatas"])
+                metas = existing.get("metadatas") if existing else None
+                if metas and metas[0] and metas[0].get("source_version") == source_version:
                     return {"status": "ok", "chunks_ingested": 0, "reason": "Already up to date (version match)"}
-            
-            # Version changed or count mismatched -> purge existing documents before re-indexing
-            existing_ids = collection.get(include=[])["ids"]
-            if existing_ids:
-                collection.delete(ids=existing_ids)
 
+        if staging_name in existing_names:
+            client.delete_collection(staging_name)
+        staging = client.create_collection(staging_name)
         for start in range(0, len(all_chunks), _BATCH_SIZE):
             batch = all_chunks[start : start + _BATCH_SIZE]
-            collection.add(
+            staging.upsert(
                 ids=[c["id"] for c in batch],
                 documents=[c["text"] for c in batch],
                 metadatas=[c["metadata"] for c in batch],
             )
+
+        if collection_name in existing_names:
+            client.delete_collection(collection_name)
+        staging.modify(name=collection_name)
     except Exception as e:  # noqa: BLE001 - deliberately broad, D-09 non-blocking contract
+        if client is not None:
+            try:
+                client.delete_collection(staging_name)
+            except Exception:  # noqa: BLE001 - staging 可能尚未建立
+                pass
         warnings.warn(f"ChromaDB ingestion skipped (non-blocking, D-09): {e}")
         return {"status": "skipped", "chunks_ingested": 0, "reason": str(e)}
 
