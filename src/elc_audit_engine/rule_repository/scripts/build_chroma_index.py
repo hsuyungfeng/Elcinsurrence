@@ -22,14 +22,24 @@ def main() -> None:
     docx_trees_path = os.path.join(settings.DB_DIR, "docx_trees.json")
     
     # Attempt to calculate source_version if data files exist (P1-4)
+    # 來源 CSV 路徑沿用 build_sqlite 的 glob 解析（settings 並無 *_RULES_CSV 常數，
+    # 原寫法一執行即 AttributeError）。任一來源缺檔時不計版本，維持 non-blocking。
     source_ver = None
-    if os.path.exists(settings.PAYMENT_RULES_CSV) and os.path.exists(settings.DRUG_RULES_CSV) and os.path.exists(docx_trees_path):
+    try:
         from elc_audit_engine.rule_repository.mapping import versions
-        source_ver = versions.build_source_version(
-            payment_csv_path=settings.PAYMENT_RULES_CSV,
-            drug_csv_path=settings.DRUG_RULES_CSV,
-            docx_trees_path=docx_trees_path,
+        from elc_audit_engine.rule_repository.scripts.build_sqlite import (
+            _resolve_drug_csv_path,
+            _resolve_payment_csv_path,
         )
+
+        if os.path.exists(docx_trees_path):
+            source_ver = versions.build_source_version(
+                payment_csv_path=_resolve_payment_csv_path(),
+                drug_csv_path=_resolve_drug_csv_path(),
+                docx_trees_path=docx_trees_path,
+            )
+    except FileNotFoundError as exc:
+        print(f"source_version 未計算（來源檔缺漏）：{exc}")
 
     result = chroma_store.build_chroma_collection(
         docx_trees_path=docx_trees_path,
