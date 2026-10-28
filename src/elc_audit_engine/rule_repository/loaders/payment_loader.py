@@ -11,7 +11,7 @@
 from elc_audit_engine.rule_repository.loaders._csv_table import load_rule_csv
 
 
-def load_payment_csv(db_path: str, csv_path: str) -> int:
+def load_payment_csv(db_path: str, csv_path: str, *, replace: bool = True) -> int:
     """讀取給付項目 CSV 並寫入 `payment_rules` 表。
 
     Args:
@@ -21,4 +21,10 @@ def load_payment_csv(db_path: str, csv_path: str) -> int:
     Returns:
         實際插入的資料列數。
     """
-    return load_rule_csv(db_path, csv_path, "payment_rules", ('診療項目代碼', '中文項目名稱', '支付規定', '生效起日', '生效迄日'))
+    return load_rule_csv(
+        db_path,
+        csv_path,
+        "payment_rules",
+        ('診療項目代碼', '中文項目名稱', '支付規定', '生效起日', '生效迄日'),
+        replace=replace,
+    )

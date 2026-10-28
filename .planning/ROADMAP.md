@@ -10,8 +10,20 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 
 - ✅ **v1.0 elc-audit-engine MVP** — Phases 1-9, 09.1, 11, 11.1（shipped 2026-08-10；Phase 10 VPN 實機串接外部依賴阻塞，不計入範圍）
 - ✅ **v1.1 紙本→數位化整合三項輸出** — Phases 12, 13, 14（shipped 2026-08-11）
+- 🔄 **v1.2 三軌自動化審核與申復工作台** — Phase 15（規劃中）
 
 ## Phases
+
+<details>
+<summary>🔄 v1.2 三軌自動化審核與申復工作台（Phase 15）</summary>
+
+- [ ] Phase 15: 當月申報檔預審與三軌工作台（0/4 plans）
+  - 15-01: TOTFA 申報檔解析器與核心資料模型
+  - 15-02: 高風險與單價門檻篩檢引擎（醫令>350元、藥品>5元/顆、診斷碼比對）
+  - 15-03: PageIndex 臨床推理樹與 SOAP 補強建議生成
+  - 15-04: Answer-me-with-HTML 視覺化互動介面與工作台整合
+
+</details>
 
 <details>
 <summary>✅ v1.0 elc-audit-engine MVP（Phases 1-9, 09.1, 11, 11.1）— SHIPPED 2026-08-10</summary>

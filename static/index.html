@@ -168,7 +168,7 @@
   <header>
     <div class="brand">
       <div class="brand-logo">E</div>
-      <div class="brand-title">Elcinsurrence 雙軌自動化審核與申復工作台</div>
+      <div class="brand-title">Elcinsurrence 三軌自動化審核與申復工作台</div>
     </div>
 
     <!-- Dual Mode Tabs -->
@@ -178,6 +178,9 @@
       </button>
       <button class="mode-btn" id="tabMode2" onclick="switchWorkflowMode('appeal')">
         ⚖️ 2. 核減事後申復 (多源證據補強 / 申復理由生成)
+      </button>
+      <button class="mode-btn" id="tabMode3" onclick="switchWorkflowMode('monthly')">
+        📊 3. 當月申報檔預審 (TOTFA.zip / 高價醫令與藥品 / 臨床推理)
       </button>
     </div>
   </header>
@@ -196,6 +199,15 @@
           style="flex: 1; min-width: 0; font-size: 11px; padding: 4px 6px; background: rgba(15,23,42,0.6); color: inherit; border: 1px solid rgba(148,163,184,0.4); border-radius: 4px;"
           onchange="saveApiKey(this.value)">
       </div>
+      <!-- 規則庫管理（每月規則更新）：上傳來源 CSV 到 data/rules/ 並同步到 rules.sqlite3 -->
+      <details id="rulesPanel" style="margin: 6px 12px; font-size: 12px;">
+        <summary style="cursor: pointer; color: #38bdf8;">📚 規則庫管理（每月規則更新）</summary>
+        <div style="padding: 6px 0; display: flex; flex-direction: column; gap: 6px;">
+          <input type="file" id="rulesFile" accept=".csv" onchange="uploadRuleCsv(this.files[0])">
+          <button onclick="syncRules()" style="background: rgba(6,182,212,0.15); border: 1px solid var(--accent-cyan); color: #38bdf8; font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer; text-align: left;" title="自 data/rules/ 讀取最新藥品與給付項目 CSV，upsert 到 rules.sqlite3（不刪除任何既有規則）">🔄 同步規則庫</button>
+          <div id="rulesStatus" style="color: var(--text-muted); line-height: 1.5;"></div>
+        </div>
+      </details>
       <div class="case-list" id="caseList"></div>
     </aside>
 
@@ -331,13 +343,44 @@
         </div>
       </div>
 
+      <!-- ==================================================================== -->
+      <!-- WORKFLOW 3: 當月申報檔預審工作介面 -->
+      <!-- ==================================================================== -->
+      <div class="view-container" id="workflow3View">
+        <div style="background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 12px; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <span style="font-size: 12px; color: var(--text-muted); display: block;">當月申報預審 (TOTFA.zip)</span>
+            <strong style="font-size: 16px;" id="mBatchTitle">尚未載入申報批次</strong>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <input type="file" id="monthlyFileInput" accept=".zip" style="display:none;" onchange="uploadMonthlyZip(this.files[0])">
+            <button class="btn-action" onclick="document.getElementById('monthlyFileInput').click()">📦 上傳 TOTFA.zip 總檔</button>
+            <button class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669);" onclick="openMonthlyHtmlReport()">🔍 開啟視覺化審核卡片 (HTML)</button>
+            <button class="btn-action" style="background: linear-gradient(135deg, #6366f1, #4f46e5);" onclick="mailMonthlyReport()">📧 郵寄報告至信箱</button>
+            <span id="mailStatus" style="font-size: 12px; color: var(--text-muted);"></span>
+          </div>
+        </div>
+
+        <div class="panel" style="flex:1; overflow:hidden;">
+          <div class="panel-header">
+            <div class="panel-title">📊 申報總檔高風險分析與 PageIndex 臨床推理卡片</div>
+            <div id="mBatchStats" style="font-size: 12px; color: var(--text-muted);"></div>
+          </div>
+          <div class="panel-body" id="mBatchReportFrame" style="padding: 0; background: #0b1120;">
+            <iframe id="monthlyReportIframe" style="width:100%; height:100%; border:none;" src="about:blank"></iframe>
+          </div>
+        </div>
+      </div>
+
     </section>
   </main>
 
   <script>
-    let currentMode = 'sampling'; // 'sampling' or 'appeal'
+    let currentMode = 'sampling'; // 'sampling', 'appeal', or 'monthly'
     let samplingCases = [];
     let appealCases = [];
+    let monthlyBatches = [];
+    let currentMonthlyBatchId = null;
     let currentSelectedCase = null;
 
     function getApiKey() {
@@ -358,17 +401,136 @@
       return fetch(url, options);
     }
 
+    // 規則庫管理：狀態文字一律以 textContent 寫入（不使用 innerHTML，避免注入）
+    function setRulesStatus(text) {
+      document.getElementById('rulesStatus').textContent = text;
+    }
+
+    async function uploadRuleCsv(file) {
+      if (!file) return;
+      const form = new FormData();
+      form.append('file', file, file.name);
+      setRulesStatus(`上傳中：${file.name} …`);
+      try {
+        const resp = await authFetch('/api/rules/upload', { method: 'POST', body: form });
+        const body = await resp.json();
+        setRulesStatus(resp.ok
+          ? `已儲存：${body.saved_as}（${body.replaced ? '覆寫舊檔' : '新檔'}）。請按「同步規則庫」套用。`
+          : `上傳失敗：${body.message}`);
+      } catch (err) {
+        setRulesStatus('上傳失敗：無法連線至服務');
+      }
+    }
+
+    async function syncRules() {
+      setRulesStatus('同步中 …');
+      try {
+        const resp = await authFetch('/api/rules/sync', { method: 'POST' });
+        const body = await resp.json();
+        if (!resp.ok) {
+          setRulesStatus(`同步失敗：${body.message}`);
+          return;
+        }
+        setRulesStatus(
+          `藥品 ${body.drug_rows} 筆（${body.drug_file}）；` +
+          `給付項目 ${body.payment_rows} 筆（${body.payment_file}）。` +
+          `DB 中不在來源檔的代碼：藥品 ${body.drug_stale_not_in_source}、給付 ${body.payment_stale_not_in_source}（已保留，未刪除）。`
+        );
+      } catch (err) {
+        setRulesStatus('同步失敗：無法連線至服務');
+      }
+    }
+
+    // 郵寄報告：收件人以輸入框取得；狀態一律以 textContent 寫入
+    function setMailStatus(text) {
+      document.getElementById('mailStatus').textContent = text;
+    }
+
+    async function mailMonthlyReport() {
+      if (!currentMonthlyBatchId) {
+        setMailStatus('請先選擇批次');
+        return;
+      }
+      const email = (window.prompt('收件人 Email（報告含身分證字號、姓名與出生日期，請確認收件人可接收個資）') || '').trim();
+      if (!email) return;
+      setMailStatus('寄送中 …');
+      try {
+        const resp = await authFetch(`/api/monthly/batch/${encodeURIComponent(currentMonthlyBatchId)}/email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const body = await resp.json();
+        if (!resp.ok) {
+          setMailStatus(`寄送失敗：${body.message}`);
+        } else if (body.status === 'sent') {
+          setMailStatus('已寄出');
+        } else {
+          setMailStatus(`${body.warning}（${body.saved_as}）`);
+        }
+      } catch (err) {
+        setMailStatus('寄送失敗：無法連線至服務');
+      }
+    }
+
     function switchWorkflowMode(mode) {
       currentMode = mode;
       document.getElementById('tabMode1').className = `mode-btn ${mode === 'sampling' ? 'active' : ''}`;
       document.getElementById('tabMode2').className = `mode-btn ${mode === 'appeal' ? 'active' : ''}`;
+      document.getElementById('tabMode3').className = `mode-btn ${mode === 'monthly' ? 'active' : ''}`;
       
       document.getElementById('workflow1View').className = `view-container ${mode === 'sampling' ? 'active' : ''}`;
       document.getElementById('workflow2View').className = `view-container ${mode === 'appeal' ? 'active' : ''}`;
+      document.getElementById('workflow3View').className = `view-container ${mode === 'monthly' ? 'active' : ''}`;
       
-      document.getElementById('sidebarListTitle').innerText = mode === 'sampling' ? '事前預審抽樣清單' : '核減刪減醫令清單';
+      if (mode === 'sampling') {
+        document.getElementById('sidebarListTitle').innerText = '事前預審抽樣清單';
+      } else if (mode === 'appeal') {
+        document.getElementById('sidebarListTitle').innerText = '核減刪減醫令清單';
+      } else {
+        document.getElementById('sidebarListTitle').innerText = '申報總檔批次清單';
+      }
 
       loadCaseData();
+    }
+
+    async function uploadMonthlyZip(file) {
+      if (!file) return;
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await authFetch('/api/monthly/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) {
+        alert('上傳失敗：' + (data.message || '請確認檔案是否為 TOTFA.zip'));
+        return;
+      }
+      alert(`申報總檔已解析成功！批次：${data.batch}\n共 ${data.total_cases} 筆門診案件，已完成規則核對。`);
+      document.getElementById('monthlyFileInput').value = '';
+      currentMonthlyBatchId = data.batch;
+      await loadMonthlyReport(data.batch);
+      await loadCaseData();
+    }
+
+    async function loadMonthlyReport(batchId) {
+      if (!batchId) return;
+      currentMonthlyBatchId = batchId;
+      document.getElementById('mBatchTitle').innerText = `申報批次：${batchId}`;
+      const res = await authFetch(`/api/monthly/batch/${batchId}/report?format=html`);
+      if (res.ok) {
+        const html = await res.text();
+        const iframe = document.getElementById('monthlyReportIframe');
+        iframe.srcdoc = html;
+      }
+    }
+
+    function openMonthlyHtmlReport() {
+      if (!currentMonthlyBatchId) {
+        alert('請先上傳或選擇一個申報批次');
+        return;
+      }
+      const key = getApiKey();
+      const url = `/api/monthly/batch/${currentMonthlyBatchId}/report?format=html` + (key ? `&key=${encodeURIComponent(key)}` : '');
+      window.open(url, '_blank');
     }
 
     async function importCases(file) {
@@ -418,13 +580,55 @@
         samplingCases = await res.json();
         renderCaseList(samplingCases);
         if (Array.isArray(samplingCases) && samplingCases.length > 0) selectSamplingCase(samplingCases[0].id);
-      } else {
+      } else if (currentMode === 'appeal') {
         const res = await authFetch('/api/appeal/cases');
         if (res.status === 401) return showCaseListMessage('請先在上方輸入 API Key 以讀取案件清單。');
         appealCases = await res.json();
         renderCaseList(appealCases);
         if (Array.isArray(appealCases) && appealCases.length > 0) selectAppealCase(appealCases[0].id);
+      } else {
+        const res = await authFetch('/api/monthly/batches');
+        const data = await res.json();
+        monthlyBatches = Array.isArray(data) ? data : (data && data.batches ? data.batches : []);
+        renderMonthlyBatchList(monthlyBatches);
+        if (monthlyBatches.length > 0 && !currentMonthlyBatchId) {
+          loadMonthlyReport(monthlyBatches[0].batch);
+        }
       }
+    }
+
+    function renderMonthlyBatchList(batches) {
+      const container = document.getElementById('caseList');
+      container.innerHTML = '';
+      if (!batches || batches.length === 0) {
+        showCaseListMessage('尚無申報總檔批次。請點擊「上傳 TOTFA.zip 總檔」。');
+        return;
+      }
+      batches.forEach(item => {
+        const div = document.createElement('div');
+        div.className = `case-item ${currentMonthlyBatchId === item.batch ? 'active' : ''}`;
+        div.onclick = () => loadMonthlyReport(item.batch);
+        const count = item.cases ?? item.case_count ?? 0;
+
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;';
+        const codeSpan = document.createElement('span');
+        codeSpan.className = 'case-code';
+        codeSpan.textContent = item.batch ?? '';
+        const badgeSpan = document.createElement('span');
+        badgeSpan.className = 'badge badge-sufficient';
+        badgeSpan.textContent = `${count} 案`;
+        row.appendChild(codeSpan);
+        row.appendChild(badgeSpan);
+
+        const sub = document.createElement('div');
+        sub.style.cssText = 'font-size:12px; color:var(--text-muted);';
+        sub.textContent = '健保門診申報總檔';
+
+        div.appendChild(row);
+        div.appendChild(sub);
+        container.appendChild(div);
+      });
     }
 
     function renderCaseList(list) {

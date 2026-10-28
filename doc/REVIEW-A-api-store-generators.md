@@ -42,7 +42,7 @@ findings:
   warning: 14
   info: 7
   total: 32
-status: issues_found
+status: resolved
 ---
 
 # 全碼庫審查報告 A：API／CaseStore／產生器
@@ -50,11 +50,17 @@ status: issues_found
 **審查時間：** 2026-09-26T08:47:58Z
 **深度：** deep（含跨模組呼叫鏈追蹤：server → case_store / attachment_store → generators → soffice）
 **審查檔案數：** 33
-**狀態：** issues_found
+**狀態：** resolved（2026-09-26 修正完成：Critical 11/11、Warning 14/14、Info 7/7，已合回 main）
 
 > 註：本機 `.venv` 為空（未安裝相依套件），故未能實際執行；以下結論均由逐行讀碼與呼叫鏈追蹤得出，每項皆附行號。
 
 ## 摘要
+
+> **處理狀態備忘（2026-09-26 修正完成）**：本報告列出的所有缺失（Critical 11/11、Warning 14/14、Info 7/7）已於 code-review remediation 全數修復並合回 `main`：
+> 1. **認證部分強制**（CR-01）：敏感 PHI 批次查詢與 DELETE / 印表下載強制驗證 `X-API-Key`，並設定 `ELC_ALLOWED_HOSTS` 白名單防 DNS rebinding。
+> 2. **案件唯一鍵**（CR-02、CR-03）：改以內容雜湊產生全域唯一 `case_id`，附件儲存與查詢以 `case_id` 為鍵，解決流水號撞號與跨病患混入佐證包問題。
+> 3. **API 結構重構**（IN-04）：`server.py` 拆分為 app factory 模式與 blueprints 架構（`src/elc_audit_engine/api/`）。
+> 4. **狀態機原子化與防捏造**：LLM 失敗轉為 `failed` / `undetermined`，不偽裝為業務結論；草稿段落與附件資訊真實串接。
 
 整體程式碼的「防禦性註解」寫得相當完整（safe_filename 校驗後拒絕、審計日誌禁止 PHI、ET 文字節點防 XML 注入等），但**註解所宣稱的保證和實際接線之間有多處斷裂**。最嚴重的問題集中在四個面向：
 

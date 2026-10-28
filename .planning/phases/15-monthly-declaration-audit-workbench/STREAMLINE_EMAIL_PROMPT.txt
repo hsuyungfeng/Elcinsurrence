@@ -1,0 +1,31 @@
+Task: Streamline Monthly Pre-audit HTML Report, Filter Criteria, and Add Email Export.
+
+User Requirements:
+1. Streamline and Simplify Findings (簡潔為主，無給付規定或無關者不顯示):
+   - Remove the '推理樹（Tree of Criteria）' block from the report HTML entirely (user: "不需要推理樹（Tree of Criteria）-那是後台比對用的").
+   - Remove findings that have NO regulation rules (e.g. 查無規則，代碼不在規則庫) and no clinical guidance. Do NOT show empty/not_found items like 01015C, AC37603100, A037807100, etc.
+   - ONLY list items that meet:
+     * Has an active/applicable payment regulation rule (有給付規定/有給付限制條文，e.g. rule_status == 'restriction_present' or has payment_text/AI-note).
+     * And satisfies the threshold: medical order points > 350, OR drug order price > 5.
+   - For items that DO have rules (e.g. 64140C):
+     * Show only: '📜 檢視完整給付規定條文' (expandable) and the amount line (單價, 點數, 總量).
+
+2. Filtering at Case Level (總醫療費用 > 1000):
+   - Case level filter: Only cases with total medical expense (d39 醫療費用總點數 or d41 申報點數) > 1000 NTD/pts. Cases with total expense <= 1000 are not included in the report.
+   - And the case must have at least one flagged order with rules (medical order > 350 or drug order > 5).
+
+3. Correct Patient Identification Labeling:
+   - In ddata, d3 is Taiwan National ID Number (身分證字號, e.g. M220518024).
+   - Label it clearly as '身分證字號' (NOT 病歷號).
+   - Display: '流水號 X · 身分證字號 [d3] · 姓名 [d49] · 出生日期 [d11] · 醫療總費用: [d39] 點 · 科別 [d8] · 醫師 [d30] · 就醫日 [d9] · 主診斷 [d19]'.
+
+4. Email Export Feature (郵寄審後 HTML to mailbox):
+   - Add endpoint `POST /api/monthly/batch/<batch_id>/email`:
+     * Accepts JSON: `{"email": "doctor@hospital.org.tw"}` or form data.
+     * Uses Python standard `smtplib` / `email.message.EmailMessage` to send the generated self-contained HTML report as an attachment (or embedded HTML body).
+     * Reads SMTP config from env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` (default noreply@elcinsurrence.local).
+     * If SMTP is not configured or in development mode, log the email action and write the email payload to `data/output/mail_{batch}_{timestamp}.eml` or return success with a warning, so it never crashes when SMTP credentials are not set locally.
+   - In Dashboard (static/index.html), add a '📧 郵寄報告至信箱' button & input prompt next to '開啟視覺化審核卡片 (HTML)'.
+
+5. Update tests to match the new concise shape, total expense > 1000 filter, and email endpoint.
+Ensure all tests pass.

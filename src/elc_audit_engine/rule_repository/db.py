@@ -96,7 +96,22 @@ def init_schema(conn: sqlite3.Connection) -> None:
     conn.execute(SCHEMA_DRUG)
     conn.execute(SCHEMA_RULE_MAPPING)
     _migrate_rule_mapping_source_version(conn)
+    _migrate_drug_rules_columns(conn)
     conn.commit()
+
+
+def _migrate_drug_rules_columns(conn: sqlite3.Connection) -> None:
+    """為 `drug_rules` 補上官方支付價 `unit_price` 與 AI 摘要 `ai_note`（若缺）。
+
+    `unit_price`：藥品項目 CSV 的「支付價」（原樣字串，已驗證為數字者才寫入）。
+    `ai_note`：藥品項目 CSV 的「AI-note」——**AI 生成的非官方摘要**，僅供參考，
+    絕不寫入 `payment_text`（AGENTs.md §2.1：不得把生成文字當成給付規定）。
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(drug_rules)").fetchall()}
+    if "unit_price" not in columns:
+        conn.execute("ALTER TABLE drug_rules ADD COLUMN unit_price TEXT")
+    if "ai_note" not in columns:
+        conn.execute("ALTER TABLE drug_rules ADD COLUMN ai_note TEXT")
 
 
 def _migrate_rule_mapping_source_version(conn: sqlite3.Connection) -> None:

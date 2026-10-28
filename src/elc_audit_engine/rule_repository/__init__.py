@@ -11,6 +11,7 @@ LLM 只在 rule_mapping 的一次性批次建置階段（Plan 04）使用過。
 import os
 import sqlite3
 import warnings
+from datetime import date
 
 from elc_audit_engine.rule_repository import db, models
 from elc_audit_engine.rule_repository.errors import RuleRepositoryError
@@ -91,6 +92,11 @@ def get_rule(code: str, db_path: str | None = None) -> models.RuleResult:
             article_full_text = mapping_row["article_full_text"] if mapping_row else None
             article_source = mapping_row["article_source"] if mapping_row else None
 
+            # 藥品官方支付價與 AI 摘要（舊版 DB 無此欄位時以 None 代替）
+            columns = row.keys()
+            unit_price = row["unit_price"] if source == "drug" and "unit_price" in columns else None
+            ai_note = row["ai_note"] if source == "drug" and "ai_note" in columns else None
+
             return models.RuleResult(
                 code=code,
                 source=source,
@@ -102,6 +108,8 @@ def get_rule(code: str, db_path: str | None = None) -> models.RuleResult:
                 article_full_text=article_full_text,
                 article_source=article_source,
                 found=True,
+                unit_price=unit_price,
+                ai_note=ai_note,
             )
         finally:
             conn.close()

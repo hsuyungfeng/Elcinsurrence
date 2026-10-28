@@ -12,8 +12,8 @@ import sqlite3
 # cases：案件目前狀態與最新 payload 快照。
 #
 # 欄位說明：
-# - `kind`：`"sampling"`（抽樣預審）或 `"appeal"`（核減申復），對應
-#   pipeline 兩個入口（`run_presubmission_check` / `run_case_pipeline`）。
+# - `kind`：`"sampling"`（抽樣預審）、`"appeal"`（核減申復）或 `"monthly"`
+#   （當月申報檔預審，case_id 為內容雜湊 `MON-...`，批次見 payload.batch）。
 # - `payload_json`：案件資料原樣 JSON（含 PHI：SOAP／病歷號／姓名等）；
 #   因此 `data/db/cases.sqlite3` 必須被 `.gitignore` 排除，絕不進版控。
 # - `failure_reason`：**只在 state='failed' 時有值**。與 `payload_json`
@@ -73,6 +73,12 @@ SCHEMA_INDEX_CASES_STATE_KIND = (
 SCHEMA_INDEX_TRANSITIONS_CASE = (
     "CREATE INDEX IF NOT EXISTS idx_transitions_case ON case_transitions (case_id, id)"
 )
+# 當月申報批次查詢（kind='monthly'，payload.batch 如 MONTHLY-202307）。
+# 表達式索引不需遷移既有資料表；IF NOT EXISTS 對舊 DB 冪等。
+SCHEMA_INDEX_CASES_BATCH = (
+    "CREATE INDEX IF NOT EXISTS idx_cases_batch "
+    "ON cases (kind, json_extract(payload_json, '$.batch'))"
+)
 
 # SQL 表名一律寫死於靜態語句，不動態組裝——與 rule_repository 同慣例
 # （T-09-13 mitigation）。若日後新增依表名查詢的介面，再比照
@@ -106,6 +112,7 @@ def init_schema(db_path: str) -> None:
         conn.execute(SCHEMA_ARTIFACTS)
         conn.execute(SCHEMA_INDEX_CASES_STATE_KIND)
         conn.execute(SCHEMA_INDEX_TRANSITIONS_CASE)
+        conn.execute(SCHEMA_INDEX_CASES_BATCH)
         conn.commit()
     finally:
         conn.close()

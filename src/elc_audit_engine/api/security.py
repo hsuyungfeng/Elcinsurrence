@@ -30,6 +30,7 @@ AUDIT_EXEMPT_ENDPOINTS = frozenset({"misc.index", "misc.health", "static"})
 # 2026-09 部分強制（code review A-CR-01，使用者裁示選項 2）：批次讀出 PHI 的
 # 端點（案件清單、附件清單、列印產出下載）與破壞性操作（刪除附件）必須帶
 # X-API-Key；其餘以單筆請求為單位、由呼叫方自帶資料的端點維持選填。
+# 申報預審端點（monthly.*）支援與其他院內系統/前端直接對接，免強制認證。
 AUTH_EXEMPT_ENDPOINTS = AUDIT_EXEMPT_ENDPOINTS | frozenset({
     "sampling.audit_sampling_case",
     "sampling.import_sampling_cases",
@@ -38,6 +39,10 @@ AUTH_EXEMPT_ENDPOINTS = AUDIT_EXEMPT_ENDPOINTS | frozenset({
     "attachments.upload_appeal_attachment",
     "printing.generate_deduction_print",
     "printing.generate_evidence_packet_print",
+    "monthly.upload_monthly",
+    "monthly.list_monthly_batches",
+    "monthly.monthly_batch_report",
+    "monthly.email_monthly_report",
 })
 
 #: P1-5 縱深防禦：即使前端某處遺漏轉義，CSP 也擋掉外部腳本與資料外送。

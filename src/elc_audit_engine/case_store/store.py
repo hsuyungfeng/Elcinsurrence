@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from config.settings import CASES_DB_PATH
 from elc_audit_engine.case_store import db as case_db
@@ -26,7 +26,7 @@ from elc_audit_engine.case_store.states import (
 )
 from elc_audit_engine.safe_paths import safe_filename
 
-_VALID_KINDS = {"sampling", "appeal"}
+_VALID_KINDS = {"sampling", "appeal", "monthly"}
 
 
 @dataclass(frozen=True)
@@ -74,7 +74,7 @@ class MissingFailureReasonError(CaseStoreError):
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _row_to_case_record(row: sqlite3.Row) -> CaseRecord:
@@ -129,7 +129,7 @@ class CaseStore:
         Raises:
             UnsafeIdentifierError: `case_id` 含路徑成分或不允許的字元
                 （校驗後拒絕，不清洗——case_id 會出現在日誌與後續檔名）。
-            CaseStoreError: `kind` 不是 `"sampling"` 或 `"appeal"`。
+            CaseStoreError: `kind` 不是 `"sampling"`、`"appeal"` 或 `"monthly"`。
             DuplicateCaseError: 同一 `case_id` 已存在——不得覆寫既有
                 狀態與歷史，覆寫等於靜默丟失可追溯性。
         """
@@ -409,6 +409,52 @@ class CaseStore:
         finally:
             conn.close()
         return tuple(_row_to_case_record(row) for row in rows)
+
+    def list_by_batch(
+        self, batch: str, *, limit: int = 1000, offset: int = 0
+    ) -> tuple[CaseRecord, ...]:
+        """依申報批次（`payload.batch`，如 `MONTHLY-202307`）列出當月申報案件。
+
+        走 `idx_cases_batch` 表達式索引；依 `created_at`、`case_id` 升冪排序，
+        支援分頁。批次內案件數請以 `count_by_batch` 取得總數。
+        """
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM cases "
+                "WHERE kind = 'monthly' AND json_extract(payload_json, '$.batch') = ? "
+                "ORDER BY created_at ASC, case_id ASC LIMIT ? OFFSET ?",
+                (batch, limit, offset),
+            ).fetchall()
+        finally:
+            conn.close()
+        return tuple(_row_to_case_record(row) for row in rows)
+
+    def count_by_batch(self, batch: str) -> int:
+        """申報批次內的案件總數（與 `list_by_batch` 同一篩選條件）。"""
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM cases "
+                "WHERE kind = 'monthly' AND json_extract(payload_json, '$.batch') = ?",
+                (batch,),
+            ).fetchone()
+        finally:
+            conn.close()
+        return row["n"]
+
+    def list_batches(self) -> tuple[tuple[str, int], ...]:
+        """所有當月申報批次及其案件數，依批次名升冪（`(batch, count)`）。"""
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT json_extract(payload_json, '$.batch') AS batch, COUNT(*) AS n "
+                "FROM cases WHERE kind = 'monthly' "
+                "GROUP BY batch HAVING batch IS NOT NULL ORDER BY batch ASC"
+            ).fetchall()
+        finally:
+            conn.close()
+        return tuple((row["batch"], row["n"]) for row in rows)
 
     def count(self, *, kind: str | None = None) -> int:
         """案件總數（分頁用）。"""

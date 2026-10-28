@@ -1,0 +1,22 @@
+Task: Implement Monthly Rule Sync Pipeline and Dashboard Rules Upload Position.
+Reference: data/rules/ (*.csv, *.ods) and user requirement:
+1. Rule Sync Pipeline:
+   - Create script/loader in src/elc_audit_engine/rule_repository/scripts/sync_latest_rules.py.
+   - Read from data/rules/ automatically:
+     * Drug CSV: '藥品項查詢項目檔*.csv' (handle utf-8-sig, map 藥品代號, 藥品中文名稱, 支付價, 給付規定, 有效起日, 有效迄日, AI-note into drug_rules table, and add unit_price column to drug_rules if needed or ensure it's queryable by get_rule).
+     * Payment CSV: '醫療服務給付項目*.csv' (update payment_rules).
+   - In get_rule in rule_repository/__init__.py:
+     * If code is found in drug_rules, return RuleResult with name, payment_text (fallback to AI-note if 給付規定 is '未找到給付規定' or empty, or concatenate them cleanly), and price/unit_price so monthly_audit can use the official NHI payment price when p11 is 0/missing in TOTFA.
+   - Provide unit tests for the loader.
+
+2. Dashboard Rules Upload Position & Trigger:
+   - Add a '規則庫管理 (每月規則更新)' section or button in the Dashboard (static/index.html):
+     * Allows uploading new rules CSV directly to data/rules/, or a button to trigger rule sync.
+   - Add Flask API endpoints in src/elc_audit_engine/api/routes/rules.py:
+     * POST /api/rules/sync: runs the sync_latest_rules pipeline and returns synced counts.
+     * POST /api/rules/upload: accepts rule CSV upload into data/rules/.
+   - Exemption: Ensure /api/rules/* endpoints are added to AUTH_EXEMPT_ENDPOINTS in security.py for seamless local operation.
+
+3. Re-run monthly audit on sample TOTFA.zip after sync to verify that the sample drugs now have names, official prices, and regulations.
+
+Execute cleanly, maintain tests, and report when ready.

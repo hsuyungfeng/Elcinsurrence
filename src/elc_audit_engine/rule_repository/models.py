@@ -40,6 +40,11 @@ class RuleResult:
     article_full_text: str | None
     article_source: str | None
     found: bool
+    # 藥品官方支付價（原樣字串，如 "3.57"）；給付項目無此欄位。
+    unit_price: str | None = None
+    # AI 生成的非官方摘要（藥品 CSV 的 AI-note）。僅供參考，**不是給付規定**，
+    # 不得當作 payment_text 使用，呈現時須標示為「AI 摘要（非官方）」。
+    ai_note: str | None = None
 
 
 def not_found(code: str) -> RuleResult:

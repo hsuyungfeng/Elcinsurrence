@@ -29,8 +29,19 @@ class RuleCsvFormatError(ValueError):
     """來源 CSV 缺少必要欄位。"""
 
 
-def load_rule_csv(db_path: str, csv_path: str, table: str, columns: tuple[str, str, str, str, str]) -> int:
-    """columns 依序為 (代碼, 名稱, 規定文字, 生效起日, 生效迄日) 的 CSV 欄名。"""
+def load_rule_csv(
+    db_path: str,
+    csv_path: str,
+    table: str,
+    columns: tuple[str, str, str, str, str],
+    *,
+    replace: bool = True,
+) -> int:
+    """columns 依序為 (代碼, 名稱, 規定文字, 生效起日, 生效迄日) 的 CSV 欄名。
+
+    replace=True（預設，建置腳本用）：先清空整表再寫入。
+    replace=False（每月同步用）：只 upsert 來源中有的代碼，來源沒有的舊列保留不刪。
+    """
     with open(csv_path, encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         missing = [c for c in columns if c not in (reader.fieldnames or [])]
@@ -51,6 +62,7 @@ def load_rule_csv(db_path: str, csv_path: str, table: str, columns: tuple[str, s
     with contextlib.closing(db.get_connection(db_path)) as conn:
         db.init_schema(conn)
         with conn:
-            conn.execute(_DELETE[table])
+            if replace:
+                conn.execute(_DELETE[table])
             conn.executemany(_INSERT[table], rows)
     return len(rows)
