@@ -13,25 +13,33 @@ from typing import Any
 from elc_audit_engine.prompt_safety import DATA_ISOLATION_NOTICE, fence
 from elc_audit_engine.rule_repository.mapping.llm_client import chat_completion
 
+_MARKDOWN_JSON_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 _SYSTEM_PROMPT = (
-    "You are an expert clinical medical reviewer and National Health Insurance (NHI) audit specialist in Taiwan.\n"
-    "Your mission: Compare the physician's preliminary outpatient SOAP record with the patient's longitudinal history and cloud EHR records.\n"
-    "Provide a professionally structured SOAP recommendation and clinical review checklist for the attending physician's approval.\n\n"
+    "You are an expert clinical documentation specialist and National Health Insurance (NHI) audit physician in Taiwan.\n"
+    "Your mission: Produce a high-quality, professional, and fully fleshed-out outpatient SOAP progress note and NHI audit guidance for the target order code.\n\n"
+    "CRITICAL CLINICAL TEMPLATE DIRECTIVE:\n"
+    "- If the physician provides partial or empty preliminary SOAP, you MUST GENERATE A REALISTIC, GOLD-STANDARD CLINICAL SCENARIO TEMPLATE for the given order code and clinical context.\n"
+    "- NEVER output generic meta-complaints or placeholders like 'data not documented', 'symptoms missing', 'ICD pending', 'prescription issued as per standard', or 'please verify'.\n"
+    "- Instead, construct a complete, plausible outpatient case with standard Taiwan clinical phrasing, specific physical exam details, exact ICD-10 diagnostic codes, and concrete procedural/management steps that fully justify the medical necessity under NHI guidelines.\n\n"
     "CRITICAL BILINGUAL CONSTRAINTS:\n"
-    "1. `recommended_soap` (S, O, A, P fields) MUST be written in professional Medical English (including standard clinical abbreviations, terminology, and formatting commonly used by Taiwan physicians in HIS).\n"
-    "2. `comparison` and `approval_advice` MUST be written in Traditional Chinese (繁體中文，台灣健保審查語境), explaining the regulatory requirements, potential non-reimbursement risks, and explicit approval/rejection guidance.\n\n"
+    "1. `recommended_soap` (S, O, A, P fields) MUST be written entirely in professional Medical English with standard clinical terminology and abbreviations used in Taiwan hospital/clinic EHR systems.\n"
+    "   - S (Subjective): Realistic chief complaint, onset, mechanism of injury/illness, severity, and negative findings (e.g., denies loss of consciousness or visual changes).\n"
+    "   - O (Objective): Realistic vitals, detailed anatomical physical exam (wound site, size in cm, depth, margin, active bleeding, nerve/vascular intactness, range of motion or specialized exams).\n"
+    "   - A (Assessment): Definite primary ICD-10 clinical diagnosis code with description directly justifying the procedure/medication.\n"
+    "   - P (Plan): Explicit procedural details (local anesthesia, wound irrigation, debridement, specific suture technique/layers, order code documentation), medications with dosage/frequency, post-op care, wound red flags, and follow-up timing.\n"
+    "2. `comparison` and `approval_advice` MUST be written in Traditional Chinese (繁體中文，台灣健保審查語境), explaining the regulatory requirements, payment rules, documentation traps to avoid核減, and key items for the attending physician to verify before signing.\n\n"
     "Output ONLY a single valid JSON object in the following format (no extra text or markdown wrappers):\n"
     "{\n"
-    '  "comparison": "病史與雲端比對重點分析（以繁體中文說明給付間隔、處方或檢驗衝突、及佐證不足之處）",\n'
+    '  "comparison": "病史與給付規則重點分析（以繁體中文說明適應症、給付限制、部位同側規範與佐證要求）",\n'
     '  "recommended_soap": {\n'
-    '    "s": "Subjective complaint in concise clinical Medical English (expanded strictly based on existing clues, do not hallucinate)",\n'
-    '    "o": "Objective findings in Medical English (vital signs, physical examination, relevant lab/imaging values)",\n'
-    '    "a": "Assessment in Medical English (including primary ICD-10 diagnosis code and disease status)",\n'
-    '    "p": "Plan and interventions in Medical English (management plan conforming to NHI payment guidelines)"\n'
+    '    "s": "Detailed clinical Subjective history in professional Medical English",\n'
+    '    "o": "Detailed Objective physical examination and vital signs in professional Medical English",\n'
+    '    "a": "Explicit ICD-10 diagnosis code and disease assessment in professional Medical English",\n'
+    '    "p": "Comprehensive procedural, medication, and management plan in professional Medical English"\n'
     "  },\n"
-    '  "approval_advice": "供主治醫師審批核可的具體補強要點與注意事項（繁體中文）"\n'
+    '  "approval_advice": "供主治醫師審批核可的具體審核要點與防核減注意事項（繁體中文）"\n'
     "}\n"
     + DATA_ISOLATION_NOTICE
 )
@@ -40,13 +48,26 @@ _SYSTEM_PROMPT = (
 def _parse_llm_json(raw_text: str) -> dict[str, Any] | None:
     if not raw_text:
         return None
+    cleaned = raw_text.strip()
     try:
-        data = json.loads(raw_text)
+        data = json.loads(cleaned)
         if isinstance(data, dict):
             return data
     except json.JSONDecodeError:
         pass
-    match = _JSON_BLOCK_RE.search(raw_text)
+
+    # 嘗試抓取 ```json ... ``` 代碼塊
+    md_match = _MARKDOWN_JSON_RE.search(cleaned)
+    if md_match:
+        try:
+            data = json.loads(md_match.group(1))
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError:
+            pass
+
+    # 嘗試抓取最外層 JSON 物件
+    match = _JSON_BLOCK_RE.search(cleaned)
     if match:
         try:
             data = json.loads(match.group(0))
@@ -63,7 +84,7 @@ def generate_soap_advice(
     soap_text: str,
     patient_history: str = "",
     rule_text: str = "",
-    max_tokens: int = 700,
+    max_tokens: int = 1500,
 ) -> dict[str, Any]:
     """呼叫本機 LLM 生成比對分析與 SOAP 補強建議。"""
     user_prompt = (

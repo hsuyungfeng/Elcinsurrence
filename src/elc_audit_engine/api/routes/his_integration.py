@@ -122,7 +122,20 @@ def soap_enhance():
             "status": "undetermined",
             "message": "規則庫查詢失敗，無法判定給付規定（系統故障，非判定結果）",
         }), 503
-    rule_text = (rule.payment_text or rule.article_full_text or "") if rule.found else ""
+    # 組合完整規則與醫令資訊，避免 payment_text 為字串 "null" 或空值
+    rule_parts = []
+    if rule.found:
+        if rule.name:
+            rule_parts.append(f"醫令名稱：{rule.name}")
+        pt = (rule.payment_text or "").strip()
+        if pt and pt.lower() != "null":
+            rule_parts.append(f"給付規定：\n{pt}")
+        aft = (rule.article_full_text or "").strip()
+        if aft and aft.lower() != "null":
+            rule_parts.append(f"章節規範與通則：\n{aft}")
+        if rule.article_location:
+            rule_parts.append(f"章節位置：{rule.article_location}")
+    rule_text = "\n\n".join(rule_parts) if rule_parts else ""
 
     advice = generate_soap_advice(
         order_code=order_code,
@@ -142,6 +155,23 @@ def soap_enhance():
     structured = advice.get("status") == "success"
     soap = advice.get("recommended_soap", {}) if structured else {}
     template = "\n".join(f"{key.upper()}: {str(soap.get(key, '')).strip()}" for key in ("s", "o", "a", "p"))
+
+    case_id = clean_str(data, "case_id")
+    if case_id:
+        store = case_store()
+        try:
+            store.get(case_id)
+            artifact_key = f"example_soap_{order_code}"
+            store.set_artifact(case_id, artifact_key, {
+                "order_code": order_code,
+                "order_name": order_name,
+                "example_soap_template": template if structured else "",
+                "bilingual_advice": advice,
+                "updated_at": datetime.now(UTC).isoformat(),
+            })
+        except Exception as e:
+            logger.warning("無法將範例病歷存入 case_artifacts (case_id=%s): %s", case_id, e)
+
     return jsonify({
         "status": "success" if structured else "fallback",
         "order_code": order_code,

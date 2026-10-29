@@ -377,12 +377,29 @@
             <button class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669);" onclick="openMonthlyHtmlReport()">🔍 開啟視覺化審核卡片 (HTML)</button>
             <button class="btn-action" style="background: linear-gradient(135deg, #6366f1, #4f46e5);" onclick="mailMonthlyReport()">📧 郵寄報告至信箱</button>
             <button class="btn-action" style="background: linear-gradient(135deg, #0ea5e9, #0284c7);" onclick="generateExampleRecord()" title="以本機 LLM 依規則生成英文範例病歷（需醫師審核）">🧾 產生範例病歷</button>
-            <dialog id="exampleDialog" style="max-width: 640px; width: 90%; background: var(--card, #111827); color: inherit; border: 1px solid rgba(148,163,184,0.4); border-radius: 10px;">
-              <div style="font-weight: 700; margin-bottom: 6px;">🧾 範例病歷（AI 生成，須醫師審核後才可使用）</div>
-              <pre id="exampleRecordOut" style="white-space: pre-wrap; font-size: 13px; line-height: 1.6; background: rgba(0,0,0,0.25); padding: 10px; border-radius: 6px;"></pre>
-              <div id="exampleRecordNote" style="font-size: 12px; color: var(--text-muted); margin-top: 6px;"></div>
-              <div style="text-align: right; margin-top: 8px;"><button class="btn-action" onclick="document.getElementById('exampleDialog').close()">關閉</button></div>
-            </dialog>
+            <div id="exampleDialog" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:99999; max-width: 680px; width: 92%; background: #1e293b; color: #f8fafc; border: 1px solid rgba(148,163,184,0.4); border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); padding: 16px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+                <div style="font-weight: 700; font-size: 15px; color: #38bdf8;">🧾 範例病歷（AI 生成，須醫師審核後才可使用）</div>
+                <button type="button" class="btn-action" style="padding: 2px 8px; font-size: 12px; background: transparent; border: 1px solid var(--border);" onclick="document.getElementById('exampleDialog').style.display='none'">✕ 關閉</button>
+              </div>
+              <div style="margin-bottom: 8px; display:flex; gap:8px;">
+                <input type="text" id="diagInput" placeholder="主診斷 (例: S90221A)" style="flex:1; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc; font-size:13px;" value="S90221A">
+                <input type="text" id="orderInput" placeholder="醫令代碼 (例: 64140C)" style="flex:1; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc; font-size:13px;" value="64140C">
+                <button class="btn-action" onclick="fetchCustomSoapTemplate()" style="background:#0284c7; white-space:nowrap;">🔄 重新生成</button>
+              </div>
+              <div style="position:relative;">
+                <textarea id="exampleRecordOut" style="width:100%; height:260px; font-family:monospace; font-size:13px; line-height:1.6; background:#0f172a; padding:10px; border-radius:6px; border:1px solid #475569; color:#f8fafc; resize:vertical; box-sizing:border-box;"></textarea>
+                <button id="copySoapBtn" onclick="copyExampleSoap()" style="position:absolute; top:8px; right:8px; background:#10b981; color:#fff; border:none; border-radius:4px; padding:4px 10px; font-size:12px; font-weight:600; cursor:pointer;">📋 複製病歷</button>
+              </div>
+              <div id="exampleRecordNote" style="font-size: 12px; color: #94a3b8; margin-top: 8px; line-height:1.5;"></div>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 12px;">
+                <span id="saveDbStatus" style="font-size:12px; color:#10b981;"></span>
+                <div style="display:flex; gap:8px;">
+                  <button class="btn-action" style="background:#4f46e5;" onclick="saveSoapToDb()">💾 存入資料庫備用</button>
+                  <button class="btn-action" onclick="document.getElementById('exampleDialog').style.display='none'">完成</button>
+                </div>
+              </div>
+            </div>
             <span id="mailStatus" style="font-size: 12px; color: var(--text-muted);"></span>
           </div>
         </div>
@@ -499,31 +516,105 @@
       }
     }
 
-    // 範例病歷：order_code 取自使用者輸入；結果以 textContent 呈現（不使用 innerHTML）
-    async function generateExampleRecord() {
-      const orderCode = (window.prompt('醫令代碼（例：64140C）') || '').trim();
-      if (!orderCode) return;
-      const soapText = (window.prompt('原始 SOAP（可留空）') || '').trim();
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // 範例病歷：配合主診斷與醫令代碼生成，支援編輯、複製與存入 DB
+    async function generateExampleRecord(prefillOrder, prefillDiag) {
+      const orderEl = document.getElementById('orderInput');
+      const diagEl = document.getElementById('diagInput');
+      if (prefillOrder && orderEl) orderEl.value = prefillOrder;
+      if (prefillDiag && diagEl) diagEl.value = prefillDiag;
+      const modal = document.getElementById('exampleDialog');
+      if (modal) {
+        modal.style.display = 'block';
+      }
+      await fetchCustomSoapTemplate();
+    }
+
+    async function fetchCustomSoapTemplate() {
+      const orderCode = (document.getElementById('orderInput').value || '').trim();
+      const diagCode = (document.getElementById('diagInput').value || '').trim();
       const out = document.getElementById('exampleRecordOut');
       const note = document.getElementById('exampleRecordNote');
-      out.textContent = '生成中 …';
+      const statusEl = document.getElementById('saveDbStatus');
+      if (!orderCode) {
+        alert('請輸入醫令代碼');
+        return;
+      }
+      out.value = 'AI 正在為您依據給付規定與主診斷生成標準病歷中，請稍候 …';
       note.textContent = '';
-      document.getElementById('exampleDialog').showModal();
+      statusEl.textContent = '';
       try {
         const resp = await authFetch('/api/his/v1/cases/soap-enhance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ order_code: orderCode, soap_text: soapText }),
+          body: JSON.stringify({
+            order_code: orderCode,
+            case_id: 'MON-50454d462a22a23dbb47e4fb0769f105',
+            patient_history: diagCode ? `主診斷：${diagCode}` : ''
+          }),
         });
         const body = await resp.json();
         if (resp.ok && body.example_soap_template) {
-          out.textContent = body.example_soap_template;
-          note.textContent = '英文病歷主體可複製至 HIS；' + (body.rule_found ? '' : '（規則庫查無此代碼）') + (body.warning || '');
+          out.value = body.example_soap_template;
+          const advice = (body.bilingual_advice && body.bilingual_advice.approval_advice) ? body.bilingual_advice.approval_advice : '';
+          note.innerHTML = `<strong>💡 健保審查重點：</strong>${escapeHtml(advice)}`;
+        } else if (resp.ok && body.bilingual_advice && body.bilingual_advice.raw_response) {
+          out.value = body.bilingual_advice.raw_response;
+          note.textContent = '【注意】' + (body.warning || '模型已為您產出建議內容。');
         } else {
-          out.textContent = body.message || body.warning || '未產生範例病歷';
+          out.value = body.message || body.warning || '未產生範例病歷';
         }
       } catch (err) {
-        out.textContent = '無法連線至服務';
+        out.value = '無法連線至服務：' + err;
+      }
+    }
+
+    function copyExampleSoap() {
+      const out = document.getElementById('exampleRecordOut');
+      out.select();
+      navigator.clipboard.writeText(out.value).then(() => {
+        const btn = document.getElementById('copySoapBtn');
+        const oldText = btn.textContent;
+        btn.textContent = '✅ 已複製！';
+        setTimeout(() => { btn.textContent = oldText; }, 2000);
+      }).catch(() => {
+        document.execCommand('copy');
+        alert('病歷內容已複製至剪貼簿！');
+      });
+    }
+
+    async function saveSoapToDb() {
+      const out = document.getElementById('exampleRecordOut');
+      const orderCode = (document.getElementById('orderInput').value || '64140C').trim();
+      const statusEl = document.getElementById('saveDbStatus');
+      statusEl.textContent = '儲存中 …';
+      try {
+        const resp = await authFetch('/api/his/v1/cases/MON-50454d462a22a23dbb47e4fb0769f105/approve-callback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            approved_soap: out.value,
+            approval_status: 'revised',
+            doctor_id: 'L122448086'
+          }),
+        });
+        if (resp.ok) {
+          statusEl.textContent = '✅ 已成功儲存至案件資料庫 (cases.sqlite3)';
+          setTimeout(() => { statusEl.textContent = ''; }, 4000);
+        } else {
+          statusEl.textContent = '❌ 儲存失敗';
+        }
+      } catch (e) {
+        statusEl.textContent = '❌ 連線失敗: ' + e;
       }
     }
 

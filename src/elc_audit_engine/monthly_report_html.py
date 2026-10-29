@@ -92,6 +92,8 @@ details.rule-fulltext > summary { cursor: pointer; color: var(--accent); font-si
 .rule-src + .rule-src { margin-top: 10px; }
 .src { color: var(--muted); font-size: 11px; }
 pre.rule-text { white-space: pre-wrap; word-break: break-word; background: var(--quote-bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 13px/1.7 "Noto Sans TC", "Microsoft JhengHei", sans-serif; margin: 4px 0 0; }
+.btn-soap-gen { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 6px; display: inline-flex; align-items: center; gap: 4px; }
+.btn-soap-gen:hover { opacity: 0.9; }
 footer { margin-top: 32px; color: var(--muted); font-size: 12px; }
 """
 
@@ -173,12 +175,39 @@ def _rule_fulltext_html(finding: OrderFinding) -> str:
     return expander
 
 
-def _finding_html(finding: OrderFinding) -> str:
+def _finding_html(finding: OrderFinding, case: CaseAudit | None = None) -> str:
     flags = "".join(f'<span class="pill">{_e(_FLAG_LABELS.get(flag, flag))}</span>' for flag in finding.flags)
     title = f"<strong>{_e(finding.code)}</strong> {_e(finding.rule_name or '')} {flags}"
     amounts = _amount_text(finding)
     amount_line = f'<div class="amounts">{_e(amounts)}</div>' if amounts else ""
-    return f'<div class="item"><div class="item-title">{title}</div>{amount_line}{_rule_fulltext_html(finding)}</div>'
+    
+    # 範例病歷產生按鈕
+    gen_btn = ""
+    if case:
+        diag = _e(case.primary_diagnosis or "")
+        case_id = _e(case.case_id)
+        code = _e(finding.code)
+        name = _e(finding.rule_name or "")
+        gen_btn = (
+            f'<div style="margin: 8px 0 4px;">'
+            f'<button class="btn-soap-gen" type="button" '
+            f'data-case-id="{case_id}" data-order-code="{code}" data-order-name="{name}" data-diag="{diag}" '
+            f'onclick="triggerExampleSoap(this)">'
+            f'🧾 產生/檢視範例病歷'
+            f'</button>'
+            f'<div class="soap-preview-box" id="soap_box_{case_id}_{code}" style="display:none; margin-top:8px; background:var(--quote-bg); border:1px solid var(--line); border-radius:8px; padding:10px;">'
+            f'<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">'
+            f'<strong style="font-size:13px; color:var(--accent);">📋 AI 範例病歷（配合主診斷生成，可編輯複製）</strong>'
+            f'<div>'
+            f'<button type="button" style="background:#10b981; color:#fff; border:none; border-radius:4px; padding:2px 8px; font-size:12px; cursor:pointer; margin-right:4px;" onclick="copySoapText(this)">複製病歷</button>'
+            f'<button type="button" style="background:transparent; color:var(--muted); border:none; font-size:12px; cursor:pointer;" onclick="this.closest(\'.soap-preview-box\').style.display=\'none\'">收合</button>'
+            f'</div></div>'
+            f'<textarea class="soap-editable" style="width:100%; min-height:160px; font-family:monospace; font-size:12px; line-height:1.5; padding:8px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--ink); resize:vertical;"></textarea>'
+            f'<div class="soap-advice-note" style="font-size:12px; color:var(--muted); margin-top:4px;"></div>'
+            f'</div></div>'
+        )
+
+    return f'<div class="item"><div class="item-title">{title}</div>{amount_line}{_rule_fulltext_html(finding)}{gen_btn}</div>'
 
 
 def _case_header(case: CaseAudit) -> str:
@@ -212,7 +241,7 @@ def _case_html(case: CaseAudit) -> str:
         if case.secondary_diagnoses
         else ""
     )
-    findings = "".join(_finding_html(f) for f in case.findings)
+    findings = "".join(_finding_html(f, case) for f in case.findings)
     return f'<details class="case"><summary>{_case_header(case)}</summary>{secondary}{findings}</details>'
 
 
