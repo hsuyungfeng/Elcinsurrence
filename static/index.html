@@ -83,7 +83,7 @@
 
     /* Main Container */
     main {
-      flex: 1; display: grid; grid-template-columns: 340px 1fr;
+      flex: 1; display: grid; grid-template-columns: 280px 1fr;
       gap: 16px; padding: 16px; height: calc(100vh - 65px); overflow: hidden;
     }
 
@@ -171,16 +171,16 @@
       <div class="brand-title">Elcinsurrence 三軌自動化審核與申復工作台</div>
     </div>
 
-    <!-- Dual Mode Tabs -->
+    <!-- 3-Track Mode Tabs: 1. 當月申報預審 (原3) -> 2. 抽樣事前預審 (原1) -> 3. 核減事後申復 (原2) -->
     <div class="mode-switcher">
-      <button class="mode-btn active" id="tabMode1" onclick="switchWorkflowMode('sampling')">
-        📋 1. 抽樣事前預審 (CSV 導入 / 醫令支持度預審)
+      <button class="mode-btn active" id="tabMode3" onclick="switchWorkflowMode('monthly')">
+        📊 1. 當月申報檔預審 (TOTFA.zip / 高價醫令與藥品 / 規則核對)
+      </button>
+      <button class="mode-btn" id="tabMode1" onclick="switchWorkflowMode('sampling')">
+        📋 2. 抽樣事前預審 (CSV 導入 / 醫令支持度預審)
       </button>
       <button class="mode-btn" id="tabMode2" onclick="switchWorkflowMode('appeal')">
-        ⚖️ 2. 核減事後申復 (多源證據補強 / 申復理由生成)
-      </button>
-      <button class="mode-btn" id="tabMode3" onclick="switchWorkflowMode('monthly')">
-        📊 3. 當月申報檔預審 (TOTFA.zip / 高價醫令與藥品 / 臨床推理)
+        ⚖️ 3. 核減事後申復 (多源證據補強 / 申復理由生成)
       </button>
     </div>
   </header>
@@ -853,7 +853,8 @@
       const keyInput = document.getElementById('apiKeyInput');
       if (keyInput) keyInput.value = savedKey;
     }
-    switchWorkflowMode('sampling');
+    // 預設進入第 1 軌：當月申報檔預審
+    switchWorkflowMode('monthly');
   </script>
 </body>
 </html>

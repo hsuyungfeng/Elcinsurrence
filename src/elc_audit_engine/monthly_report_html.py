@@ -21,6 +21,7 @@ from elc_audit_engine.monthly_audit import (
     OrderFinding,
     report_view,
 )
+from elc_audit_engine.rule_repository.icd_titles import get_icd_chinese_title
 
 _FLAG_LABELS = {
     "points_over_350": "醫令點數 > 350",
@@ -81,7 +82,11 @@ details.case > summary { cursor: pointer; padding: 12px 0; }
 .item-title strong { font-size: 14px; }
 .pill { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 12px; background: var(--line); color: var(--ink); }
 .amounts { font-size: 14px; font-weight: 600; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
-details.rule-fulltext { margin-top: 8px; }
+.rule-blocks { margin-top: 8px; }
+.rule-payment { background: var(--quote-bg); border-left: 3px solid var(--accent); border-radius: 4px; padding: 8px 12px; margin: 6px 0; }
+.rule-payment-title { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+.rule-payment-text { font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+details.rule-fulltext { margin-top: 6px; }
 details.rule-fulltext > summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 600; }
 .rule-body { margin-top: 8px; }
 .rule-src + .rule-src { margin-top: 10px; }
@@ -136,18 +141,36 @@ def _amount_text(finding: OrderFinding) -> str:
 
 
 def _rule_fulltext_html(finding: OrderFinding) -> str:
-    """📜 規則全文展開區（僅在有原文時輸出）。"""
-    blocks = "".join(
-        f'<div class="rule-src"><div class="src">{_e(_SOURCE_LABELS.get(name, name))}</div>'
-        f'<pre class="rule-text">{_e(text)}</pre></div>'
-        for name, text in finding.source_texts
-    )
-    if not blocks:
+    """📜 規則全文展開區：
+    - 給付規定（payment_text）：有內容時以 .rule-payment 直接展開顯示。
+    - 條文全文（article_full_text）或完整給付條文總覽：以 <details class="rule-fulltext"> 折疊，按壓 summary 展開全文。
+    """
+    if not finding.source_texts:
         return ""
-    return (
+
+    payment_boxes = []
+    blocks = []
+    for name, text in finding.source_texts:
+        label = _SOURCE_LABELS.get(name, name)
+        if name == "payment_text":
+            payment_boxes.append(
+                f'<div class="rule-payment">'
+                f'<div class="rule-payment-title">📜 給付規定（payment_text）</div>'
+                f'<div class="rule-payment-text">{_e(text)}</div>'
+                f'</div>'
+            )
+        blocks.append(
+            f'<div class="rule-src"><div class="src">{_e(label)}</div>'
+            f'<pre class="rule-text">{_e(text)}</pre></div>'
+        )
+
+    expander = (
         '<details class="rule-fulltext"><summary>📜 檢視完整給付規定條文</summary>'
-        f'<div class="rule-body">{blocks}</div></details>'
+        f'<div class="rule-body">{"".join(blocks)}</div></details>'
     )
+    if payment_boxes:
+        return f'<div class="rule-blocks">{"".join(payment_boxes)}{expander}</div>'
+    return expander
 
 
 def _finding_html(finding: OrderFinding) -> str:
@@ -159,7 +182,12 @@ def _finding_html(finding: OrderFinding) -> str:
 
 
 def _case_header(case: CaseAudit) -> str:
-    """案件標題：流水號 · 身分證字號 [d3] · 姓名 [d49] · 出生日期 [d11] · 醫療總費用 [d39] 點 · 科別 [d8] · 醫師 [d30] · 就醫日 [d9] · 主診斷 [d19]（缺漏不顯示）。"""
+    """案件標題：流水號 · 身分證字號 [d3] · 姓名 [d49] · 出生日期 [d11] · 醫療總費用 [d39] 點 · 科別 [d8] · 醫師 [d30] · 就醫日 [d9] · 主診斷 [d19]（含中文名稱，缺漏不顯示）。"""
+    diag_text = None
+    if case.primary_diagnosis:
+        c_title = get_icd_chinese_title(case.primary_diagnosis)
+        diag_text = f"{case.primary_diagnosis} ({c_title})" if c_title else case.primary_diagnosis
+
     segments = [
         ("流水號", case.case_seq),
         ("身分證字號", case.patient_id),
@@ -169,7 +197,7 @@ def _case_header(case: CaseAudit) -> str:
         ("科別", case.department),
         ("醫師", case.doctor_code),
         ("就醫日", case.visit_date),
-        ("主診斷", case.primary_diagnosis),
+        ("主診斷", diag_text),
     ]
     parts = []
     for label, value in segments:
