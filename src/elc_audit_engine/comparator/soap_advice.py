@@ -13,7 +13,7 @@ from typing import Any
 from elc_audit_engine.prompt_safety import DATA_ISOLATION_NOTICE, fence
 from elc_audit_engine.rule_repository.mapping.llm_client import chat_completion
 
-_JSON_BLOCK_RE = re.compile(r"\{.*\}", re.S)
+_JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 _SYSTEM_PROMPT = (
     "You are an expert clinical medical reviewer and National Health Insurance (NHI) audit specialist in Taiwan.\n"

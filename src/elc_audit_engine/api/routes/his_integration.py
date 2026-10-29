@@ -20,7 +20,7 @@ import logging
 import os
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from flask import Blueprint, current_app, jsonify, request
@@ -86,7 +86,7 @@ def push_his_case():
         "soap": soap_text,
         "his_encounter_id": his_encounter_id,
         "source": "his_direct_api",
-        "received_at": datetime.now(timezone.utc).isoformat(),
+        "received_at": datetime.now(UTC).isoformat(),
     }
     try:
         case_store().create(
@@ -176,7 +176,7 @@ def approve_callback(case_id: str):
         "doctor_id": doctor_id,
         "approval_status": approval_status,
         "final_soap": approved_soap,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
     webhook_url = current_app.config.get("HIS_WEBHOOK_URL") or os.environ.get("HIS_WEBHOOK_URL")
     if webhook_url:

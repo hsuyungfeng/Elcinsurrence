@@ -258,7 +258,7 @@
               <!-- Qwen3.8-27B SOAP 比對建議與醫師審批面板 -->
               <div id="sLlmSoapPanel" style="margin-top: 14px; background: rgba(15,23,42,0.6); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 12px; display: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                  <span style="font-weight: 700; color: #38bdf8; font-size: 13px;">🤖 LLM 智慧 SOAP 補強建議 (Qwen3.8-27B)</span>
+                  <span style="font-weight: 700; color: #38bdf8; font-size: 13px;">🤖 LLM 智慧 SOAP 補強建議 (Qwen3.8-27B)｜英文病歷主體（可直接複製至 HIS）＋中文審查意見</span>
                   <button type="button" class="btn-action" style="padding: 3px 8px; font-size: 11px;" onclick="applyRecommendedSoap()">套用建議至病歷</button>
                 </div>
                 <div id="sLlmComparison" style="font-size: 12px; color: #cbd5e1; margin-bottom: 8px; line-height: 1.5; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;"></div>
@@ -376,6 +376,13 @@
             <button class="btn-action" onclick="document.getElementById('monthlyFileInput').click()">📦 上傳 TOTFA.zip 總檔</button>
             <button class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669);" onclick="openMonthlyHtmlReport()">🔍 開啟視覺化審核卡片 (HTML)</button>
             <button class="btn-action" style="background: linear-gradient(135deg, #6366f1, #4f46e5);" onclick="mailMonthlyReport()">📧 郵寄報告至信箱</button>
+            <button class="btn-action" style="background: linear-gradient(135deg, #0ea5e9, #0284c7);" onclick="generateExampleRecord()" title="以本機 LLM 依規則生成英文範例病歷（需醫師審核）">🧾 產生範例病歷</button>
+            <dialog id="exampleDialog" style="max-width: 640px; width: 90%; background: var(--card, #111827); color: inherit; border: 1px solid rgba(148,163,184,0.4); border-radius: 10px;">
+              <div style="font-weight: 700; margin-bottom: 6px;">🧾 範例病歷（AI 生成，須醫師審核後才可使用）</div>
+              <pre id="exampleRecordOut" style="white-space: pre-wrap; font-size: 13px; line-height: 1.6; background: rgba(0,0,0,0.25); padding: 10px; border-radius: 6px;"></pre>
+              <div id="exampleRecordNote" style="font-size: 12px; color: var(--text-muted); margin-top: 6px;"></div>
+              <div style="text-align: right; margin-top: 8px;"><button class="btn-action" onclick="document.getElementById('exampleDialog').close()">關閉</button></div>
+            </dialog>
             <span id="mailStatus" style="font-size: 12px; color: var(--text-muted);"></span>
           </div>
         </div>
@@ -489,6 +496,34 @@
         }
       } catch (err) {
         setMailStatus('寄送失敗：無法連線至服務');
+      }
+    }
+
+    // 範例病歷：order_code 取自使用者輸入；結果以 textContent 呈現（不使用 innerHTML）
+    async function generateExampleRecord() {
+      const orderCode = (window.prompt('醫令代碼（例：64140C）') || '').trim();
+      if (!orderCode) return;
+      const soapText = (window.prompt('原始 SOAP（可留空）') || '').trim();
+      const out = document.getElementById('exampleRecordOut');
+      const note = document.getElementById('exampleRecordNote');
+      out.textContent = '生成中 …';
+      note.textContent = '';
+      document.getElementById('exampleDialog').showModal();
+      try {
+        const resp = await authFetch('/api/his/v1/cases/soap-enhance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order_code: orderCode, soap_text: soapText }),
+        });
+        const body = await resp.json();
+        if (resp.ok && body.example_soap_template) {
+          out.textContent = body.example_soap_template;
+          note.textContent = '英文病歷主體可複製至 HIS；' + (body.rule_found ? '' : '（規則庫查無此代碼）') + (body.warning || '');
+        } else {
+          out.textContent = body.message || body.warning || '未產生範例病歷';
+        }
+      } catch (err) {
+        out.textContent = '無法連線至服務';
       }
     }
 
