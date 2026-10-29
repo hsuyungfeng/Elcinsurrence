@@ -115,10 +115,10 @@
     .badge-none { background: var(--color-none-bg); color: var(--color-none); border: 1px solid var(--color-none); }
 
     /* Workspace */
-    .workspace { display: grid; grid-template-rows: auto 1fr; gap: 16px; overflow: hidden; }
+    .workspace { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
 
     /* Mode 1: Sampling View (事前預審) */
-    .view-container { display: none; height: 100%; grid-template-rows: auto 1fr; gap: 16px; overflow: hidden; }
+    .view-container { display: none; height: 100%; min-height: 0; grid-template-rows: auto 1fr; gap: 16px; overflow: hidden; }
     .view-container.active { display: grid; }
 
     .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; overflow: hidden; }
@@ -361,13 +361,13 @@
           </div>
         </div>
 
-        <div class="panel" style="flex:1; overflow:hidden;">
+        <div class="panel" style="flex: 1; min-height: 0; height: 100%; overflow: hidden;">
           <div class="panel-header">
-            <div class="panel-title">📊 申報總檔高風險分析與 PageIndex 臨床推理卡片</div>
+            <div class="panel-title">📊 申報總檔高風險醫令與給付規定預審報告</div>
             <div id="mBatchStats" style="font-size: 12px; color: var(--text-muted);"></div>
           </div>
-          <div class="panel-body" id="mBatchReportFrame" style="padding: 0; background: #0b1120;">
-            <iframe id="monthlyReportIframe" style="width:100%; height:100%; border:none;" src="about:blank"></iframe>
+          <div class="panel-body" id="mBatchReportFrame" style="padding: 0; background: #0b1120; flex: 1; min-height: 0; height: 100%; display: flex; flex-direction: column;">
+            <iframe id="monthlyReportIframe" style="flex: 1; width: 100%; height: 100%; min-height: 0; border: none; display: block;" src="about:blank"></iframe>
           </div>
         </div>
       </div>
