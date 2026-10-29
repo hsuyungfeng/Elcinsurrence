@@ -183,3 +183,161 @@
 | 2026-08-11 | **GSD Phase 14 — 審核軌跡＋申復佐證包列印（完成）** | `evidence_packet/` 三層管線（python-docx → soffice headless → pypdf 合訂）；`image_processor.py`（Pillow + pillow_heif HEIC 支援 + EXIF 自動旋轉 + A4 縮放 + 損毀圖片紅色警示框跳過）；`builder.py`（封面/軌跡/摘要/理由/附錄）；`POST /api/appeal/evidence-packet/print` + `scripts/build_evidence_packet.py` CLI；修復 `build_evidence_packet_docx` 缺 `facility` 參數 Bug（`46ab11a`） |
 | 2026-08-11 | **Milestone v1.1「紙本→數位化整合三項輸出」全數 SHIPPED** | Phases 12/13/14 全數完成；全套件 **458 passed / 2 skipped, 0 failed**（145.99s）；`git push origin/main`；HANDOFF.json + `.continue-here.md` 已封存 |
 
+
+
+  針對您提出的 「雙軌資料來源（自建 HIS API vs. 外來未知系統上傳 ZIP）」、「健保 XML 三層結構中無
+  SOAP 之現狀」、「基層診所高頻重複醫令/診斷的規則比對機制」 以及 「未來對接 HIS Database 進行
+  LLM SOAP 補強與申復閉環」，進行深度調研與架構規劃建議：
+  ──────
+  ### 一、 健保 XML 現狀與雙軌架構深度比對
+
+  │ Diagram exceeds terminal width (292 > 99 cols)
+  │ Displayed as code block. Widen terminal to view inline.
+
+    flowchart TD
+        subgraph DataSources["資料輸入雙軌 (Ingestion Dual-Track)"]
+            SourceA["軌道 A: 自有 HIS 系統 (Direct API / DB Hook)"]
+            SourceB["軌道 B: 外來未知系統 (TOTFA.zip / CSV 批次上傳)"]
+        end
+
+        subgraph DataPayload["資料主幹 (Payload Context)"]
+            XMLTree["健保標準 XML 三層結構<br/>tdata (總表) → ddata/dbody (點數) → pdata (醫令)"]
+            ClinicalData["臨床病歷層 (EHR / SOAP)<br/>• 門診原始 SOAP (主訴/客觀/評估/處置)<br/>•
+            健保雲端跨院歷史 (Timeline / Labs / Exams)"]
+        end
+
+        subgraph CoreEngine["審核與比對核心 (ELC Audit Engine)"]
+            RuleMatch["官方給付規則庫 (SQLite3 + 文本分析)<br/>• 藥品給付規定
+            (payment_text)<br/>• 特殊支付標準 (article_full_text)"]
+            HighFrequency["高頻醫令快取與精準過濾<br/>(總費用>1000, 點數≥350, 藥價≥5)"]
+        end
+
+        subgraph LLMReasoning["本地推理層 (Qwen3.8-27B-FP8 / UD-Q4)"]
+            SOAPGen["SOAP 智慧補強引擎<br/>• 主體：英文專有名詞與醫學術語<br/>•
+            補充：繁體中文健保審批指導"]
+            AppealDraft["申復爭點草稿 (四段式 D10 理由書)"]
+        end
+
+        subgraph OutputActions["輸出與回寫 (Actions & Storage)"]
+            WebReview["Web 視覺化審核卡片 (HTML / 郵件通知)"]
+            HISBackwrite["回寫端點 (HIS Database / Webhook Connector)"]
+        end
+
+        SourceA -->|完整帶入 SOAP + XML 欄位| XMLTree
+        SourceA -->|病歷號關聯| ClinicalData
+        SourceB -->|僅含申報 XML，必定無 SOAP| XMLTree
+
+        XMLTree --> HighFrequency
+        ClinicalData -.-> HighFrequency
+        HighFrequency --> RuleMatch
+
+        RuleMatch -->|外來 ZIP 僅核對申報規則| WebReview
+        RuleMatch -->|自有 HIS 結合 SOAP+雲端| LLMReasoning
+        ClinicalData --> LLMReasoning
+
+        LLMReasoning --> SOAPGen
+        LLMReasoning --> AppealDraft
+        SOAPGen --> HISBackwrite
+        AppealDraft --> HISBackwrite
+  ──────
+  ### 二、 核心問題架構分析與策略建議
+
+  #### 1. 雙軌輸入對齊策略（自有 API vs. 外來未知系統）
+
+  • 外來 ZIP（TOTFA.zip）必定無 SOAP：
+      • 健保署標準 XML 規格（<outpatient> 結構）為「純費用結算與處方申報明細」，從未包含病患門診
+      SOAP 或病程記錄（Progress Notes）。
+      • 策略：外來 ZIP 純作「申報法規預審」（目前系統已落實）：
+          • 快速稽核有無違反適應症、高價藥物與處置有無規定限制、有無漏填 ICD 碼、有無超額開立。
+          • 不強行對其進行 SOAP 預審，避免模型在無文本的情況下空轉或捏造。
+
+  • 自有 HIS 系統（API / DB Direct Hook）：
+      • 透過專屬 API 接收「<dbody> 申報欄位 + soap_text + 健保雲端查詢暫存（cloud_timeline）」。
+      • 讓 LLM 擁有完整的雙向上下文（左邊是申報項目，右邊是醫師隨手打的簡短
+      SOAP），才能啟動自動補強。
+
+
+  #### 2. 基層診所「高度重複醫令、藥令、診斷」之治理
+
+  • 臨床現況：
+      • 基層診所（如耳鼻喉科、小兒科、家醫科、骨科診所）常態開立的醫令與診斷高度集中（約 20~30
+      種診斷如 J00、E11.9，搭配特定口服藥抗生素、消炎止痛藥、或是高點數處置如
+      64140C、48004C、14050B）。
+  • 建議機制：
+      • 以官方📜 給付規定（payment_text）為唯一事實錨點：
+          • 將給付規定全文作為原始依據，LLM 不得自由發揮。
+      • 診所專屬「高頻比對樣板規則集」：
+          • 將診所常用的前 30 組「診斷碼 ↔ 醫令 ↔
+          給付規定約束」在記憶體建立快速向量/正則比對索引，在呼叫 LLM
+          前先命中法規要件（例如「需間隔3個月」、「需附術前照片」），大幅節省推論時間與算力。
+
+
+
+  #### 3. SOAP 語言規範：英文為主，繁體中文為補充意見
+
+  • 臨床標準規範：
+      • 台灣醫師門診 SOAP 習慣以醫學英文為主（如 S: Sore throat for 3 days; O: Tonsil enlargement
+      with exudate, mild fever 38.2; A: Acute exudative tonsillitis (J03.90); P: Amoxicillin
+      500mg TID, symptomatic relief）。
+      • 若 LLM 產出全中文病歷，醫師在貼回 HIS 時往往覺得突兀且不符合臨床慣例。
+  • 提示詞架構約束：
+      • recommended_soap (S/O/A/P)：嚴格採用 Medical
+      English（符合醫學術語、英文簡寫與專業格式），醫師可直接一鍵帶回 HIS。
+      • approval_advice / comparison：採用
+      繁體中文（台灣健保核減語境），向主治醫師條列說明審核風險、健保退費隱患與具體審批指引。
+
+  ──────
+  ### 三、 預留 HIS Database 連接點（Connector / Webhook 設計）
+
+  為避免未來系統重構，需在現有架構中預留下列標準資料結構與回寫端點：
+
+  #### 1. 資料庫對接中繼結構設計（擴充 Payload Schema）
+
+  在現有的 SubmissionCase 與 CaseStore 中，預留以下 4 個擴充槽位（Custom Slots）：
+
+    {
+      "case_seq": "101",
+      "record_no": "M220518024",
+      "his_patient_id": "HIS_PT_09876",
+      "his_encounter_id": "ENC_20261029_001",
+      "his_source_system": "VisionHIS_v3",
+      "soap": {
+        "original_soap": "S: DM follow up\nO: BP 130/80\nA: DM\nP: HbA1c",
+        "recommended_soap": "S: Type 2 DM routine follow-up...\nO: BP 130/80 mmHg...\nA: Type 2
+        diabetes mellitus without complications (E11.9)...\nP: HbA1c check...",
+        "doctor_approved": false,
+        "approved_at": null,
+        "approving_doctor_id": "D12345"
+      },
+      "cloud_records": [
+        {
+          "source": "NHI_Cloud_EHR",
+          "date": "2026-07-15",
+          "category": "Lab",
+          "summary": "HbA1c 7.2%"
+        }
+      ]
+    }
+
+  #### 2. HIS API 連接點規劃（三向 API）
+
+  1. POST /api/his/v1/cases/push（HIS 推送病歷至預審平台）：
+      • 診所 HIS 於存檔或開立處方時，直接將看診資料（含 XML 欄位與 SOAP）以 JSON 推送過來。
+  2. POST /api/his/v1/cases/soap-enhance（即時 SOAP 補強與比對）：
+      • 接收原始 SOAP + 雲端歷程，調用本地 Qwen 模型，回傳英文 SOAP 與繁中審批建議。
+  3. POST /api/his/v1/cases/{id}/approve-callback（審批回寫 Webhook）：
+      • 當醫師在 Web 工作台上點擊「套用建議」或「核可」時，平台主動將定稿後的英文 SOAP Webhook
+      回傳給診所 HIS 伺服器，直接寫入 HIS 門診病歷資料庫。
+
+  ──────
+  ### 四、 總結與後續推進建議
+
+  1. 第 1 軌（當月申報預審）定位：
+      • 維持當前純法規與高風險預審（外來 ZIP），不強求無中生有產出
+      SOAP，重點在抓出高額核減漏洞（點數 >350、藥價 >5、適應症衝突）。
+  2. 第 2、3 軌（事前預審 / 事後申復）定位：
+      • 導入 Qwen3.8-27B 本地比對，嚴格遵循「SOAP 英文主體 + 審核意見繁體中文」策略。
+  3. 下一步實施重點：
+      • 調整 soap_advice.py 系統 Prompt，使模型嚴格輸出 臨床英文 SOAP 與 繁體中文審批要點。
+      • 保留 HIS 整合的標準 REST API 接口，供日後直接與診所資料庫進行 Webhook 串接。
+

@@ -26,7 +26,7 @@ from elc_audit_engine.case_store.states import (
 )
 from elc_audit_engine.safe_paths import safe_filename
 
-_VALID_KINDS = {"sampling", "appeal", "monthly"}
+_VALID_KINDS = {"sampling", "appeal", "monthly", "his"}
 
 
 @dataclass(frozen=True)
