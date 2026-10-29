@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import uuid
 
 from flask import Blueprint, Response, current_app, jsonify, request
@@ -91,9 +92,22 @@ def upload_monthly():
             rules_db_path=current_app.config.get("ELC_RULES_DB_PATH"),
             persist=True,
         )
+
+        # 申報總檔與分析結果留存伺服機持久目錄（data/uploads/ 与 data/output/）
+        upload_dir = current_app.config.get("ELC_UPLOAD_DIR") or settings.DATA_DIR
+        os.makedirs(upload_dir, exist_ok=True)
+        saved_zip = os.path.join(upload_dir, f"{ingest.batch}.zip")
+        shutil.copy2(dest, saved_zip)
+
+        out_dir = current_app.config.get("ELC_OUTPUT_DIR") or settings.OUTPUT_DIR
+        os.makedirs(out_dir, exist_ok=True)
+        report_html = render_batch_report_html(audit)
+        saved_html = os.path.join(out_dir, f"report_{ingest.batch}.html")
+        with open(saved_html, "w", encoding="utf-8") as f:
+            f.write(report_html)
     finally:
         if os.path.exists(dest):
-            os.remove(dest)  # PHI 最小化：暫存檔即時清除
+            os.remove(dest)  # 清理暫存檔（原始檔已安全備份至 saved_zip）
 
     return jsonify({
         "status": "success",

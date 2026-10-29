@@ -13,6 +13,7 @@ import zipfile
 
 import pytest
 
+from config import settings
 from elc_audit_engine.monthly_audit import ARTIFACT_NAME
 from elc_audit_engine.rule_repository.db import (
     SCHEMA_DRUG,
@@ -166,6 +167,11 @@ def test_temp_zip_is_removed_after_success(client, app):
     _upload(client, _sample_zip())
     raw_dir = app.config["ELC_RAW_DIR"]
     assert os.listdir(raw_dir) == []
+    # 驗證伺服機端持久留存：上傳總檔 .zip 與分析報告 .html
+    upload_dir = app.config["ELC_UPLOAD_DIR"]
+    assert os.path.exists(os.path.join(upload_dir, f"{BATCH}.zip"))
+    out_dir = app.config.get("ELC_OUTPUT_DIR") or settings.OUTPUT_DIR
+    assert os.path.exists(os.path.join(out_dir, f"report_{BATCH}.html"))
 
 
 def test_missing_rules_database_still_200_but_undetermined(make_api_app, tmp_path):
