@@ -120,6 +120,7 @@ def test_detect_media_type():
     assert detect_media_type("photo.jpg") == "image"
     assert detect_media_type("photo.JPEG") == "image"
     assert detect_media_type("photo.png") == "image"
+    assert detect_media_type("archive.zip") == "zip"
 
 
 def test_detect_media_type_unsupported():

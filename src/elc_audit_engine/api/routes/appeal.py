@@ -9,10 +9,13 @@ from flask import Blueprint, current_app, jsonify, request
 
 from elc_audit_engine import attachment_store
 from elc_audit_engine.case_store import CaseNotFoundError, IllegalTransitionError
+from elc_audit_engine.comparator.soap_advice import generate_soap_advice
 from elc_audit_engine.generators import build_appeal_draft, render_appeal_json
 from elc_audit_engine.ingest import MediaExtractError, detect_media_type, extract_text
+from elc_audit_engine.ingest.zip_support import inspect_zip_contents
 from elc_audit_engine.parsers.deduction import DeductionFileError, parse_deduction_file
 from elc_audit_engine.parsers.models import DeductionRecord
+from elc_audit_engine.parsers.totfa import parse_totfa_zip
 from elc_audit_engine.rule_repository import get_rule
 from elc_audit_engine.rule_repository.errors import RuleRepositoryError
 
@@ -134,6 +137,27 @@ def generate_appeal_draft():
     )
     state_transition = _advance_to_appealed(case_id, draft)
 
+    # 整合 Qwen3.8-27B 智慧比對：比對原始 SOAP 與雲端病歷/多源證據，產出 SOAP 補強與申復理由建議
+    soap_advice = None
+    try:
+        history_desc = ""
+        if timeline and timeline.events:
+            history_desc = "\n".join(
+                f"- [{e.date}] {e.category}: {e.summary}" for e in timeline.events[:5]
+            )
+        if evidence:
+            ev_desc = "\n".join(f"- [證據] {e}" for e in evidence)
+            history_desc = f"{history_desc}\n{ev_desc}".strip()
+        soap_advice = generate_soap_advice(
+            order_code=order_code,
+            order_name=order_name or order_code,
+            soap_text=deduction_reason or "",
+            patient_history=history_desc,
+            rule_text=rule_text or "",
+        )
+    except Exception as exc:
+        current_app.logger.warning("LLM SOAP appeal advice generation failed: %s", exc)
+
     # W4 契約橋（D-03）：回應主體為 render_appeal_json 標準契約（單一契約）。
     payload = json.loads(render_appeal_json(draft))
     # A-CR-04：通過驗證的草稿寫回 CaseStore，供佐證包列印讀取。
@@ -143,6 +167,7 @@ def generate_appeal_draft():
     payload["case_id"] = case_id or None
     payload["state_transition"] = state_transition
     payload["rule_found"] = rule.found
+    payload["soap_advice"] = soap_advice
     payload["records_degraded"] = timeline is None
     payload["records_source"] = records_source
     payload["records_window_anchor"] = "visit_date" if visit_date else "today"
@@ -164,7 +189,57 @@ def import_appeal_cases():
 
     try:
         media_type = detect_media_type(filename)
-        if media_type != "csv":
+        if media_type == "zip":
+            zip_cat, zip_items = inspect_zip_contents(path)
+            if zip_cat == "totfa":
+                totfa_res = parse_totfa_zip(path)
+                records = []
+                seen_cases = set()
+                for c in totfa_res.cases:
+                    tp = 0
+                    try:
+                        tp = int(c.raw.get("d39") or 0)
+                    except:
+                        pass
+                    for o in c.orders:
+                        pts = 0
+                        try:
+                            pts = int(o.points or 0)
+                        except:
+                            pass
+                        price = 0.0
+                        try:
+                            price = float(o.unit_price or 0.0)
+                        except:
+                            pass
+                        if (tp > 1000 and (pts >= 350 or price >= 5.0)) or len(records) < 50:
+                            if c.case_seq not in seen_cases and len(records) < 50:
+                                seen_cases.add(c.case_seq)
+                                records.append(DeductionRecord(
+                                    non_reimbursed_amount=pts or int(price),
+                                    case_seq=c.case_seq,
+                                    visit_date=c.visit_date,
+                                    id_number=c.record_no,
+                                    order_seq=str(o.seq) if o.seq is not None else None,
+                                    order_code=o.code,
+                                    deduction_reason=f"申報總檔核對預審（主診斷：{c.primary_diagnosis}）",
+                                ))
+                from elc_audit_engine.parsers.deduction import DeductionParseResult
+                result = DeductionParseResult(records=tuple(records), rejected=())
+            elif zip_cat == "csv" and zip_items:
+                # 寫出解出的 csv 暫存並解析
+                import tempfile
+                with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp_csv:
+                    tmp_csv.write(zip_items[0][1])
+                    tmp_csv_path = tmp_csv.name
+                try:
+                    result = parse_deduction_file(tmp_csv_path)
+                finally:
+                    if os.path.exists(tmp_csv_path):
+                        os.remove(tmp_csv_path)
+            else:
+                raise DeductionFileError("ZIP 壓縮檔內未找到 TOTFA.xml 或有效的 CSV 檔案")
+        elif media_type != "csv":
             text, tool = extract_text(path, media_type=media_type)
             return jsonify({
                 "status": "partial",
@@ -174,7 +249,8 @@ def import_appeal_cases():
                 "message": "紙本核減清單（PDF／影像）無法自動結構化為 18 欄，請以 CSV 匯出後上傳，或改用逐筆新增。",
                 "extracted_text_preview": text[:500],
             })
-        result = parse_deduction_file(path)
+        else:
+            result = parse_deduction_file(path)
     except (MediaExtractError, DeductionFileError) as exc:
         current_app.logger.warning("appeal import failed: %s", exc)
         raise ApiError(import_error_message(exc))

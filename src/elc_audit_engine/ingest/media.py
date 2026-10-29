@@ -35,7 +35,7 @@ class MediaExtractError(Exception):
 
 
 def detect_media_type(filename: str) -> str:
-    """依副檔名回傳 ``csv`` / ``pdf`` / ``image``；不支援則拋 MediaExtractError。
+    """依副檔名回傳 ``csv`` / ``pdf`` / ``image`` / ``zip``；不支援則拋 MediaExtractError。
 
     Args:
         filename: 上傳檔名（僅副檔名有意義）。
@@ -47,6 +47,8 @@ def detect_media_type(filename: str) -> str:
         return "pdf"
     if ext in _IMAGE_EXTS:
         return "image"
+    if ext == ".zip":
+        return "zip"
     raise MediaExtractError(
         f"不支援的檔案類型: {ext or '(無副檔名)'}（支援 CSV / PDF / JPEG 等影像）"
     )

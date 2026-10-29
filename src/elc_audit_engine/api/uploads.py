@@ -12,7 +12,7 @@ from elc_audit_engine.ingest.media import MediaLimitError
 from .errors import UploadFileError
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-ALLOWED_EXTS = {".csv", ".pdf", ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
+ALLOWED_EXTS = {".csv", ".pdf", ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp", ".zip"}
 
 
 def save_upload(file_storage, raw_dir: str) -> tuple[str, str]:

@@ -191,8 +191,8 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-title" id="sidebarListTitle">事前預審抽樣清單</div>
-        <button style="background: rgba(6,182,212,0.15); border: 1px solid var(--accent-cyan); color: #38bdf8; font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer;" onclick="document.getElementById('importFile').click()" title="匯入 CSV（digital）／PDF／JPEG 掃描影像（paper→OCR）">📂 匯入 CSV/PDF/影像</button>
-        <input type="file" id="importFile" accept=".csv,.pdf,.jpg,.jpeg,.png,.tif,.tiff,.bmp,.webp" style="display:none;" onchange="importCases(this.files[0])">
+        <button style="background: rgba(6,182,212,0.15); border: 1px solid var(--accent-cyan); color: #38bdf8; font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer;" onclick="document.getElementById('importFile').click()" title="匯入 TOTFA.zip／CSV／PDF／影像">📂 匯入 ZIP/CSV/PDF</button>
+        <input type="file" id="importFile" accept=".csv,.pdf,.jpg,.jpeg,.png,.tif,.tiff,.bmp,.webp,.zip" style="display:none;" onchange="importCases(this.files[0])">
       </div>
       <div style="padding: 6px 12px; display: flex; gap: 6px; align-items: center;">
         <input type="password" id="apiKeyInput" placeholder="API Key（讀取案件清單必填）" autocomplete="off"
@@ -248,12 +248,24 @@
 
           <div class="panel">
             <div class="panel-header">
-              <div class="panel-title">🛠️ 醫令支持度預先補強建議</div>
+              <div class="panel-title">🛠️ 醫令支持度預先補強建議（Qwen3.8-27B 智慧分析）</div>
             </div>
             <div class="panel-body">
               <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); padding: 14px; border-radius: 8px; color: #10b981; font-size: 13px; line-height: 1.6;" id="sAdviceBox">
                 建議補強：請醫師於 P 欄補充『病患上次 HbA1c 8.2%，本次為3個月例行評估』以達強支持。
               </div>
+
+              <!-- Qwen3.8-27B SOAP 比對建議與醫師審批面板 -->
+              <div id="sLlmSoapPanel" style="margin-top: 14px; background: rgba(15,23,42,0.6); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 12px; display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <span style="font-weight: 700; color: #38bdf8; font-size: 13px;">🤖 LLM 智慧 SOAP 補強建議 (Qwen3.8-27B)</span>
+                  <button type="button" class="btn-action" style="padding: 3px 8px; font-size: 11px;" onclick="applyRecommendedSoap()">套用建議至病歷</button>
+                </div>
+                <div id="sLlmComparison" style="font-size: 12px; color: #cbd5e1; margin-bottom: 8px; line-height: 1.5; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;"></div>
+                <div id="sLlmSoapPreview" style="font-size: 12px; color: #a7f3d0; line-height: 1.5; white-space: pre-wrap; background: rgba(6,78,59,0.2); padding: 8px; border-radius: 6px; border: 1px solid rgba(16,185,129,0.2);"></div>
+                <div id="sLlmApprovalAdvice" style="font-size: 12px; color: #fbbf24; margin-top: 8px; line-height: 1.5;"></div>
+              </div>
+
               <div style="margin-top: 16px;">
                 <button class="btn-action" style="width: 100%;" onclick="alert('預審結果與補強建議已儲存！將送出至抽審系統。')">✅ 完成補強並送出抽審檔案</button>
               </div>
@@ -333,6 +345,13 @@
 
               <label style="font-size: 11px; color: #38bdf8; display: block; margin-bottom: 2px;">④ 病歷佐證 (醫師申復說明)</label>
               <textarea class="appeal-input" id="aSec4"></textarea>
+
+              <!-- Qwen3.8-27B 申復比對分析與審批建議 -->
+              <div id="aLlmSoapPanel" style="margin-top: 10px; background: rgba(15,23,42,0.6); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 10px; display: none;">
+                <div style="font-weight: 700; color: #38bdf8; font-size: 12px; margin-bottom: 6px;">🤖 LLM 智慧分析與審批建議 (Qwen3.8-27B)</div>
+                <div id="aLlmComparison" style="font-size: 11px; color: #cbd5e1; margin-bottom: 6px; line-height: 1.4;"></div>
+                <div id="aLlmAdvice" style="font-size: 11px; color: #fbbf24; line-height: 1.4;"></div>
+              </div>
 
               <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
                 <span style="font-size: 12px; color: var(--text-muted);">字數檢核：<strong style="color:#10b981;" id="aCharCount">0 / 2000 字</strong></span>
@@ -755,6 +774,30 @@
           '⚠ 病歷缺席：' + (data.records_degraded_reason || '未含半年病史佐證') + '\n' +
           adv.innerText;
       }
+
+      // Qwen3.8-27B 智慧比對與 SOAP 補強呈現
+      const llmPanel = document.getElementById('sLlmSoapPanel');
+      if (data.soap_advice && data.soap_advice.status === 'success') {
+        llmPanel.style.display = 'block';
+        document.getElementById('sLlmComparison').innerText = '🔍 比對分析：' + (data.soap_advice.comparison || '');
+        const rSoap = data.soap_advice.recommended_soap || {};
+        document.getElementById('sLlmSoapPreview').innerText =
+          'S: ' + (rSoap.s || '') + '\n' +
+          'O: ' + (rSoap.o || '') + '\n' +
+          'A: ' + (rSoap.a || '') + '\n' +
+          'P: ' + (rSoap.p || '');
+        document.getElementById('sLlmApprovalAdvice').innerText = '👨‍⚕️ 審批建議：' + (data.soap_advice.approval_advice || '');
+      } else {
+        llmPanel.style.display = 'none';
+      }
+    }
+
+    function applyRecommendedSoap() {
+      const preview = document.getElementById('sLlmSoapPreview').innerText;
+      if (preview) {
+        document.getElementById('sSoapInput').value = preview;
+        alert('已將 LLM 建議 SOAP 填入病歷編輯框，可手動微調後送審！');
+      }
     }
 
     function selectAppealCase(id) {
@@ -835,6 +878,16 @@
         document.getElementById('aSec3').value =
           '（規則庫查無此醫令條文，請人工補充依據）\n' +
           document.getElementById('aSec3').value;
+      }
+
+      // Qwen3.8-27B 申復比對分析與審批建議呈現
+      const aLlmPanel = document.getElementById('aLlmSoapPanel');
+      if (data.soap_advice && data.soap_advice.status === 'success') {
+        aLlmPanel.style.display = 'block';
+        document.getElementById('aLlmComparison').innerText = '🔍 比對分析：' + (data.soap_advice.comparison || '');
+        document.getElementById('aLlmAdvice').innerText = '👨‍⚕️ 審批補強要點：' + (data.soap_advice.approval_advice || '');
+      } else {
+        aLlmPanel.style.display = 'none';
       }
     }
 

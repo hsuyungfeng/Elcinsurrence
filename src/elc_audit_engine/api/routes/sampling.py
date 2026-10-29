@@ -8,6 +8,7 @@ import os
 from flask import Blueprint, current_app, jsonify, request
 
 from elc_audit_engine.case_store import CaseNotFoundError, IllegalTransitionError
+from elc_audit_engine.comparator.soap_advice import generate_soap_advice
 from elc_audit_engine.ingest import (
     MediaExtractError,
     SamplingImportError,
@@ -18,8 +19,12 @@ from elc_audit_engine.ingest import (
     parse_sampling_csv,
     parse_sampling_ocr_text,
 )
+from elc_audit_engine.ingest.sampling import SamplingCaseRecord, SamplingImportResult
+from elc_audit_engine.ingest.zip_support import inspect_zip_contents
+from elc_audit_engine.monthly_audit import audit_batch
 from elc_audit_engine.parsers import parse_soap_text
 from elc_audit_engine.parsers.models import OrderRecord, SubmissionCase
+from elc_audit_engine.parsers.totfa import parse_totfa_zip
 from elc_audit_engine.pipeline import run_presubmission_check
 from elc_audit_engine.rule_repository.errors import RuleRepositoryError
 
@@ -146,6 +151,25 @@ def audit_sampling_case():
         ),
     )
 
+    # 整合 Qwen3.8-27B 智慧比對：比對原始 SOAP 與雲端病歷/病史時間軸，產出結構化建議供醫師審批
+    soap_advice = None
+    try:
+        history_desc = ""
+        if timeline and timeline.events:
+            history_desc = "\n".join(
+                f"- [{e.date}] {e.category}: {e.summary}" for e in timeline.events[:5]
+            )
+        rule_desc = oj.check_item.rule_text if oj.check_item else ""
+        soap_advice = generate_soap_advice(
+            order_code=order_code,
+            order_name=order_name or order_code,
+            soap_text=soap_text or "",
+            patient_history=history_desc,
+            rule_text=rule_desc,
+        )
+    except Exception as exc:
+        current_app.logger.warning("LLM SOAP advice generation failed: %s", exc)
+
     return jsonify({
         "status": "success",
         "case_id": case_id or None,
@@ -160,6 +184,7 @@ def audit_sampling_case():
         "quote": oj.judgment.quote if oj.judgment else "",
         "rule_location": oj.check_item.rule_location if oj.check_item else None,
         "reinforcement_advice": _advice(oj),
+        "soap_advice": soap_advice,
         "candidates": [
             {"text": n.text, "rule_location": n.rule_location, "prompt_only": n.prompt_only}
             for n in oj.narratives
@@ -191,6 +216,54 @@ def import_sampling_cases():
             with open(path, "rb") as f:
                 result = parse_sampling_csv(f.read())
             source = "csv"
+        elif media_type == "zip":
+            # 支援 .zip 壓縮包：若內含 TOTFA.xml 則依使用者條件挑選高風險案件（小於50筆）；若為 CSV 則解析 CSV
+            zip_cat, zip_items = inspect_zip_contents(path)
+            if zip_cat == "totfa":
+                totfa_res = parse_totfa_zip(path)
+                # 建立抽樣案件清單：醫療費用>1000, (醫令點數>=350 或 藥令單價>=5), 取前50筆高風險項
+                records = []
+                seen_cases = set()
+                for c in totfa_res.cases:
+                    tp = 0
+                    try:
+                        tp = int(c.raw.get("d39") or 0)
+                    except:
+                        pass
+                    for o in c.orders:
+                        pts = 0
+                        try:
+                            pts = int(o.points or 0)
+                        except:
+                            pass
+                        price = 0.0
+                        try:
+                            price = float(o.unit_price or 0.0)
+                        except:
+                            pass
+                        if (tp > 1000 and (pts >= 350 or price >= 5.0)) or len(records) < 50:
+                            if c.case_seq not in seen_cases and len(records) < 50:
+                                seen_cases.add(c.case_seq)
+                                records.append(SamplingCaseRecord(
+                                    order_code=o.code,
+                                    case_seq=c.case_seq,
+                                    record_no=c.record_no,
+                                    patient_name=c.patient_name,
+                                    order_name=o.code,
+                                    visit_date=c.visit_date,
+                                    clinic=c.clinic,
+                                    soap_text="",
+                                    source="totfa_zip",
+                                ))
+                result = SamplingImportResult(records=tuple(records), rejected=())
+                source = "totfa_zip"
+            elif zip_cat == "csv" and zip_items:
+                # 取第一個 CSV 進行解析
+                _, csv_bytes = zip_items[0]
+                result = parse_sampling_csv(csv_bytes)
+                source = "zip_csv"
+            else:
+                raise SamplingImportError("ZIP 壓縮檔內未找到 TOTFA.xml 或有效的 CSV 檔案")
         elif media_type == "pdf":
             # 優先 pdftotext；掃描型 PDF（無文字層）→ 再試 PP-StructureV3 表格結構化
             text, tool = extract_text(path, media_type=media_type)
