@@ -494,13 +494,13 @@
 
     function switchWorkflowMode(mode) {
       currentMode = mode;
+      document.getElementById('tabMode3').className = `mode-btn ${mode === 'monthly' ? 'active' : ''}`;
       document.getElementById('tabMode1').className = `mode-btn ${mode === 'sampling' ? 'active' : ''}`;
       document.getElementById('tabMode2').className = `mode-btn ${mode === 'appeal' ? 'active' : ''}`;
-      document.getElementById('tabMode3').className = `mode-btn ${mode === 'monthly' ? 'active' : ''}`;
       
+      document.getElementById('workflow3View').className = `view-container ${mode === 'monthly' ? 'active' : ''}`;
       document.getElementById('workflow1View').className = `view-container ${mode === 'sampling' ? 'active' : ''}`;
       document.getElementById('workflow2View').className = `view-container ${mode === 'appeal' ? 'active' : ''}`;
-      document.getElementById('workflow3View').className = `view-container ${mode === 'monthly' ? 'active' : ''}`;
       
       if (mode === 'sampling') {
         document.getElementById('sidebarListTitle').innerText = '事前預審抽樣清單';
@@ -901,10 +901,12 @@
     }
 
     // Init
-    const savedKey = localStorage.getItem('elc_api_key');
-    if (savedKey) {
-      const keyInput = document.getElementById('apiKeyInput');
-      if (keyInput) keyInput.value = savedKey;
+    const defaultDevKey = 'dev_api_key_for_local_development_1234567890abcdef';
+    const savedKey = localStorage.getItem('elc_api_key') || defaultDevKey;
+    const keyInput = document.getElementById('apiKeyInput');
+    if (keyInput) keyInput.value = savedKey;
+    if (!localStorage.getItem('elc_api_key')) {
+      localStorage.setItem('elc_api_key', defaultDevKey);
     }
     // 預設進入第 1 軌：當月申報檔預審
     switchWorkflowMode('monthly');
