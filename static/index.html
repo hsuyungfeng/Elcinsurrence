@@ -428,7 +428,7 @@
 
     function getApiKey() {
       const input = document.getElementById('apiKeyInput');
-      return (input && input.value) ? input.value.trim() : (localStorage.getItem('elc_api_key') || '');
+      return (input && input.value) ? input.value.trim() : (localStorage.getItem('elc_api_key') || 'dev_api_key_for_local_development_1234567890abcdef');
     }
 
     async function authFetch(url, options = {}) {

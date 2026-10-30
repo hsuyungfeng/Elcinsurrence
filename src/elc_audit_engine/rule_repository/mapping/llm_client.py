@@ -98,10 +98,12 @@ def chat_completion(
     }
 
     assert_local_llm_url(LLAMA_CPP_BASE_URL)
-    response = requests.post(
+    session = requests.Session()
+    session.trust_env = False  # 繞過環境中的 HTTP_PROXY，直接連線本機 LLM
+    response = session.post(
         f"{LLAMA_CPP_BASE_URL}/v1/chat/completions",
         json=payload,
-        timeout=60,
+        timeout=180,
     )
     response.raise_for_status()
     # content 可能為 null（B-IN-13）；以空字串交由呼叫端的解析失敗路徑處理
