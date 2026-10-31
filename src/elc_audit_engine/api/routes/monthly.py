@@ -25,11 +25,20 @@ from elc_audit_engine.mailer import (
     write_eml,
 )
 from elc_audit_engine.monthly_audit import audit_batch, report_view
+from elc_audit_engine.monthly_pregen import (
+    STATUS_QUALITY_FAILED,
+    STATUS_UNDETERMINED,
+    load_templates,
+    pregen_batch,
+    pregen_template,
+)
 from elc_audit_engine.monthly_reasoning import attach_reasoning
 from elc_audit_engine.monthly_report_html import render_batch_report_html
 from elc_audit_engine.parsers.models import SubmissionParseResult
 from elc_audit_engine.parsers.submission_xml import SubmissionXmlError
 from elc_audit_engine.parsers.totfa import parse_totfa_zip
+from elc_audit_engine.rule_repository import get_rule as _get_rule
+from elc_audit_engine.rule_repository.errors import RuleRepositoryError
 
 from ..context import caller_id, case_store
 from ..errors import ApiError
@@ -101,7 +110,7 @@ def upload_monthly():
 
         out_dir = current_app.config.get("ELC_OUTPUT_DIR") or settings.OUTPUT_DIR
         os.makedirs(out_dir, exist_ok=True)
-        report_html = render_batch_report_html(audit)
+        report_html = render_batch_report_html(audit, templates=load_templates(store, report_view(audit)))
         saved_html = os.path.join(out_dir, f"report_{ingest.batch}.html")
         with open(saved_html, "w", encoding="utf-8") as f:
             f.write(report_html)
@@ -148,7 +157,11 @@ def monthly_batch_report(batch_id: str):
         persist=False,
     )
     if fmt == "html":
-        return Response(render_batch_report_html(audit), content_type="text/html; charset=utf-8")
+        templates = load_templates(store, report_view(audit))
+        return Response(
+            render_batch_report_html(audit, templates=templates),
+            content_type="text/html; charset=utf-8",
+        )
 
     audit = report_view(audit)  # 報告納入規則（醫療總點數 > 1000、有給付規定且超過門檻）
     payload = audit.to_dict(include_rule_text=True)
@@ -186,7 +199,7 @@ def email_monthly_report(batch_id: str):
         rules_db_path=current_app.config.get("ELC_RULES_DB_PATH"),
         persist=False,
     )
-    html_report = render_batch_report_html(audit)
+    html_report = render_batch_report_html(audit, templates=load_templates(store, report_view(audit)))
 
     config = smtp_config_from_env()
     sender = config.sender if config else (os.environ.get("SMTP_FROM") or DEFAULT_FROM)
@@ -211,3 +224,76 @@ def email_monthly_report(batch_id: str):
         raise ApiError("郵件寄送失敗（請檢查 SMTP 設定與網路）", status=502)
     current_app.logger.info("郵件已寄出 batch=%s", batch_id)
     return jsonify({"status": "sent", "batch": batch_id})
+
+
+@bp.route("/api/monthly/template", methods=["POST"])
+def monthly_soap_template():
+    """取得單一處置／手術醫令＋主診斷的範例病歷：命中快取直接回傳，否則生成（通過品質檢核才存庫）。
+
+    請求 JSON：{"order_code", "primary_diagnosis", "order_name"?, "force"?}。
+    規則庫查詢失敗回 503（系統故障，不以空規則生成）；LLM 失敗回 503；品質未過回 422 且不存庫。
+    """
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        raise ApiError("請求主體必須為 JSON 物件")
+    order_code = str(data.get("order_code") or "").strip()
+    dx = str(data.get("primary_diagnosis") or "").strip()
+    order_name = str(data.get("order_name") or "").strip()
+    if not order_code or not dx:
+        raise ApiError("order_code 與 primary_diagnosis 皆必填")
+    if len(order_code) > 32 or len(dx) > 32 or len(order_name) > 200:
+        raise ApiError("欄位長度超過上限")
+    force = data.get("force") is True
+
+    try:
+        rule = _get_rule(order_code, db_path=current_app.config.get("ELC_RULES_DB_PATH"))
+    except RuleRepositoryError:
+        return jsonify({"status": "undetermined", "message": "規則庫查詢失敗（系統故障，非判定結果）"}), 503
+    rule_text = (rule.payment_text or rule.article_full_text or "") if rule.found else ""
+    name = order_name or (rule.name if rule.found and rule.name else order_code)
+
+    outcome = pregen_template(
+        case_store(),
+        order_code=order_code,
+        order_name=name,
+        primary_diagnosis=dx,
+        rule_text=rule_text,
+        force=force,
+    )
+    if outcome.status == STATUS_UNDETERMINED:
+        return jsonify({"status": "undetermined", "message": "LLM 服務無法連線或逾時（系統故障，非判定結果）"}), 503
+    if outcome.status == STATUS_QUALITY_FAILED:
+        return jsonify({"status": "quality_failed", "quality": outcome.quality,
+                         "message": "生成內容未通過品質檢核，未存入範本"}), 422
+    return jsonify({
+        "status": outcome.status,
+        "order_code": order_code,
+        "primary_diagnosis": dx,
+        "soap": outcome.soap,
+        "quality": outcome.quality,
+    })
+
+
+@bp.route("/api/monthly/batch/<batch_id>/pregen", methods=["POST"])
+def monthly_batch_pregen(batch_id: str):
+    """批次預生成報告中處置／手術高價醫令的範例病歷（快取命中不計次數；新生成數量受 limit 限制）。"""
+    if not _BATCH_RE.match(batch_id):
+        raise ApiError("batch_id 格式應為 MONTHLY-YYYYMM")
+    try:
+        limit = int(request.args.get("limit", "10"))
+    except ValueError:
+        raise ApiError("limit 須為整數")
+    if not 1 <= limit <= 50:
+        raise ApiError("limit 須介於 1～50")
+
+    store = case_store()
+    if store.count_by_batch(batch_id) == 0:
+        raise ApiError("查無此批次", status=404)
+    audit = audit_batch(
+        store,
+        batch_id,
+        rules_db_path=current_app.config.get("ELC_RULES_DB_PATH"),
+        persist=False,
+    )
+    counts = pregen_batch(store, report_view(audit), limit=limit)
+    return jsonify({"status": "success", "batch": batch_id, **counts})

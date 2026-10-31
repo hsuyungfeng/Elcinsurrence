@@ -77,6 +77,15 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _template_key(order_code: str, primary_diagnosis: str | None) -> tuple[str, str]:
+    """範本鍵正規化：醫令代碼與診斷碼皆去空白、轉大寫。診斷可為空字串（代表通用範本）；醫令代碼必填。"""
+    code = (order_code or "").strip().upper()
+    dx = (primary_diagnosis or "").strip().upper()
+    if not code:
+        raise CaseStoreError("範本鍵缺漏：醫令代碼必填")
+    return code, dx
+
+
 def _row_to_case_record(row: sqlite3.Row) -> CaseRecord:
     payload_json = row["payload_json"]
     payload = json.loads(payload_json) if payload_json is not None else None
@@ -442,6 +451,63 @@ class CaseStore:
         finally:
             conn.close()
         return row["n"]
+
+    def get_soap_template(
+        self, order_code: str, primary_diagnosis: str, *, fallback_general: bool = True
+    ) -> dict | None:
+        """讀取範本：先查 (醫令, 診斷)；未命中且 `fallback_general` 時回退查 (醫令, '') 通用範本。
+
+        回傳的 `scope` 為 "specific"（指定診斷）或 "general"（通用範本）；皆未命中回 None。
+        """
+        code, dx = _template_key(order_code, primary_diagnosis)
+        keys = [(code, dx)]
+        if dx and fallback_general:
+            keys.append((code, ""))
+        conn = self._connect()
+        try:
+            for key in keys:
+                row = conn.execute(
+                    "SELECT soap_json, source, quality_score, created_at FROM soap_templates "
+                    "WHERE order_code = ? AND primary_diagnosis = ?",
+                    key,
+                ).fetchone()
+                if row is not None:
+                    return {
+                        "soap": json.loads(row["soap_json"]),
+                        "source": row["source"],
+                        "quality_score": row["quality_score"],
+                        "created_at": row["created_at"],
+                        "scope": "specific" if key[1] == dx and dx else "general",
+                    }
+        finally:
+            conn.close()
+        return None
+
+    def put_soap_template(
+        self,
+        order_code: str,
+        primary_diagnosis: str,
+        soap: dict,
+        *,
+        source: str,
+        quality_score: int | None,
+    ) -> None:
+        """寫入（覆寫）通用範本。`source` 為 llm_validated 或 physician_edited。"""
+        key = _template_key(order_code, primary_diagnosis)
+        conn = self._connect()
+        try:
+            with conn:
+                conn.execute(
+                    "INSERT INTO soap_templates "
+                    "(order_code, primary_diagnosis, soap_json, source, quality_score, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT(order_code, primary_diagnosis) DO UPDATE SET "
+                    "soap_json = excluded.soap_json, source = excluded.source, "
+                    "quality_score = excluded.quality_score, created_at = excluded.created_at",
+                    (*key, json.dumps(soap, ensure_ascii=False), source, quality_score, _now_iso()),
+                )
+        finally:
+            conn.close()
 
     def list_batches(self) -> tuple[tuple[str, int], ...]:
         """所有當月申報批次及其案件數，依批次名升冪（`(batch, count)`）。"""

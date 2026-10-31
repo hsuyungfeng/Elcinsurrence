@@ -59,7 +59,11 @@ _ICD_CONTEXT_RE = re.compile(r"ICD|診斷|病名")
 _SENTENCE_SPLIT_RE = re.compile(r"[。；;\n]")
 
 # 規則文字的占位值（SQLite 中以字串 'null' 或空白出現）。
-_EMPTY_TEXT_SENTINELS = frozenset({"", "null", "None"})
+# 無實質內容的占位文字（比對前轉小寫）。命中者視同「無給付規定原文」→ STATUS_NO_TEXT，
+# 不納入預審報告。例：AC43152151 的 payment_text 為「目前無」，並無任何限制條文。
+_EMPTY_TEXT_SENTINELS = frozenset({
+    "", "null", "none", "目前無", "無資訊", "無", "無給付規定", "未找到給付規定",
+})
 
 # 規則狀態（`OrderFinding.rule_status`）。
 STATUS_UNDETERMINED = "undetermined"
@@ -305,7 +309,7 @@ def _usable_text(value: str | None) -> str | None:
     if value is None:
         return None
     text = value.strip()
-    return None if text in _EMPTY_TEXT_SENTINELS else text
+    return None if text.lower() in _EMPTY_TEXT_SENTINELS else text
 
 
 # ── 單一醫令判定 ──────────────────────────────────────────────────

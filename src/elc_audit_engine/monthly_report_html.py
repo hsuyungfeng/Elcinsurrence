@@ -22,6 +22,44 @@ from elc_audit_engine.monthly_audit import (
     report_view,
 )
 from elc_audit_engine.rule_repository.icd_titles import get_icd_chinese_title
+from elc_audit_engine.monthly_pregen import is_procedure_finding
+
+_SOAP_CSS = """
+details.soap-example { margin-top: 8px; }
+details.soap-example > summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 600; }
+.soap-box { margin-top: 6px; }
+textarea.soap-text { width: 100%; min-height: 150px; font: 12px/1.6 monospace; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink); resize: vertical; }
+.soap-actions { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+button.btn-copy { background: #10b981; color: #fff; border: none; border-radius: 4px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+button.btn-soap-modal { background: var(--accent, #0284c7); color: #fff; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 6px; display: inline-flex; align-items: center; gap: 4px; }
+button.btn-soap-modal:hover { opacity: 0.9; }
+
+"""
+
+_COPY_SCRIPT = """
+function copySoap(btn) {
+  var ta = btn.closest('.soap-box').querySelector('textarea');
+  ta.select();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(ta.value).then(function () { btn.textContent = '已複製'; },
+      function () { btn.textContent = '請手動複製'; });
+  } else {
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    btn.textContent = ok ? '已複製' : '請手動複製';
+  }
+}
+
+function openSoapModal(orderCode, diagCode, caseId) {
+  if (window.parent && window.parent.generateExampleRecord) {
+    window.parent.generateExampleRecord(orderCode, diagCode, caseId);
+  } else if (typeof generateExampleRecord === 'function') {
+    generateExampleRecord(orderCode, diagCode, caseId);
+  } else {
+    window.parent.postMessage({ type: 'OPEN_EX_MODAL', order_code: orderCode, primary_diagnosis: diagCode, case_id: caseId }, '*');
+  }
+}
+"""
 
 _FLAG_LABELS = {
     "points_over_350": "醫令點數 > 350",
@@ -175,39 +213,57 @@ def _rule_fulltext_html(finding: OrderFinding) -> str:
     return expander
 
 
-def _finding_html(finding: OrderFinding, case: CaseAudit | None = None) -> str:
+def _soap_example_html(finding: OrderFinding, case: CaseAudit | None, templates) -> str:
+    """處置／手術高價醫令的範例病歷：
+    - 若已有快取範本，直接輸出可展開與複製的 <details> 區塊。
+    - 若尚未快取，提供按鈕開啟範例病歷彈窗進行即時生成與預覽。
+    """
+    if case is None or not is_procedure_finding(finding):
+        return ""
+    order_code = (finding.code or "").strip().upper()
+    primary_diag = (case.primary_diagnosis or "").strip().upper()
+    key = (order_code, primary_diag)
+    soap = templates.get(key) if templates else None
+
+    # 按鈕：開啟彈窗（同步該病人主診斷與醫令代碼）
+    c_id = _e(case.case_id or "")
+    c_order = _e(order_code)
+    c_diag = _e(primary_diag)
+    modal_btn = (
+        f'<button type="button" class="btn-soap-modal" '
+        f'onclick="openSoapModal(\'{c_order}\', \'{c_diag}\', \'{c_id}\')">'
+        f'🧾 範例病歷彈窗'
+        f'</button>'
+    )
+
+    if soap:
+        body = "\n".join(f"{k.upper()}: {soap.get(k, '')}" for k in ("s", "o", "a", "p"))
+        return (
+            '<details class="soap-example"><summary>📝 範例病歷（可複製、可修改）</summary>'
+            '<div class="soap-box">'
+            f'<textarea class="soap-text" spellcheck="false">{_e(body)}</textarea>'
+            '<div class="soap-actions">'
+            '<button type="button" class="btn-copy" onclick="copySoap(this)">📋 複製</button>'
+            f'{modal_btn}'
+            '<span class="src">AI 範例，須醫師審核後方可使用；非病歷事實紀錄。</span></div>'
+            "</div></details>"
+        )
+
+    # 尚未快取：提供按鈕供醫師點擊生成
+    return (
+        f'<div style="margin-top:6px;">{modal_btn}</div>'
+    )
+
+
+def _finding_html(finding: OrderFinding, case: CaseAudit | None = None, templates=None) -> str:
     flags = "".join(f'<span class="pill">{_e(_FLAG_LABELS.get(flag, flag))}</span>' for flag in finding.flags)
     title = f"<strong>{_e(finding.code)}</strong> {_e(finding.rule_name or '')} {flags}"
     amounts = _amount_text(finding)
     amount_line = f'<div class="amounts">{_e(amounts)}</div>' if amounts else ""
-    
-    # 範例病歷產生按鈕
-    gen_btn = ""
-    if case:
-        diag = _e(case.primary_diagnosis or "")
-        case_id = _e(case.case_id)
-        code = _e(finding.code)
-        name = _e(finding.rule_name or "")
-        gen_btn = (
-            f'<div style="margin: 8px 0 4px;">'
-            f'<button class="btn-soap-gen" type="button" '
-            f'data-case-id="{case_id}" data-order-code="{code}" data-order-name="{name}" data-diag="{diag}" '
-            f'onclick="triggerExampleSoap(this)">'
-            f'🧾 產生/檢視範例病歷'
-            f'</button>'
-            f'<div class="soap-preview-box" id="soap_box_{case_id}_{code}" style="display:none; margin-top:8px; background:var(--quote-bg); border:1px solid var(--line); border-radius:8px; padding:10px;">'
-            f'<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">'
-            f'<strong style="font-size:13px; color:var(--accent);">📋 AI 範例病歷（配合主診斷生成，可編輯複製）</strong>'
-            f'<div>'
-            f'<button type="button" style="background:#10b981; color:#fff; border:none; border-radius:4px; padding:2px 8px; font-size:12px; cursor:pointer; margin-right:4px;" onclick="copySoapText(this)">複製病歷</button>'
-            f'<button type="button" style="background:transparent; color:var(--muted); border:none; font-size:12px; cursor:pointer;" onclick="this.closest(\'.soap-preview-box\').style.display=\'none\'">收合</button>'
-            f'</div></div>'
-            f'<textarea class="soap-editable" style="width:100%; min-height:160px; font-family:monospace; font-size:12px; line-height:1.5; padding:8px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--ink); resize:vertical;"></textarea>'
-            f'<div class="soap-advice-note" style="font-size:12px; color:var(--muted); margin-top:4px;"></div>'
-            f'</div></div>'
-        )
-
-    return f'<div class="item"><div class="item-title">{title}</div>{amount_line}{_rule_fulltext_html(finding)}{gen_btn}</div>'
+    return (
+        f'<div class="item"><div class="item-title">{title}</div>{amount_line}'
+        f"{_rule_fulltext_html(finding)}{_soap_example_html(finding, case, templates)}</div>"
+    )
 
 
 def _case_header(case: CaseAudit) -> str:
@@ -235,17 +291,17 @@ def _case_header(case: CaseAudit) -> str:
     return f'<span class="case-head">{_e(" · ".join(parts))}</span>'
 
 
-def _case_html(case: CaseAudit) -> str:
+def _case_html(case: CaseAudit, templates=None) -> str:
     secondary = (
         f'<p class="meta">次診斷：{_e("、".join(case.secondary_diagnoses))}</p>'
         if case.secondary_diagnoses
         else ""
     )
-    findings = "".join(_finding_html(f, case) for f in case.findings)
+    findings = "".join(_finding_html(f, case, templates) for f in case.findings)
     return f'<details class="case"><summary>{_case_header(case)}</summary>{secondary}{findings}</details>'
 
 
-def render_batch_report_html(batch: BatchAudit) -> str:
+def render_batch_report_html(batch: BatchAudit, *, templates=None) -> str:
     """把 BatchAudit 渲染成精簡版自包含 HTML（先套用 report_view 的納入規則）。"""
     view = report_view(batch)
     totals = view.report.get("totals", {})
@@ -260,7 +316,7 @@ def render_batch_report_html(batch: BatchAudit) -> str:
             _kpi("待判定（系統故障）", status.get(STATUS_UNDETERMINED, 0), "red"),
         ]
     )
-    cases_html = "".join(_case_html(case) for case in view.cases) or (
+    cases_html = "".join(_case_html(case, templates) for case in view.cases) or (
         '<p class="meta">本批次無符合條件（醫療總點數 > 1000，且有給付規定超過門檻）的案件。</p>'
     )
 
@@ -269,7 +325,7 @@ def render_batch_report_html(batch: BatchAudit) -> str:
         '<html lang="zh-Hant"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>當月申報預審 {_e(view.batch)}</title>"
-        f"<style>{_CSS}</style></head><body><main>"
+        f"<style>{_CSS}{_SOAP_CSS}</style></head><body><main>"
         '<header class="hero">'
         f'<div class="batch">{_e(view.batch)}</div>'
         "<h1>當月申報預審報告</h1>"
@@ -284,7 +340,7 @@ def render_batch_report_html(batch: BatchAudit) -> str:
         "<h2>案件明細</h2>"
         f"{cases_html}"
         "<footer>本報告由 elc-audit-engine 產生；內含身分證字號、姓名與出生日期（個人資料），請依院內規範保管與傳送。</footer>"
-        "</main></body></html>"
+        f"</main><script>{_COPY_SCRIPT}</script></body></html>"
     )
 
 

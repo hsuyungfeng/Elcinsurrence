@@ -27,7 +27,10 @@ from flask import Blueprint, current_app, jsonify, request
 
 from elc_audit_engine.case_store import CaseNotFoundError
 from elc_audit_engine.case_store.store import DuplicateCaseError
-from elc_audit_engine.comparator.soap_advice import generate_soap_advice
+from elc_audit_engine.comparator.soap_advice import (
+    generate_soap_advice,
+    validate_soap_quality,
+)
 from elc_audit_engine.rule_repository import get_rule
 from elc_audit_engine.rule_repository.errors import RuleRepositoryError
 
@@ -114,6 +117,43 @@ def soap_enhance():
     order_name = clean_str(data, "order_name") or order_code
     soap_text = clean_str(data, "soap_text", max_len=MAX_SOAP_CHARS)
     patient_history = clean_str(data, "patient_history", max_len=MAX_SOAP_CHARS)
+    primary_diagnosis = clean_str(data, "primary_diagnosis")
+    if not primary_diagnosis and patient_history:
+        # 嘗試從 patient_history 解析主診斷（例如 "主診斷：D2362" 或 "S90221A"）
+        import re
+        m = re.search(r"(?:主診斷[:：\s]*|^)([A-TV-Z][0-9][0-9A-Z]?(?:\.[0-9A-Z]{1,4})?)", patient_history, re.IGNORECASE)
+        if m:
+            primary_diagnosis = m.group(1).strip().upper()
+
+    force = data.get("force") is True
+    store = case_store()
+
+    # 1. 優先查詢通用快取 (soap_templates)
+    if not force and primary_diagnosis:
+        cached = store.get_soap_template(order_code, primary_diagnosis)
+        if cached is not None:
+            c_soap = cached["soap"]
+            c_template = "\n".join(f"{key.upper()}: {str(c_soap.get(key, '')).strip()}" for key in ("s", "o", "a", "p"))
+            advice = {
+                "status": "success",
+                "recommended_soap": c_soap,
+                "comparison": "已載入此醫令與主診斷之通用標準範本",
+                "approval_advice": "請核對病患實際處置部位、病理報告與同意書記錄完整性。",
+            }
+            return jsonify({
+                "status": "success",
+                "from_cache": True,
+                "template_scope": cached["scope"],
+                "order_code": order_code,
+                "order_name": order_name,
+                "primary_diagnosis": primary_diagnosis,
+                "rule_found": True,
+                "rule_text": "",
+                "bilingual_advice": advice,
+                "example_soap_template": c_template,
+                "review_required": True,
+                "warning": None,
+            })
 
     try:
         rule = get_rule(order_code, db_path=current_app.config.get("ELC_RULES_DB_PATH"))
@@ -155,6 +195,21 @@ def soap_enhance():
     structured = advice.get("status") == "success"
     soap = advice.get("recommended_soap", {}) if structured else {}
     template = "\n".join(f"{key.upper()}: {str(soap.get(key, '')).strip()}" for key in ("s", "o", "a", "p"))
+
+    # 品質驗證通過後存入通用 soap_templates 快取
+    if structured and primary_diagnosis:
+        quality = validate_soap_quality(soap)
+        if quality.get("pass"):
+            try:
+                store.put_soap_template(
+                    order_code,
+                    primary_diagnosis,
+                    {k: str(soap[k]).strip() for k in ("s", "o", "a", "p")},
+                    source="llm_validated",
+                    quality_score=quality.get("quality_score"),
+                )
+            except Exception as e:
+                logger.warning("寫入 soap_templates 失敗: %s", e)
 
     case_id = clean_str(data, "case_id")
     if case_id:

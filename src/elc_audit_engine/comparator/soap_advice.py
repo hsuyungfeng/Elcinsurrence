@@ -16,6 +16,72 @@ from elc_audit_engine.rule_repository.mapping.llm_client import chat_completion
 _MARKDOWN_JSON_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
 
+_SOAP_SECTIONS = ("s", "o", "a", "p")
+_MIN_SECTION_CHARS = 20
+_MAX_SECTION_CHARS = 1500
+_PASS_SCORE = 70
+# 佔位符／未完成用語（大小寫不敏感）：代表模型未實際寫出內容。
+_PLACEHOLDER_RE = re.compile(
+    r"not documented|not recorded|pending|missing|placeholder|to be determined|\btbd\b|\bn/a\b|lorem|"
+    r"xxx+|\[[^\]]*\]|待補|待填|未記載|未提供|尚未",
+    re.IGNORECASE,
+)
+_CJK_RE = re.compile(r"[一-鿿㐀-䶿]")
+_ICD10_RE = re.compile(r"\b[A-TV-Z][0-9]{2}(?:\.[0-9A-Z]{1,4})?\b")
+
+
+def validate_soap_quality(soap_dict: Any) -> dict[str, Any]:
+    """檢核 LLM 產生的 recommended_soap 品質（確定性規則，不呼叫 LLM）。
+
+    檢核項目：
+    - 結構：S/O/A/P 四欄皆存在且為非空字串（缺漏即不通過）。
+    - 佔位符：出現 pending／missing／not documented／[...] 等未完成用語（不通過）。
+    - 長度：每欄至少 20 字元、至多 1500 字元（不通過）。
+    - 語言：醫學英文主體，CJK 字元佔比須 ≤ 10%（不通過；中文應只出現在審批欄）。
+    - 診斷碼：A 欄應含 ICD-10 形式代碼（缺漏僅扣分）。
+
+    Returns:
+        {"pass": bool, "quality_score": 0..100, "issues": [{"section", "code", "detail"}]}
+        `pass` 為 True 須同時滿足無結構／佔位符／語言問題且分數 ≥ 70。
+    """
+    issues: list[dict[str, str]] = []
+    score = 100
+    if not isinstance(soap_dict, dict):
+        return {"pass": False, "quality_score": 0, "issues": [{"section": "*", "code": "not_a_dict", "detail": "SOAP 非物件"}]}
+
+    blocking = False
+    for key in _SOAP_SECTIONS:
+        raw = soap_dict.get(key)
+        text = raw.strip() if isinstance(raw, str) else ""
+        if not text:
+            issues.append({"section": key, "code": "missing", "detail": f"{key.upper()} 欄缺漏或為空"})
+            score -= 25
+            blocking = True
+            continue
+        if len(text) < _MIN_SECTION_CHARS:
+            issues.append({"section": key, "code": "too_short", "detail": f"{key.upper()} 欄過短（<{_MIN_SECTION_CHARS} 字元）"})
+            score -= 15
+            blocking = True
+        if len(text) > _MAX_SECTION_CHARS:
+            issues.append({"section": key, "code": "too_long", "detail": f"{key.upper()} 欄過長（>{_MAX_SECTION_CHARS} 字元）"})
+            score -= 10
+        if _PLACEHOLDER_RE.search(text):
+            issues.append({"section": key, "code": "placeholder", "detail": f"{key.upper()} 欄含佔位或未完成用語"})
+            score -= 20
+            blocking = True
+        cjk = len(_CJK_RE.findall(text))
+        if cjk / max(len(text.replace(" ", "")), 1) > 0.10:
+            issues.append({"section": key, "code": "not_english", "detail": f"{key.upper()} 欄應為醫學英文，卻含大量中文"})
+            score -= 15
+            blocking = True
+        if key == "a" and not _ICD10_RE.search(text):
+            issues.append({"section": "a", "code": "no_icd10", "detail": "A 欄未見 ICD-10 代碼"})
+            score -= 5
+
+    score = max(0, min(100, score))
+    return {"pass": (not blocking) and score >= _PASS_SCORE, "quality_score": score, "issues": issues}
+
+
 _SYSTEM_PROMPT = (
     "You are an expert clinical documentation specialist and National Health Insurance (NHI) audit physician in Taiwan.\n"
     "Your mission: Produce a high-quality, professional, and fully fleshed-out outpatient SOAP progress note and NHI audit guidance for the target order code.\n\n"

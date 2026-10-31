@@ -97,7 +97,8 @@ def test_no_external_resources_or_scripts_loaded():
     assert "https://" not in html
     assert "<script src" not in html
     assert "<link " not in html
-    assert "<script" not in html.lower()
+    # 只允許一段內嵌的複製腳本（無外部來源）；使用者資料仍須轉義（見下方測試）
+    assert html.lower().count("<script>") == 1
 
 
 def test_rule_text_is_escaped_never_rendered_as_markup():

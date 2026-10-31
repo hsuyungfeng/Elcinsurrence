@@ -85,6 +85,22 @@ SCHEMA_INDEX_CASES_BATCH = (
 # rule_repository 加白名單。
 
 
+# soap_templates：通用處置／手術範例病歷快取（Plan 15-04）。
+# 鍵為 (order_code, primary_diagnosis)：同一醫令＋同一主診斷共用一份範本，避免重複呼叫 LLM。
+# `soap_json` 為 {"s","o","a","p"}；`source` 記錄來源（llm_validated／physician_edited）。
+SCHEMA_SOAP_TEMPLATES = (
+    "CREATE TABLE IF NOT EXISTS soap_templates ("
+    "order_code TEXT NOT NULL, "
+    "primary_diagnosis TEXT NOT NULL, "
+    "soap_json TEXT NOT NULL, "
+    "source TEXT NOT NULL, "
+    "quality_score INTEGER, "
+    "created_at TEXT NOT NULL, "
+    "PRIMARY KEY (order_code, primary_diagnosis)"
+    ")"
+)
+
+
 def get_connection(db_path: str) -> sqlite3.Connection:
     """建立（或開啟）SQLite 連線，回傳前確保父目錄存在。
 
@@ -113,6 +129,7 @@ def init_schema(db_path: str) -> None:
         conn.execute(SCHEMA_INDEX_CASES_STATE_KIND)
         conn.execute(SCHEMA_INDEX_TRANSITIONS_CASE)
         conn.execute(SCHEMA_INDEX_CASES_BATCH)
+        conn.execute(SCHEMA_SOAP_TEMPLATES)
         conn.commit()
     finally:
         conn.close()
