@@ -23,6 +23,7 @@ from elc_audit_engine.monthly_audit import (
 )
 from elc_audit_engine.rule_repository.icd_titles import get_icd_chinese_title
 from elc_audit_engine.monthly_pregen import is_procedure_finding
+from elc_audit_engine import evidence_vault
 
 _SOAP_CSS = """
 details.soap-example { margin-top: 8px; }
@@ -34,6 +35,10 @@ button.btn-copy { background: #10b981; color: #fff; border: none; border-radius:
 button.btn-soap-modal { background: var(--accent, #0284c7); color: #fff; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 6px; display: inline-flex; align-items: center; gap: 4px; }
 button.btn-soap-modal:hover { opacity: 0.9; }
 
+.vault-box { margin: 8px 0; padding: 8px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
+.vault-title { font-weight: 600; color: var(--accent); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.vault-files { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.vault-file-item { display: inline-flex; align-items: center; gap: 4px; background: var(--bg); padding: 2px 8px; border-radius: 4px; font-size: 12px; border: 1px solid var(--line); }
 """
 
 _COPY_SCRIPT = """
@@ -291,14 +296,47 @@ def _case_header(case: CaseAudit) -> str:
     return f'<span class="case-head">{_e(" · ".join(parts))}</span>'
 
 
+def _case_vault_html(case: CaseAudit) -> str:
+    """自動查詢並呈現該病患當月於 Evidence Vault 中的影像與佐證檔案清單。"""
+    vault_key = evidence_vault.vault_key_for_case(case.patient_id, case.visit_date)
+    if not vault_key:
+        return ""
+    try:
+        files_by_cat = evidence_vault.list_vault_files(vault_key)
+    except Exception:
+        return ""
+
+    cat_icons = {
+        "images": "🖼️ 影像",
+        "audio": "🎙️ 錄音",
+        "reports": "📄 檢驗報告",
+        "records": "📝 病歷紀錄",
+    }
+    items = []
+    for cat, icon in cat_icons.items():
+        for f in files_by_cat.get(cat, []):
+            items.append(f'<li class="vault-file-item">{icon} {_e(f.filename)}</li>')
+
+    if not items:
+        return ""
+
+    return (
+        f'<div class="vault-box">'
+        f'<div class="vault-title">📁 佐證庫附加檔案（{_e(vault_key)}）</div>'
+        f'<ul class="vault-files">{"".join(items)}</ul>'
+        f'</div>'
+    )
+
+
 def _case_html(case: CaseAudit, templates=None) -> str:
     secondary = (
         f'<p class="meta">次診斷：{_e("、".join(case.secondary_diagnoses))}</p>'
         if case.secondary_diagnoses
         else ""
     )
+    vault_section = _case_vault_html(case)
     findings = "".join(_finding_html(f, case, templates) for f in case.findings)
-    return f'<details class="case"><summary>{_case_header(case)}</summary>{secondary}{findings}</details>'
+    return f'<details class="case"><summary>{_case_header(case)}</summary>{secondary}{vault_section}{findings}</details>'
 
 
 def render_batch_report_html(batch: BatchAudit, *, templates=None) -> str:

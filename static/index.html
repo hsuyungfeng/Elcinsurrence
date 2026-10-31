@@ -160,6 +160,43 @@
       border: 1px solid var(--panel-border); border-radius: 6px; color: var(--text-main);
       font-size: 13px; padding: 8px 10px; resize: vertical; margin-bottom: 10px;
     }
+    /* Phase 17-02：身分證佐證庫面板（內部捲動，避免擠壓工作區既有版面） */
+    .vault-panel { max-height: 340px; }
+    .vault-message { font-size: 12px; color: #38bdf8; margin-bottom: 8px; min-height: 16px; line-height: 1.5; }
+    .vault-dropzone {
+      border: 2px dashed rgba(56, 189, 248, 0.4); border-radius: 10px; padding: 12px;
+      text-align: center; color: var(--text-muted); font-size: 13px; margin-bottom: 12px;
+    }
+    .vault-dropzone.dragover { border-color: var(--accent-cyan); background: rgba(6, 182, 212, 0.08); }
+    .vault-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+    .vault-card {
+      background: rgba(0, 0, 0, 0.25); border: 1px solid var(--panel-border);
+      border-radius: 8px; padding: 10px; min-width: 0;
+    }
+    .vault-card-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+    .vault-card audio { width: 100%; }
+    .vault-item {
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      font-size: 12px; padding: 4px 0; border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+    }
+    .vault-item-name { word-break: break-all; min-width: 0; }
+    .vault-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+    .vault-thumb {
+      background: rgba(0, 0, 0, 0.3); border: 1px solid var(--panel-border); border-radius: 6px;
+      padding: 4px; cursor: pointer; color: var(--text-muted); font-size: 11px;
+      display: flex; flex-direction: column; gap: 4px; min-width: 0;
+    }
+    .vault-thumb img { width: 100%; height: 80px; object-fit: cover; border-radius: 4px; }
+    .vault-thumb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vault-empty { font-size: 12px; color: var(--text-muted); }
+    .vault-lightbox {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85); z-index: 1000;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 10px; padding: 16px; cursor: zoom-out;
+    }
+    .vault-lightbox[hidden] { display: none; }
+    .vault-lightbox img { max-width: 95vw; max-height: 85vh; border-radius: 8px; }
+    .vault-lightbox-caption { color: #e2e8f0; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -231,6 +268,61 @@
           <button class="btn-action" onclick="runSamplingAudit()">⚡ 審核病歷並評估支持度</button>
         </div>
 
+        <!-- 抽樣與導出工具列（Phase 16-03） -->
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;">
+          <button class="btn-action" onclick="sampleFromMonthlyBatch()">📦 從申報總檔自動抽樣 (20隨機+10立意)</button>
+          <button class="btn-action" onclick="openSamplingPreview()">🔍 檢視視覺化預審卡片 (HTML)</button>
+          <button class="btn-action" onclick="exportSamplingXml()">📄 導出健保局抽審 XML</button>
+        </div>
+
+        <!-- 佐證庫（Phase 17-02）：依案件病歷號（身分證）＋就醫年月自動掛載 vault_key -->
+        <div class="panel vault-panel" id="vaultPanel" style="margin-top: 12px;">
+          <div class="panel-header">
+            <div class="panel-title">📁 佐證庫：<span id="vaultKeyLabel">尚未選取案件</span></div>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" class="btn-action" id="vaultBtnFile" style="padding: 6px 12px; font-size: 12px;" disabled
+                onclick="document.getElementById('vaultFileInput').click()">📤 上傳檔案</button>
+              <button type="button" class="btn-action" id="vaultBtnZip" style="padding: 6px 12px; font-size: 12px;" disabled
+                onclick="document.getElementById('vaultZipInput').click()">🗜️ 上傳 ZIP</button>
+              <input type="file" id="vaultFileInput" multiple hidden
+                accept=".jpg,.jpeg,.png,.dicom,.heic,.mp3,.m4a,.wav,.aac,.pdf,.txt,.csv,.json"
+                onchange="uploadVaultFiles(this.files)">
+              <input type="file" id="vaultZipInput" accept=".zip" hidden onchange="uploadVaultFiles(this.files)">
+            </div>
+          </div>
+          <div class="panel-body">
+            <div id="vaultMessage" class="vault-message"></div>
+            <div id="vaultDropzone" class="vault-dropzone"
+              ondragover="handleVaultDragOver(event)" ondragleave="handleVaultDragLeave(event)" ondrop="handleVaultDrop(event)">
+              拖曳檔案或 ZIP 至此上傳（支援影像、錄音、報告與病歷檔；ZIP 會自動解壓分類）
+            </div>
+            <div class="vault-grid">
+              <div class="vault-card">
+                <div class="vault-card-title">🎙️ 錄音檔</div>
+                <div id="vaultAudio"><div class="vault-empty">請先選取案件</div></div>
+              </div>
+              <div class="vault-card">
+                <div class="vault-card-title">🖼️ 影像畫廊（點擊放大）</div>
+                <div id="vaultImages" class="vault-gallery"><div class="vault-empty">請先選取案件</div></div>
+              </div>
+              <div class="vault-card">
+                <div class="vault-card-title">📄 檢驗檢查報告</div>
+                <div id="vaultReports"><div class="vault-empty">請先選取案件</div></div>
+              </div>
+              <div class="vault-card">
+                <div class="vault-card-title">📝 病歷紀錄</div>
+                <div id="vaultRecords"><div class="vault-empty">請先選取案件</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 燈箱（影像放大檢視） -->
+        <div id="vaultLightbox" class="vault-lightbox" hidden onclick="closeVaultLightbox()">
+          <img id="vaultLightboxImg" alt="">
+          <div id="vaultLightboxCaption" class="vault-lightbox-caption"></div>
+        </div>
+
         <!-- 2 Panels -->
         <div class="card-grid">
           <div class="panel">
@@ -271,6 +363,41 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- 多源證據：檢驗數據／雲端病歷／影像佐證（Phase 16-02/16-03） -->
+        <div class="card-grid" style="margin-top: 16px;">
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">🧪 檢驗數據（Lab Results）</div>
+            </div>
+            <div class="panel-body">
+              <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">每行一筆：<code>項目 | 數值 | 單位 | 日期</code>（單位、日期可省略）</div>
+              <textarea class="code-editor" id="sLabInput" placeholder="HbA1c | 8.5 | % | 2026-07-10"></textarea>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">☁️ 雲端病歷（健保跨院紀錄）</div>
+            </div>
+            <div class="panel-body">
+              <textarea class="code-editor" id="sCloudInput" placeholder="外院跨院病歷摘要……"></textarea>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">🖼️ 影像佐證上傳</div>
+            </div>
+            <div class="panel-body">
+              <input type="file" id="sAttachInput" accept=".jpg,.jpeg,.png,.pdf,.heic" onchange="uploadSamplingAttachment(this.files[0])">
+              <div id="sAttachList" style="margin-top: 10px; font-size: 12px; color: var(--text-muted); line-height: 1.6;">請先選擇抽樣案件</div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top: 12px;">
+          <button class="btn-action" onclick="saveSamplingEvidence()">💾 儲存多源證據並重新審核（LLM 將參考檢驗與雲端病歷）</button>
         </div>
       </div>
 
@@ -527,11 +654,14 @@
     }
 
     // 範例病歷：配合主診斷與醫令代碼生成，支援編輯、複製與存入 DB
-    async function generateExampleRecord(prefillOrder, prefillDiag) {
+    let currentModalCaseId = null;
+
+    async function generateExampleRecord(prefillOrder, prefillDiag, caseId) {
       const orderEl = document.getElementById('orderInput');
       const diagEl = document.getElementById('diagInput');
       if (prefillOrder && orderEl) orderEl.value = prefillOrder;
       if (prefillDiag && diagEl) diagEl.value = prefillDiag;
+      if (caseId) currentModalCaseId = caseId;
       const modal = document.getElementById('exampleDialog');
       if (modal) {
         modal.style.display = 'block';
@@ -558,7 +688,8 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             order_code: orderCode,
-            case_id: 'MON-50454d462a22a23dbb47e4fb0769f105',
+            case_id: currentModalCaseId || 'MON-50454d462a22a23dbb47e4fb0769f105',
+            primary_diagnosis: diagCode,
             patient_history: diagCode ? `主診斷：${diagCode}` : ''
           }),
         });
@@ -566,7 +697,8 @@
         if (resp.ok && body.example_soap_template) {
           out.value = body.example_soap_template;
           const advice = (body.bilingual_advice && body.bilingual_advice.approval_advice) ? body.bilingual_advice.approval_advice : '';
-          note.innerHTML = `<strong>💡 健保審查重點：</strong>${escapeHtml(advice)}`;
+          const cacheTag = body.from_cache ? '【⚡ 讀取自通用快取資料庫】' : '【🤖 LLM 新生成已存庫】';
+          note.textContent = `${cacheTag} 💡 健保審查重點：${advice}`;
         } else if (resp.ok && body.bilingual_advice && body.bilingual_advice.raw_response) {
           out.value = body.bilingual_advice.raw_response;
           note.textContent = '【注意】' + (body.warning || '模型已為您產出建議內容。');
@@ -577,6 +709,13 @@
         out.value = '無法連線至服務：' + err;
       }
     }
+
+    // 監聽 iframe postMessage（當使用者從內嵌報告點擊彈窗按鈕時）
+    window.addEventListener('message', function(event) {
+      if (event.data && (event.data.type === 'OPEN_EX_MODAL' || event.data.type === 'OPEN_SOAP_MODAL')) {
+        generateExampleRecord(event.data.order_code, event.data.primary_diagnosis, event.data.case_id);
+      }
+    });
 
     function copyExampleSoap() {
       const out = document.getElementById('exampleRecordOut');
@@ -594,11 +733,12 @@
 
     async function saveSoapToDb() {
       const out = document.getElementById('exampleRecordOut');
-      const orderCode = (document.getElementById('orderInput').value || '64140C').trim();
+      const orderCode = (document.getElementById('orderInput').value || '').trim();
       const statusEl = document.getElementById('saveDbStatus');
+      const targetCaseId = currentModalCaseId || 'MON-50454d462a22a23dbb47e4fb0769f105';
       statusEl.textContent = '儲存中 …';
       try {
-        const resp = await authFetch('/api/his/v1/cases/MON-50454d462a22a23dbb47e4fb0769f105/approve-callback', {
+        const resp = await authFetch(`/api/his/v1/cases/${encodeURIComponent(targetCaseId)}/approve-callback`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -668,14 +808,24 @@
       }
     }
 
-    function openMonthlyHtmlReport() {
+    // 以標頭傳遞 API Key（伺服器只讀 X-API-Key，不接受網址參數；網址列的金鑰也會進入日誌）
+    async function openMonthlyHtmlReport() {
       if (!currentMonthlyBatchId) {
         alert('請先上傳或選擇一個申報批次');
         return;
       }
-      const key = getApiKey();
-      const url = `/api/monthly/batch/${currentMonthlyBatchId}/report?format=html` + (key ? `&key=${encodeURIComponent(key)}` : '');
-      window.open(url, '_blank');
+      try {
+        const resp = await authFetch(`/api/monthly/batch/${encodeURIComponent(currentMonthlyBatchId)}/report?format=html`);
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => ({}));
+          alert(`無法開啟報告：${body.message || resp.status}`);
+          return;
+        }
+        const blob = new Blob([await resp.text()], { type: 'text/html;charset=utf-8' });
+        window.open(URL.createObjectURL(blob), '_blank');
+      } catch (err) {
+        alert('無法連線至服務');
+      }
     }
 
     async function importCases(file) {
@@ -841,7 +991,461 @@
       badge.innerText = '⏳ 待審';
       badge.className = 'badge badge-weak';
 
+      fillSamplingEvidence(currentSelectedCase);
+      refreshVault(currentSelectedCase);
       runSamplingAudit();
+    }
+
+    // ── Phase 16-03：抽樣多源證據、預審卡片與健保抽審 XML ──
+    function formatLabLines(labs) {
+      return (labs || []).map(l => [l.name, l.value, l.unit, l.date].filter((s, i) => i < 2 || s).join(' | ')).join('\n');
+    }
+
+    function parseLabLines(text) {
+      return text.split('\n').map(line => line.trim()).filter(Boolean).map(line => {
+        const [name = '', value = '', unit = '', date = ''] = line.split('|').map(s => s.trim());
+        return { name, value, unit, date };
+      });
+    }
+
+    function fillSamplingEvidence(c) {
+      document.getElementById('sLabInput').value = formatLabLines(c.lab_results);
+      document.getElementById('sCloudInput').value = c.cloud_records || '';
+      refreshSamplingAttachments(c.id);
+    }
+
+    // ── Phase 17-02：身分證佐證庫（vault）多源掛載與多媒體預覽 ──
+    // 所有使用者／伺服器字串一律以 textContent 或 DOM API 寫入（不使用 innerHTML）。
+    const VAULT_CATEGORIES = ['audio', 'images', 'reports', 'records'];
+    const VAULT_CONTAINERS = { audio: 'vaultAudio', images: 'vaultImages', reports: 'vaultReports', records: 'vaultRecords' };
+    const VAULT_PREVIEWABLE_IMAGE_EXT = ['.jpg', '.jpeg', '.png'];
+    const VAULT_MAX_UPLOAD_BYTES = 11 * 1024 * 1024;  // 與後端 MAX_CONTENT_LENGTH 一致
+    let vaultActiveKey = null;
+    let vaultRequestSeq = 0;
+    let vaultObjectUrls = [];
+
+    // 由抽樣案件推導 vault_key：病歷號須為「1 英文字母＋9 碼數字」（身分證格式），
+    // 就醫日期取西元年後兩碼＋月份（YYMM），例如 2026-05-10 → 2605。
+    // 同時接受民國 YYYMMDD（如 1150510）。任一條件不符即回傳說明，不猜測。
+    function computeVaultKey(record) {
+      const rawNo = String(record.record_no ?? '').trim().toUpperCase();
+      if (!/^[A-Z][0-9]{9}$/.test(rawNo)) {
+        return {
+          key: null,
+          error: `病歷號「${rawNo || '（空白）'}」不是身分證格式（需 1 個英文字母＋9 碼數字，目前 ${rawNo.length} 碼），無法自動掛載佐證庫。`,
+        };
+      }
+      const visit = String(record.visit_date ?? '').trim();
+      const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(visit);
+      const roc = /^(\d{3})(\d{2})(\d{2})$/.exec(visit);
+      let year;
+      let month;
+      if (iso) {
+        year = Number(iso[1]);
+        month = Number(iso[2]);
+      } else if (roc) {
+        year = Number(roc[1]) + 1911;
+        month = Number(roc[2]);
+      } else {
+        return { key: null, error: `就醫日期「${visit || '（空白）'}」無法解析（需 YYYY-MM-DD 或民國 YYYMMDD），無法掛載佐證庫。` };
+      }
+      if (month < 1 || month > 12) {
+        return { key: null, error: `就醫日期月份不合法：「${visit}」。` };
+      }
+      const yymm = String(year % 100).padStart(2, '0') + String(month).padStart(2, '0');
+      return { key: `${rawNo}-${yymm}`, error: null };
+    }
+
+    function vaultFileUrl(key, category, filename) {
+      return `/api/vault/${encodeURIComponent(key)}/files/${category}/${encodeURIComponent(filename)}`;
+    }
+
+    function setVaultMessage(text) {
+      document.getElementById('vaultMessage').textContent = text;
+    }
+
+    function setVaultButtonsEnabled(enabled) {
+      document.getElementById('vaultBtnFile').disabled = !enabled;
+      document.getElementById('vaultBtnZip').disabled = !enabled;
+    }
+
+    function clearVaultObjectUrls() {
+      vaultObjectUrls.forEach(u => URL.revokeObjectURL(u));
+      vaultObjectUrls = [];
+    }
+
+    function vaultPlaceholder(text) {
+      const p = document.createElement('div');
+      p.className = 'vault-empty';
+      p.textContent = text;
+      return p;
+    }
+
+    function renderVaultContainersEmpty(text) {
+      VAULT_CATEGORIES.forEach(cat => {
+        const box = document.getElementById(VAULT_CONTAINERS[cat]);
+        box.replaceChildren(vaultPlaceholder(text));
+      });
+    }
+
+    // <audio>／<img> 無法附帶 X-API-Key 標頭，故改以 authFetch 取回後轉為同源 blob URL。
+    // seq 不符代表使用者已切換案件，回傳 null 並立即釋放該 URL。
+    async function fetchVaultBlobUrl(url, seq) {
+      try {
+        const res = await authFetch(url);
+        if (!res.ok) return null;
+        const objectUrl = URL.createObjectURL(await res.blob());
+        if (seq !== vaultRequestSeq) {
+          URL.revokeObjectURL(objectUrl);
+          return null;
+        }
+        vaultObjectUrls.push(objectUrl);
+        return objectUrl;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function isPreviewableImage(filename) {
+      const lower = filename.toLowerCase();
+      return VAULT_PREVIEWABLE_IMAGE_EXT.some(ext => lower.endsWith(ext));
+    }
+
+    function openVaultLightbox(url, caption) {
+      document.getElementById('vaultLightboxImg').src = url;
+      document.getElementById('vaultLightboxCaption').textContent = caption;
+      document.getElementById('vaultLightbox').hidden = false;
+    }
+
+    function closeVaultLightbox() {
+      document.getElementById('vaultLightbox').hidden = true;
+      document.getElementById('vaultLightboxImg').removeAttribute('src');
+    }
+
+    // 報告／病歷：先同步開啟空白分頁（避免 await 後被彈窗攔截），取得檔案後再導向 blob。
+    async function openVaultFile(category, filename) {
+      const key = vaultActiveKey;
+      if (!key) return;
+      const win = window.open('', '_blank');
+      try {
+        const res = await authFetch(vaultFileUrl(key, category, filename));
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const objectUrl = URL.createObjectURL(await res.blob());
+        if (win) {
+          win.location.href = objectUrl;
+        } else {
+          setVaultMessage('瀏覽器攔截了新分頁，請允許彈出視窗後再試。');
+        }
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+      } catch (err) {
+        if (win) win.close();
+        setVaultMessage(`開啟失敗：${filename}（${err.message}）`);
+      }
+    }
+
+    function renderVaultAudio(files, urls) {
+      const box = document.getElementById(VAULT_CONTAINERS.audio);
+      if (!files.length) {
+        box.replaceChildren(vaultPlaceholder('尚無錄音檔'));
+        return;
+      }
+      const nodes = files.map((f, i) => {
+        const card = document.createElement('div');
+        card.style.marginBottom = '10px';
+        const name = document.createElement('div');
+        name.className = 'vault-item-name';
+        name.style.fontSize = '12px';
+        name.textContent = f.filename;
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.preload = 'metadata';
+        if (urls[i]) {
+          audio.src = urls[i];
+          card.append(name, audio);
+        } else {
+          card.append(name, vaultPlaceholder('無法載入此錄音（檢查權限或檔案）'));
+        }
+        return card;
+      });
+      box.replaceChildren(...nodes);
+    }
+
+    function renderVaultImages(files, urls) {
+      const box = document.getElementById(VAULT_CONTAINERS.images);
+      if (!files.length) {
+        box.replaceChildren(vaultPlaceholder('尚無影像'));
+        return;
+      }
+      const nodes = files.map((f, i) => {
+        const tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = 'vault-thumb';
+        const name = document.createElement('span');
+        name.className = 'vault-thumb-name';
+        name.textContent = f.filename;
+        if (urls[i]) {
+          const img = document.createElement('img');
+          img.src = urls[i];
+          img.alt = f.filename;
+          tile.onclick = () => openVaultLightbox(urls[i], f.filename);
+          tile.append(img, name);
+        } else {
+          // DICOM／HEIC 等瀏覽器無法直接顯示：提供開啟（下載）而非縮圖
+          tile.textContent = '📎 ' + f.filename;
+          tile.onclick = () => openVaultFile('images', f.filename);
+        }
+        return tile;
+      });
+      box.replaceChildren(...nodes);
+    }
+
+    function renderVaultLinkList(boxId, category, files, emptyText) {
+      const box = document.getElementById(boxId);
+      if (!files.length) {
+        box.replaceChildren(vaultPlaceholder(emptyText));
+        return;
+      }
+      const nodes = files.map(f => {
+        const row = document.createElement('div');
+        row.className = 'vault-item';
+        const name = document.createElement('span');
+        name.className = 'vault-item-name';
+        name.textContent = `${f.filename}（${f.size} bytes）`;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-action';
+        btn.style.cssText = 'padding: 3px 10px; font-size: 11px; flex-shrink: 0;';
+        btn.textContent = '開啟';
+        btn.onclick = () => openVaultFile(category, f.filename);
+        row.append(name, btn);
+        return row;
+      });
+      box.replaceChildren(...nodes);
+    }
+
+    async function loadVault(key, seq) {
+      try {
+        const res = await authFetch(`/api/vault/${encodeURIComponent(key)}`);
+        const body = await res.json().catch(() => ({}));
+        if (seq !== vaultRequestSeq) return;
+        if (!res.ok) {
+          setVaultMessage('無法載入佐證庫：' + (body.message || res.status));
+          renderVaultContainersEmpty('載入失敗');
+          return;
+        }
+        const grouped = {};
+        VAULT_CATEGORIES.forEach(cat => {
+          grouped[cat] = (body.categories && body.categories[cat] && body.categories[cat].files) || [];
+        });
+        await renderVaultFiles(key, grouped, seq);
+      } catch (err) {
+        if (seq === vaultRequestSeq) setVaultMessage('無法連線至服務');
+      }
+    }
+
+    async function renderVaultFiles(key, grouped, seq) {
+      clearVaultObjectUrls();
+      const counts = VAULT_CATEGORIES.map(cat => grouped[cat].length);
+      const total = counts.reduce((a, b) => a + b, 0);
+      if (total === 0) {
+        setVaultMessage(`尚未匯入 ${key} 佐證檔案，可拖曳 ZIP 或單檔至此`);
+      } else {
+        setVaultMessage(`${key}：錄音 ${counts[0]}／影像 ${counts[1]}／報告 ${counts[2]}／病歷 ${counts[3]}（共 ${total} 個檔案）`);
+      }
+
+      // 錄音與可預覽影像在渲染前先取回 blob URL（平行送出）
+      const audioUrls = await Promise.all(grouped.audio.map(f =>
+        fetchVaultBlobUrl(vaultFileUrl(key, 'audio', f.filename), seq)));
+      const imageUrls = await Promise.all(grouped.images.map(f =>
+        isPreviewableImage(f.filename) ? fetchVaultBlobUrl(vaultFileUrl(key, 'images', f.filename), seq) : Promise.resolve(null)));
+      if (seq !== vaultRequestSeq) return;
+
+      renderVaultAudio(grouped.audio, audioUrls);
+      renderVaultImages(grouped.images, imageUrls);
+      renderVaultLinkList('vaultReports', 'reports', grouped.reports, '尚無檢驗檢查報告');
+      renderVaultLinkList('vaultRecords', 'records', grouped.records, '尚無病歷紀錄');
+    }
+
+    // 點選案件時呼叫：推導 vault_key，成功則載入佐證庫，失敗則說明原因
+    async function refreshVault(record) {
+      const seq = ++vaultRequestSeq;
+      clearVaultObjectUrls();
+      const result = computeVaultKey(record);
+      vaultActiveKey = result.key;
+      setVaultButtonsEnabled(Boolean(result.key));
+      const label = document.getElementById('vaultKeyLabel');
+      if (!result.key) {
+        label.textContent = '無法自動掛載';
+        setVaultMessage(result.error);
+        renderVaultContainersEmpty('請修正病歷號或就醫日期後重新選取案件');
+        return;
+      }
+      label.textContent = result.key;
+      setVaultMessage('載入佐證庫中…');
+      await loadVault(result.key, seq);
+    }
+
+    async function uploadVaultFiles(fileList) {
+      const key = vaultActiveKey;
+      if (!key) {
+        setVaultMessage('請先選取可掛載佐證庫的案件');
+        return;
+      }
+      const files = Array.from(fileList || []);
+      if (!files.length) return;
+      const totalBytes = files.reduce((n, f) => n + f.size, 0);
+      if (totalBytes > VAULT_MAX_UPLOAD_BYTES) {
+        setVaultMessage(`單次上傳超過 11 MB 上限（目前 ${(totalBytes / 1048576).toFixed(1)} MB），請分批上傳。`);
+        return;
+      }
+      const fd = new FormData();
+      files.forEach(f => fd.append('file', f, f.name));
+      setVaultMessage(`上傳中：${files.length} 個檔案…`);
+      try {
+        const res = await authFetch(`/api/vault/${encodeURIComponent(key)}/upload`, { method: 'POST', body: fd });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setVaultMessage('上傳失敗：' + (body.message || res.status));
+        } else {
+          setVaultMessage(`已匯入 ${body.saved.length} 個檔案。`);
+        }
+      } catch (err) {
+        setVaultMessage('無法連線至服務');
+      } finally {
+        document.getElementById('vaultFileInput').value = '';
+        document.getElementById('vaultZipInput').value = '';
+      }
+      if (vaultActiveKey === key) {
+        await loadVault(key, ++vaultRequestSeq);
+      }
+    }
+
+    function handleVaultDragOver(event) {
+      event.preventDefault();
+      if (vaultActiveKey) document.getElementById('vaultDropzone').classList.add('dragover');
+    }
+
+    function handleVaultDragLeave(event) {
+      document.getElementById('vaultDropzone').classList.remove('dragover');
+    }
+
+    function handleVaultDrop(event) {
+      event.preventDefault();
+      document.getElementById('vaultDropzone').classList.remove('dragover');
+      uploadVaultFiles(event.dataTransfer ? event.dataTransfer.files : null);
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeVaultLightbox();
+    });
+
+    async function refreshSamplingAttachments(caseId) {
+      const box = document.getElementById('sAttachList');
+      box.innerText = '載入中…';
+      try {
+        const res = await authFetch(`/api/appeal/attachments/${encodeURIComponent(caseId)}`);
+        if (!res.ok) {
+          box.innerText = '無法載入附件清單';
+          return;
+        }
+        const data = await res.json();
+        const items = data.attachments || [];
+        box.innerText = items.length
+          ? items.map(a => `📎 ${a.filename}（${a.mime_type}，${a.file_size} bytes）`).join('\n')
+          : '尚未上傳影像佐證';
+      } catch (err) {
+        box.innerText = '無法連線至服務';
+      }
+    }
+
+    async function sampleFromMonthlyBatch() {
+      const batch = currentMonthlyBatchId || window.prompt('請輸入申報批次代號（例如 MONTHLY-202307）', 'MONTHLY-202307');
+      if (!batch) return;
+      const res = await authFetch('/api/sampling/sample-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch, random_count: 20, intentional_count: 10 })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert('自動抽樣失敗：' + (data.message || res.status));
+        return;
+      }
+      alert(`抽樣完成：批次 ${data.batch}，共 ${data.sampled} 筆（隨機 ${data.random}／立意 ${data.intentional}）。\n新增 ${data.case_store_persisted} 筆，既有略過 ${data.case_store_conflicts.length} 筆。`);
+      await loadCaseData();
+    }
+
+    async function saveSamplingEvidence() {
+      if (!currentSelectedCase) {
+        alert('請先選擇一筆抽樣案件');
+        return;
+      }
+      const caseId = currentSelectedCase.id;
+      const res = await authFetch(`/api/sampling/cases/${encodeURIComponent(caseId)}/evidence`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lab_results: parseLabLines(document.getElementById('sLabInput').value),
+          cloud_records: document.getElementById('sCloudInput').value
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert('儲存失敗：' + (data.message || res.status));
+        return;
+      }
+      currentSelectedCase.lab_results = data.lab_results;
+      currentSelectedCase.cloud_records = data.cloud_records;
+      await runSamplingAudit();
+    }
+
+    async function uploadSamplingAttachment(file) {
+      if (!file || !currentSelectedCase) return;
+      const caseId = currentSelectedCase.id;
+      const fd = new FormData();
+      fd.append('case_id', caseId);
+      fd.append('file', file);
+      const res = await authFetch('/api/appeal/attachments/upload', { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) alert('上傳失敗：' + (data.message || res.status));
+      document.getElementById('sAttachInput').value = '';
+      await refreshSamplingAttachments(caseId);
+    }
+
+    async function openSamplingPreview() {
+      if (!currentSelectedCase) {
+        alert('請先選擇一筆抽樣案件');
+        return;
+      }
+      const res = await authFetch(`/api/sampling/cases/${encodeURIComponent(currentSelectedCase.id)}/preview-html`);
+      if (!res.ok) {
+        alert('無法開啟預審卡片（' + res.status + '）');
+        return;
+      }
+      const blob = new Blob([await res.text()], { type: 'text/html;charset=utf-8' });
+      window.open(URL.createObjectURL(blob), '_blank');
+    }
+
+    async function exportSamplingXml() {
+      if (!currentSelectedCase) {
+        alert('請先選擇一筆抽樣案件');
+        return;
+      }
+      const caseId = currentSelectedCase.id;
+      const res = await authFetch(`/api/sampling/cases/${encodeURIComponent(caseId)}/export-xml`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert('導出失敗：' + (body.message || res.status));
+        return;
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sampling_${caseId.replace(/[^A-Za-z0-9_-]/g, '_')}.xml`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     async function runSamplingAudit() {

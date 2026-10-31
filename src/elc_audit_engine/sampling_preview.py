@@ -139,14 +139,52 @@ def _attachment_card(attachments: list[dict]) -> str:
     )
 
 
-def render_sampling_preview_html(case_id: str, payload: dict, attachments: list[dict] | None = None) -> str:
-    """回傳單一抽樣案件的完整預覽 HTML（自包含、已轉義）。"""
+_VAULT_CATEGORY_LABELS = (
+    ("images", "🖼️ 相片"),
+    ("audio", "🎙️ 錄音"),
+    ("reports", "📄 檢驗檢查報告"),
+    ("records", "📝 病歷紀錄"),
+)
+
+
+def _vault_card(vault_key: str | None, vault: dict[str, list[dict]] | None) -> str:
+    """佐證庫檔案清單（Phase 17-03）：僅列分類與檔名，內容不嵌入預覽。無檔案時整段不輸出。"""
+    if not vault_key or not vault:
+        return ""
+    rows = "".join(
+        f"<tr><td>{_e(label)}</td><td>{_e(', '.join(f.get('filename', '') for f in vault.get(cat, [])) or '—')}</td>"
+        f"<td>{len(vault.get(cat, []))}</td></tr>"
+        for cat, label in _VAULT_CATEGORY_LABELS
+    )
+    if sum(len(vault.get(cat, [])) for cat, _ in _VAULT_CATEGORY_LABELS) == 0:
+        return ""
+    return (
+        f'<section class="card"><h2>📁 佐證庫（{_e(vault_key)}）</h2>'
+        '<table><thead><tr><th>分類</th><th>檔名</th><th>數量</th></tr></thead>'
+        f"<tbody>{rows}</tbody></table>"
+        '<p class="muted">佐證檔案內容須經佐證庫檔案端點取得（需 API Key）。</p></section>'
+    )
+
+
+def render_sampling_preview_html(
+    case_id: str,
+    payload: dict,
+    attachments: list[dict] | None = None,
+    *,
+    vault_key: str | None = None,
+    vault: dict[str, list[dict]] | None = None,
+) -> str:
+    """回傳單一抽樣案件的完整預覽 HTML（自包含、已轉義）。
+
+    vault_key／vault：由路由以 `vault_key_for_case` 推導並列出的佐證庫檔案（分類 → 檔案清單）。
+    """
     sections = "".join([
         _patient_card(payload),
         _soap_card(payload),
         _lab_card(payload),
         _cloud_card(payload),
         _attachment_card(attachments or []),
+        _vault_card(vault_key, vault),
     ])
     return (
         "<!doctype html>"

@@ -17,11 +17,15 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 <details>
 <summary>🔄 v1.2 三軌自動化審核與申復工作台（Phase 15）</summary>
 
-- [ ] Phase 15: 當月申報檔預審與三軌工作台（0/4 plans）
-  - 15-01: TOTFA 申報檔解析器與核心資料模型
-  - 15-02: 高風險與單價門檻篩檢引擎（醫令>350元、藥品>5元/顆、診斷碼比對）
-  - 15-03: PageIndex 臨床推理樹與 SOAP 補強建議生成
-  - 15-04: Answer-me-with-HTML 視覺化互動介面與工作台整合
+- [x] Phase 15: 當月申報檔預審與三軌工作台（5/5 plans）— completed 2026-10-30
+- [x] Phase 16: 事前預審抽樣清單與多源審查工作台（3/3 plans）— completed 2026-10-31
+  - 16-01: 抽樣演算法（20 隨機 + 10 最高點數立意抽查）與批次抽樣 API
+  - 16-02: 多源證據輸入（檢驗、雲端病歷、影像附件）與 HTML 視覺化預覽卡片
+  - 16-03: 健保局電子抽審 XML 導出（Big5/outpatient）、前端 UI 整合與 E2E 驗證
+- [x] Phase 17: 二階抽審核實工作台與身分證佐證庫（Evidence Vault）（3/3 plans）— completed 2026-10-31
+  - 17-01: 佐證庫檔案系統規範與 Vault Service 實作（身分證-YYMM 結構化自動歸檔、讀取與安全防護）
+  - 17-02: 前端第二階介面升級（身分證佐證庫多源掛載、影像畫廊、錄音播放器、報告檢視）
+  - 17-03: 以 MONTHLY-202307.zip 進行二階核實全流程走通與 E2E 整合驗收
 
 </details>
 

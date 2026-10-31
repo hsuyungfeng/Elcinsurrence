@@ -9,7 +9,7 @@ from typing import Any
 
 from flask import Blueprint, Response, current_app, jsonify, request
 
-from elc_audit_engine import attachment_store
+from elc_audit_engine import attachment_store, evidence_vault
 from elc_audit_engine.case_store import CaseNotFoundError, IllegalTransitionError
 from elc_audit_engine.comparator.soap_advice import generate_soap_advice
 from elc_audit_engine.generators.sampling_xml import SamplingXmlError, build_sampling_xml
@@ -121,7 +121,18 @@ def sampling_case_preview_html(case_id: str):
         {"filename": a.filename, "mime_type": a.mime_type, "file_size": a.file_size}
         for a in attachment_store.list_attachments(case_id)
     ]
-    html = render_sampling_preview_html(case_id, dict(record.payload or {}), attachments)
+    payload = dict(record.payload or {})
+    # 佐證庫（Phase 17-03）：依病歷號＋就醫日推導 vault_key，列出該病患月份的佐證檔案清單
+    vault_key = evidence_vault.vault_key_for_case(payload.get("record_no"), payload.get("visit_date"))
+    vault = None
+    if vault_key is not None:
+        vault = {
+            cat: [{"filename": f.filename} for f in files]
+            for cat, files in evidence_vault.list_vault_files(vault_key).items()
+        }
+    html = render_sampling_preview_html(
+        case_id, payload, attachments, vault_key=vault_key, vault=vault
+    )
     return Response(html, content_type="text/html; charset=utf-8")
 
 
