@@ -48,3 +48,9 @@ TOTFA.xml
 data/samples/
 data/phi/
 data/sampleimage/
+
+# 病患個資佐證庫與本機資料庫（PHI & Local DBs）—— 示範佐證留本機供 Dashboard 讀取，絕不進版控
+data/evidence_vault/
+*.sqlite3
+data/*.sqlite3
+data/db/*.sqlite3

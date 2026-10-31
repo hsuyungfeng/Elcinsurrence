@@ -1471,23 +1471,31 @@
           data.message || '預審失敗，請稍後再試。';
         return;
       }
-      document.getElementById('sAdviceBox').innerText = data.reinforcement_advice;
+      // Plan 18-03：閉環警示（病歷缺席、範本降級、查無規則）置於建議框最前方
+      const warningText = (data.closed_loop_warnings || []).map(w => '⚠ ' + w).join('\n');
+      document.getElementById('sAdviceBox').innerText =
+        (warningText ? warningText + '\n\n' : '') + data.reinforcement_advice;
 
       // 徽章以引擎實際結果為準（原本停留在清單的硬編碼值）。
       // support_level=null 有兩種成因，必須分辨（P1-1）：
       // undetermined=true → 系統未能判定；否則為查無規則。
       // 兩者都不得顯示為「裸奔」。
       const badge = document.getElementById('sSupportBadge');
-      if (data.support_level === '充分') {
+      // 閉環狀態（Plan 18-03）：病歷缺席的充分已降為薄弱；查無規則不同於待判定。
+      const state = data.support_state || data.support_level;
+      if (data.rule_found === false) {
+        badge.innerText = '❓ 查無規則';
+        badge.className = 'badge badge-weak';
+      } else if (state === '充分') {
         badge.innerText = '✅ 充分';
         badge.className = 'badge badge-sufficient';
-      } else if (data.support_level === '薄弱') {
+      } else if (state === '薄弱') {
         badge.innerText = '⚠️ 薄弱';
         badge.className = 'badge badge-weak';
-      } else if (data.support_level === '裸奔') {
+      } else if (state === '裸奔') {
         badge.innerText = '❌ 裸奔';
         badge.className = 'badge badge-none';
-      } else if (data.undetermined) {
+      } else if (state === '待判定' || data.undetermined) {
         badge.innerText = '⏳ 待判定';
         badge.className = 'badge badge-weak';
       } else {

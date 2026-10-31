@@ -30,8 +30,14 @@ from elc_audit_engine.parsers.models import OrderRecord, SubmissionCase
 from elc_audit_engine.parsers.totfa import parse_totfa_zip
 from elc_audit_engine.pipeline import run_presubmission_check
 from elc_audit_engine.rule_repository.errors import RuleRepositoryError
-from elc_audit_engine.sampling_preview import render_sampling_preview_html
+from elc_audit_engine.sampling_closed_loop import (
+    build_review,
+    fallback_soap,
+    resolve_soap_text,
+    save_review,
+)
 from elc_audit_engine.sampling_sampler import sample_monthly_batch
+from elc_audit_engine.unified_review_report import build_review_case_view, render_unified_review_html
 
 from ..cases import persist_cases, to_sampling_case
 from ..context import caller_id, case_store
@@ -115,25 +121,39 @@ def update_sampling_evidence(case_id: str):
 
 @bp.route("/api/sampling/cases/<case_id>/preview-html", methods=["GET"])
 def sampling_case_preview_html(case_id: str):
-    """單一抽樣案件的視覺化預覽卡片（HTML）；需 API Key（含病歷與個資）。"""
+    """單一抽樣案件的統一審查格式預覽（第 2 階；HTML）；需 API Key（含病歷與個資）。
+
+    身分證字號即 record_no；佐證庫依身分證＋就醫日推導（Phase 17-03）；
+    SOAP 缺漏時以範本降級並標示須醫師審核（Plan 18-03）。
+    """
     record = _sampling_case_or_404(case_id)
-    attachments = [
-        {"filename": a.filename, "mime_type": a.mime_type, "file_size": a.file_size}
-        for a in attachment_store.list_attachments(case_id)
-    ]
+    store = case_store()
     payload = dict(record.payload or {})
-    # 佐證庫（Phase 17-03）：依病歷號＋就醫日推導 vault_key，列出該病患月份的佐證檔案清單
+
     vault_key = evidence_vault.vault_key_for_case(payload.get("record_no"), payload.get("visit_date"))
-    vault = None
+    vault_listing = None
     if vault_key is not None:
-        vault = {
+        vault_listing = {
             cat: [{"filename": f.filename} for f in files]
             for cat, files in evidence_vault.list_vault_files(vault_key).items()
         }
-    html = render_sampling_preview_html(
-        case_id, payload, attachments, vault_key=vault_key, vault=vault
+    attachments = tuple(a.filename for a in attachment_store.list_attachments(case_id))
+
+    soap_template = None
+    if not str(payload.get("soap") or "").strip():
+        soap, source = fallback_soap(store, payload)
+        if source.startswith("template") and soap is not None:
+            soap_template = soap
+
+    view = build_review_case_view(
+        2,
+        case_id,
+        payload,
+        vault_listing=vault_listing,
+        soap_template=soap_template,
+        attachments=attachments,
     )
-    return Response(html, content_type="text/html; charset=utf-8")
+    return Response(render_unified_review_html(view), content_type="text/html; charset=utf-8")
 
 
 @bp.route("/api/sampling/cases/<case_id>/export-xml", methods=["GET"])
@@ -303,12 +323,20 @@ def audit_sampling_case():
     case_id = clean_str(data, "case_id")
     store = case_store()
 
+    case_payload: dict | None = None
     if case_id:
         try:
-            if store.get(case_id).kind != "sampling":
+            record = store.get(case_id)
+            if record.kind != "sampling":
                 raise ApiError(f"案件 '{case_id}' 不是抽樣預審案件", status=409)
+            case_payload = dict(record.payload or {})
         except CaseNotFoundError:
             pass  # 查無案件不阻斷預審（向後相容），state_transition 會標 not_found
+
+    # Plan 18-03：SOAP 未填時自動帶入範本（僅供參考），來源寫入審查結果
+    soap_source = "case" if soap_text else "none"
+    if not soap_text and case_payload is not None:
+        soap_text, soap_source = resolve_soap_text(store, case_payload)
 
     case = SubmissionCase(record_no=record_no, orders=(OrderRecord(code=order_code),))
     soap_doc = parse_soap_text(soap_text) if soap_text else None
@@ -340,6 +368,19 @@ def audit_sampling_case():
             "LLM 判定服務異常，未完成預審" if oj.support_level is None and oj.rule_found else None
         ),
     )
+
+    # Plan 18-03：支持度狀態流轉（待判定／充分／薄弱／裸奔）與警示寫回案件 payload["review"]。
+    # 與 run_closed_loop 共用 build_review，確保 audit 與閉環結果一致。
+    review = None
+    if case_payload is not None:
+        review = build_review(
+            judgment_level=oj.support_level,
+            rule_found=oj.rule_found,
+            records_degraded=result.comparison.records_degraded,
+            records_source=records_source,
+            soap_source=soap_source,
+        )
+        save_review(store, case_id, review)
 
     # 整合 Qwen3.8-27B 智慧比對：比對原始 SOAP 與雲端病歷/病史時間軸，產出結構化建議供醫師審批
     soap_advice = None
@@ -388,6 +429,11 @@ def audit_sampling_case():
         "records_degraded_reason": degraded_reason(
             records_source, result.comparison.records_degraded
         ),
+        # 閉環（Plan 18-03）：狀態流轉、警示與本次判定實際使用的 SOAP 來源／文字
+        "support_state": review["support_state"] if review else None,
+        "closed_loop_warnings": review["warnings"] if review else [],
+        "soap_source": soap_source,
+        "soap_text_used": soap_text or "",
     })
 
 

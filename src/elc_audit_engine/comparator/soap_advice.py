@@ -18,7 +18,9 @@ _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 _SOAP_SECTIONS = ("s", "o", "a", "p")
 _MIN_SECTION_CHARS = 20
-_MAX_SECTION_CHARS = 1500
+_MAX_SECTION_CHARS = 500
+_MIN_TOTAL_CHARS = 500
+_MAX_TOTAL_CHARS = 1000
 _PASS_SCORE = 70
 # 佔位符／未完成用語（大小寫不敏感）：代表模型未實際寫出內容。
 _PLACEHOLDER_RE = re.compile(
@@ -78,6 +80,16 @@ def validate_soap_quality(soap_dict: Any) -> dict[str, Any]:
             issues.append({"section": "a", "code": "no_icd10", "detail": "A 欄未見 ICD-10 代碼"})
             score -= 5
 
+    total_chars = sum(len((soap_dict.get(k) or "").strip()) for k in _SOAP_SECTIONS)
+    if total_chars < _MIN_TOTAL_CHARS:
+        issues.append({"section": "*", "code": "total_too_short", "detail": f"SOAP 總字元數過短（{total_chars} < {_MIN_TOTAL_CHARS}）"})
+        score -= 20
+        blocking = True
+    elif total_chars > _MAX_TOTAL_CHARS:
+        issues.append({"section": "*", "code": "total_too_long", "detail": f"SOAP 總字元數過長（{total_chars} > {_MAX_TOTAL_CHARS}）"})
+        score -= 20
+        blocking = True
+
     score = max(0, min(100, score))
     return {"pass": (not blocking) and score >= _PASS_SCORE, "quality_score": score, "issues": issues}
 
@@ -89,6 +101,9 @@ _SYSTEM_PROMPT = (
     "- If the physician provides partial or empty preliminary SOAP, you MUST GENERATE A REALISTIC, GOLD-STANDARD CLINICAL SCENARIO TEMPLATE for the given order code and clinical context.\n"
     "- NEVER output generic meta-complaints or placeholders like 'data not documented', 'symptoms missing', 'ICD pending', 'prescription issued as per standard', or 'please verify'.\n"
     "- Instead, construct a complete, plausible outpatient case with standard Taiwan clinical phrasing, specific physical exam details, exact ICD-10 diagnostic codes, and concrete procedural/management steps that fully justify the medical necessity under NHI guidelines.\n\n"
+    "CRITICAL CONCISENESS & LENGTH CONSTRAINT:\n"
+    "- Total character length across S + O + A + P fields combined MUST BE BETWEEN 500 AND 1000 CHARACTERS.\n"
+    "- Keep clinical documentation focused, concise, and professional without redundant fluff, while strictly meeting Taiwan NHI audit guidelines.\n\n"
     "CRITICAL BILINGUAL CONSTRAINTS:\n"
     "1. `recommended_soap` (S, O, A, P fields) MUST be written entirely in professional Medical English with standard clinical terminology and abbreviations used in Taiwan hospital/clinic EHR systems.\n"
     "   - S (Subjective): Realistic chief complaint, onset, mechanism of injury/illness, severity, and negative findings (e.g., denies loss of consciousness or visual changes).\n"

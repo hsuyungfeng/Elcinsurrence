@@ -1,28 +1,16 @@
-"""Plan 18-02 測試骨架：第 2、3 階審查報告統一格式。
-
-- 公開常數（區塊順序、階段標題）為一般測試。
-- 渲染與建模流程為 strict xfail（raises=NotImplementedError）：實作完成後會變成
-  XPASS 並使測試失敗，屆時移除 xfail 標記即可。
-"""
+"""Plan 18-02：第 2、3 階審查報告統一格式（建模與 HTML 渲染）。"""
 
 from __future__ import annotations
 
-import pytest
-
 from elc_audit_engine import unified_review_report as report
 
-pending_impl = pytest.mark.xfail(
-    raises=NotImplementedError,
-    strict=True,
-    reason="Plan 18-02 尚未實作",
-)
-
-
-# ── 已實作：公開契約 ─────────────────────────────────────────
+# ── 公開契約 ─────────────────────────────────────────────────
 
 
 def test_section_order_matches_monthly_202307_layout():
-    assert report.SECTION_ORDER == ("kpi", "header", "rule", "soap", "vault")
+    assert report.SECTION_ORDER == (
+        "warning", "kpi", "header", "rule", "soap", "lab", "cloud", "vault",
+    )
 
 
 def test_stage_titles_cover_stage_2_and_3():
@@ -39,20 +27,20 @@ def test_review_case_view_defaults_to_no_soap_and_no_vault():
     assert view.vault_files == {}
 
 
-# ── 待實作：建模與渲染（strict xfail） ───────────────────────
+# ── 建模 ─────────────────────────────────────────────────────
 
 
-@pending_impl
 def test_build_view_prefers_case_soap_over_template():
-    report.build_review_case_view(
+    view = report.build_review_case_view(
         2,
         "C-1",
         {"soap": "S: 主訴\nO: 數值\nA: 診斷\nP: 計畫"},
         soap_template={"s": "範本", "o": "", "a": "", "p": ""},
     )
+    assert view.soap_source == "case"
+    assert view.soap == {"s": "主訴", "o": "數值", "a": "診斷", "p": "計畫"}
 
 
-@pending_impl
 def test_build_view_falls_back_to_template_and_marks_source():
     view = report.build_review_case_view(
         3,
@@ -61,9 +49,47 @@ def test_build_view_falls_back_to_template_and_marks_source():
         soap_template={"s": "範本主訴", "o": "範本數值", "a": "範本診斷", "p": "範本計畫"},
     )
     assert view.soap_source == "template"
+    assert view.soap["p"] == "範本計畫"
 
 
-@pending_impl
+def test_build_view_keeps_unmarked_soap_text_as_raw():
+    view = report.build_review_case_view(2, "C-2b", {"soap": "沒有標記的一段病歷"})
+    assert view.soap == {"raw": "沒有標記的一段病歷"}
+
+
+def test_build_view_without_any_soap_source():
+    view = report.build_review_case_view(2, "C-2c", {})
+    assert view.soap is None
+    assert view.soap_source == "none"
+
+
+def test_header_labels_record_no_as_national_id():
+    view = report.build_review_case_view(2, "C-2d", {"record_no": "L221543164"})
+    assert view.header["身分證字號"] == "L221543164"
+    assert "病歷號" not in view.header
+
+
+def test_header_falls_back_to_patient_id_for_national_id():
+    view = report.build_review_case_view(2, "C-2e", {"patient_id": "L221543164"})
+    assert view.header["身分證字號"] == "L221543164"
+
+
+def test_build_view_maps_vault_listing_and_counts_kpis():
+    view = report.build_review_case_view(
+        2,
+        "C-3",
+        {"record_no": "A123456789", "visit_date": "2026-07-15"},
+        rules=(report.RuleBlock(label="給付規定", text="原文"),),
+        vault_listing={"images": [{"filename": "a.jpg"}, {"filename": "b.jpg"}], "audio": []},
+    )
+    assert view.vault_files == {"images": ("a.jpg", "b.jpg")}
+    assert view.vault_key == "A123456789-2607"
+    assert view.kpis == {"給付規定段落": 1, "佐證檔案": 2}
+
+
+# ── 渲染 ─────────────────────────────────────────────────────
+
+
 def test_render_escapes_external_text():
     view = report.ReviewCaseView(
         case_id="C-3",
@@ -75,7 +101,6 @@ def test_render_escapes_external_text():
     assert "&lt;script&gt;" in html
 
 
-@pending_impl
 def test_render_omits_empty_sections():
     view = report.ReviewCaseView(case_id="C-4", stage=2)
     html = report.render_unified_review_html(view)
@@ -83,7 +108,6 @@ def test_render_omits_empty_sections():
     assert "SOAP" not in html
 
 
-@pending_impl
 def test_render_follows_section_order():
     view = report.ReviewCaseView(
         case_id="C-5",
@@ -100,8 +124,54 @@ def test_render_follows_section_order():
     assert positions == sorted(positions)
 
 
-@pending_impl
-def test_stage_3_header_uses_stage_title():
+def test_render_stage_3_uses_stage_title():
     view = report.ReviewCaseView(case_id="C-6", stage=3)
     html = report.render_unified_review_html(view)
     assert report.STAGE_TITLES[3] in html
+
+
+def test_render_marks_template_soap_for_physician_review():
+    view = report.ReviewCaseView(
+        case_id="C-7",
+        stage=2,
+        soap={"s": "範本", "o": "", "a": "", "p": ""},
+        soap_source="template",
+    )
+    html = report.render_unified_review_html(view)
+    assert "須醫師審核" in html
+
+
+def test_build_view_reads_warnings_labs_cloud_from_payload():
+    payload = {
+        "review": {"warnings": ["⚠ 本案未取得半年病史佐證（病歷缺席）。"]},
+        "lab_results": [{"name": "HbA1c", "value": "8.5", "unit": "%"}, {"value": "x"}],
+        "cloud_records": "  健保跨院病歷正常  ",
+    }
+    view = report.build_review_case_view(2, "C-9", payload, attachments=("wound.png",))
+    assert view.warnings == ("⚠ 本案未取得半年病史佐證（病歷缺席）。",)
+    assert view.labs == ({"name": "HbA1c", "value": "8.5", "unit": "%"},)
+    assert view.cloud_text == "健保跨院病歷正常"
+    assert view.attachments == ("wound.png",)
+
+
+def test_render_shows_warnings_labs_cloud_and_attachments():
+    view = report.ReviewCaseView(
+        case_id="C-10",
+        stage=2,
+        warnings=("⚠ 病歷缺席",),
+        labs=({"name": "HbA1c", "value": "8.5", "unit": "%"},),
+        cloud_text="健保跨院病歷正常",
+        attachments=("wound.png",),
+    )
+    html = report.render_unified_review_html(view)
+    assert "⚠ 病歷缺席" in html
+    assert "8.5 %" in html
+    assert "健保跨院病歷正常" in html
+    assert "wound.png" in html
+
+
+def test_render_is_self_contained_without_external_resources():
+    view = report.ReviewCaseView(case_id="C-8", stage=2, soap={"s": "S"}, soap_source="case")
+    html = report.render_unified_review_html(view)
+    assert "<link" not in html
+    assert "src=" not in html

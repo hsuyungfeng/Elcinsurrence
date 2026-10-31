@@ -1,21 +1,33 @@
-"""Plan 18-03 測試骨架：抽樣事前預審自動化閉環。
-
-- 已實作的硬性規則（None → 待判定、未知級別拒絕）為一般測試。
-- 尚未實作的流程為 strict xfail（raises=NotImplementedError）：實作完成後會變成
-  XPASS 並使測試失敗，屆時移除 xfail 標記即可。
-"""
+"""Plan 18-03：抽樣事前預審自動化閉環（SOAP 降級、流程、寫回與冪等）。"""
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
+from config import settings
 from elc_audit_engine import sampling_closed_loop as loop
 
-pending_impl = pytest.mark.xfail(
-    raises=NotImplementedError,
-    strict=True,
-    reason="Plan 18-03 尚未實作",
-)
+KEY_PAYLOAD = {
+    "order_code": "62022C",
+    "order_name": "高價處置測試",
+    "record_no": "A123456789",
+    "visit_date": "2026-07-15",
+    "clinic": "01",
+    "soap": "S: 主訴胸悶\nO: 血壓 150/90\nA: 高血壓\nP: 追蹤",
+    "lab_results": [{"name": "HbA1c", "value": "8.5", "unit": "%"}],
+    "cloud_records": "外院紀錄：曾診斷高血壓。",
+}
+
+
+@pytest.fixture
+def store(make_api_app):
+    return make_api_app().extensions["elc"].case_store
+
+
+def _create(store, case_id: str, payload: dict, kind: str = "sampling"):
+    store.create(case_id=case_id, kind=kind, payload=dict(payload), actor="test")
 
 
 # ── 已實作：硬性規則 ─────────────────────────────────────────
@@ -74,52 +86,116 @@ def test_warnings_explain_downgrade_from_sufficient():
     assert "降為「薄弱」" in warnings[1]
 
 
-# ── 待實作：流程契約（strict xfail） ──────────────────────────
+# ── SOAP 降級 ────────────────────────────────────────────────
 
 
-@pending_impl
-def test_missing_soap_falls_back_to_template(make_api_app):
-    """SOAP 缺漏時改用 soap_templates 範本，soap_source 需標示來源。"""
-    app = make_api_app()
-    store = app.extensions["elc"].case_store
-    loop.fallback_soap(store, {"order_code": "62022C", "primary_diagnosis": "I10"})
+def test_fallback_soap_prefers_case_text(store):
+    soap, source = loop.fallback_soap(store, KEY_PAYLOAD)
+    assert source == "case"
+    assert soap["s"] == "主訴胸悶"
 
 
-@pending_impl
-def test_missing_soap_and_template_returns_none_without_raising(make_api_app):
-    """範本亦查無時回 (None, "none")，不得拋出例外。"""
-    app = make_api_app()
-    store = app.extensions["elc"].case_store
+def test_fallback_soap_keeps_unmarked_case_text_as_raw(store):
+    soap, source = loop.fallback_soap(store, {"order_code": "62022C", "soap": "無標記原文"})
+    assert source == "case"
+    assert soap == {"raw": "無標記原文"}
+
+
+def test_fallback_soap_uses_general_template_when_case_soap_missing(store):
+    store.put_soap_template(
+        "62022C", "", {"s": "範本S", "o": "範本O", "a": "範本A", "p": "範本P"},
+        source="llm_validated", quality_score=90,
+    )
+    soap, source = loop.fallback_soap(store, {"order_code": "62022C", "soap": ""})
+    assert source == "template_general"
+    assert soap["p"] == "範本P"
+
+
+def test_fallback_soap_prefers_specific_template(store):
+    store.put_soap_template(
+        "62022C", "I10", {"s": "專屬S", "o": "", "a": "", "p": ""},
+        source="llm_validated", quality_score=90,
+    )
+    soap, source = loop.fallback_soap(store, {"order_code": "62022C", "primary_diagnosis": "I10"})
+    assert source == "template_specific"
+    assert soap["s"] == "專屬S"
+
+
+def test_fallback_soap_returns_none_when_nothing_available(store):
     soap, source = loop.fallback_soap(store, {"order_code": "99999X", "primary_diagnosis": ""})
     assert soap is None
     assert source == "none"
 
 
-@pending_impl
-def test_run_closed_loop_attaches_vault_labs_and_cloud(make_api_app):
-    """點選案件時自動掛載佐證庫、檢驗數據與雲端病歷。"""
-    app = make_api_app()
-    store = app.extensions["elc"].case_store
-    result = loop.run_closed_loop(store, "SAMP-closed-loop-1")
-    assert result.case_id == "SAMP-closed-loop-1"
-    assert result.support_state in loop.SUPPORT_STATES
+def test_fallback_soap_without_order_code_returns_none(store):
+    assert loop.fallback_soap(store, {}) == (None, "none")
 
 
-@pending_impl
-def test_run_closed_loop_is_idempotent(make_api_app):
-    """同一案件重跑兩次，結果與寫回的 payload 必須一致。"""
-    app = make_api_app()
-    store = app.extensions["elc"].case_store
-    first = loop.run_closed_loop(store, "SAMP-closed-loop-1")
-    second = loop.run_closed_loop(store, "SAMP-closed-loop-1")
+# ── 閉環流程 ─────────────────────────────────────────────────
+
+
+def test_run_closed_loop_rejects_non_sampling_case(store):
+    _create(store, "MON-1", KEY_PAYLOAD, kind="monthly")
+    with pytest.raises(ValueError):
+        loop.run_closed_loop(store, "MON-1", provider=None)
+
+
+def test_run_closed_loop_without_records_never_reports_sufficient(store):
+    """病歷來源未設定 → records_degraded=True，任何情況下都不得標示為充分。"""
+    _create(store, "SAMP-loop-1", KEY_PAYLOAD)
+    result = loop.run_closed_loop(store, "SAMP-loop-1", provider=None)
+    assert result.records_degraded is True
+    assert result.records_source == "unconfigured"
+    assert result.support_state != loop.SUPPORT_SUFFICIENT
+    assert result.warnings
+
+
+def test_run_closed_loop_writes_review_back_to_payload(store):
+    _create(store, "SAMP-loop-2", KEY_PAYLOAD)
+    result = loop.run_closed_loop(store, "SAMP-loop-2", provider=None)
+    saved = store.get("SAMP-loop-2").payload["review"]
+    assert saved["support_state"] == result.support_state
+    assert saved["records_source"] == "unconfigured"
+
+
+def test_run_closed_loop_without_write_back_leaves_payload_untouched(store):
+    _create(store, "SAMP-loop-3", KEY_PAYLOAD)
+    loop.run_closed_loop(store, "SAMP-loop-3", provider=None, write_back=False)
+    assert "review" not in store.get("SAMP-loop-3").payload
+
+
+def test_run_closed_loop_is_idempotent(store):
+    _create(store, "SAMP-loop-4", KEY_PAYLOAD)
+    first = loop.run_closed_loop(store, "SAMP-loop-4", provider=None)
+    second = loop.run_closed_loop(store, "SAMP-loop-4", provider=None)
     assert first == second
 
 
-@pending_impl
-def test_run_closed_loop_degrades_when_patient_records_missing(make_api_app):
-    """病歷目錄缺席時 records_degraded=True 並附警示，而非服務 500（P0-2／C5）。"""
-    app = make_api_app()
-    store = app.extensions["elc"].case_store
-    result = loop.run_closed_loop(store, "SAMP-closed-loop-1", records_provider=None)
-    assert result.records_degraded is True
-    assert result.warnings
+def test_run_closed_loop_counts_labs_and_cloud_records(store):
+    _create(store, "SAMP-loop-5", KEY_PAYLOAD)
+    result = loop.run_closed_loop(store, "SAMP-loop-5", provider=None)
+    assert result.lab_count == 1
+    assert result.cloud_attached is True
+
+
+def test_run_closed_loop_marks_template_soap_source(store):
+    store.put_soap_template(
+        "62022C", "", {"s": "範本S", "o": "", "a": "", "p": ""},
+        source="llm_validated", quality_score=90,
+    )
+    _create(store, "SAMP-loop-6", {**KEY_PAYLOAD, "soap": ""})
+    result = loop.run_closed_loop(store, "SAMP-loop-6", provider=None)
+    assert result.soap_source == "template_general"
+    assert any("範本" in w for w in result.warnings)
+
+
+def test_run_closed_loop_counts_vault_files(store, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "DATA_DIR", str(tmp_path))
+    vault_dir = os.path.join(str(tmp_path), "evidence_vault", "A123456789-2607", "images")
+    os.makedirs(vault_dir)
+    with open(os.path.join(vault_dir, "scan.jpg"), "wb") as handle:
+        handle.write(b"x")
+    _create(store, "SAMP-loop-7", KEY_PAYLOAD)
+    result = loop.run_closed_loop(store, "SAMP-loop-7", provider=None)
+    assert result.vault_key == "A123456789-2607"
+    assert result.vault_file_count == 1

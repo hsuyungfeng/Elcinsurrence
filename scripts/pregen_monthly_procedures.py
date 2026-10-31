@@ -59,6 +59,7 @@ def run(
     rules_db_path: str | None,
     dry_run: bool,
     limit: int,
+    force: bool = False,
 ) -> dict:
     """批次來源（db_path）與範本存放（template_db_path）可分開；範本應存於正式 cases.sqlite3。"""
     source = CaseStore(db_path=db_path)
@@ -70,7 +71,7 @@ def run(
     llm_calls = 0
     for code, name, rule_text in targets:
         entry = {"order_code": code, "order_name": name}
-        if store.get_soap_template(code, GENERAL_DX, fallback_general=False) is not None:
+        if not force and store.get_soap_template(code, GENERAL_DX, fallback_general=False) is not None:
             entry["result"] = "cached"
         elif not rule_text.strip():
             entry["result"] = "skipped_no_rule_text"
@@ -86,6 +87,7 @@ def run(
                 order_name=name,
                 primary_diagnosis=GENERAL_DX,
                 rule_text=rule_text,
+                force=force,
             )
             entry["result"] = outcome.status
             if outcome.quality is not None:
@@ -113,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rules-db", default=None, help="rules.sqlite3 路徑（預設為系統設定）")
     parser.add_argument("--limit", type=int, default=30, help="本次最多呼叫 LLM 的醫令數")
     parser.add_argument("--dry-run", action="store_true", help="只列出目標，不呼叫 LLM、不寫入")
+    parser.add_argument("--force", action="store_true", help="強制重新生成並覆寫既有快取範本")
     args = parser.parse_args(argv)
     if not 1 <= args.limit <= 100:
         parser.error("--limit 須介於 1～100")
@@ -124,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         rules_db_path=args.rules_db,
         dry_run=args.dry_run,
         limit=args.limit,
+        force=args.force,
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
