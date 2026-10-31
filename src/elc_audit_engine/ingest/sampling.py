@@ -14,8 +14,8 @@ from __future__ import annotations
 import csv
 import io
 import os
-from dataclasses import dataclass, field
-from typing import Sequence
+from collections.abc import Sequence
+from dataclasses import dataclass
 
 from elc_audit_engine.rule_repository.loaders.dates import parse_flexible_date
 
@@ -57,6 +57,11 @@ class SamplingCaseRecord:
     source: str = "csv"
     ocr_line: str | None = None
     raw: tuple[str, ...] = ()
+    # 多源證據（Plan 16-02）：不參與案件內容雜湊（見 api/cases.py content_case_id），
+    # 以免補充證據後重新匯入同一檔案時產生不同 case_id。
+    lab_results: tuple[dict, ...] = ()  # 檢驗數據：{name, value, unit?, date?}
+    cloud_records: str | None = None  # 健保雲端跨院紀錄摘要
+    attachments: tuple[str, ...] = ()  # 關聯附件識別（實際檔案存於 attachment_store）
 
 
 @dataclass(frozen=True)

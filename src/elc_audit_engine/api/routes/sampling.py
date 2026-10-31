@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import re
+from typing import Any
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request
 
+from elc_audit_engine import attachment_store
 from elc_audit_engine.case_store import CaseNotFoundError, IllegalTransitionError
 from elc_audit_engine.comparator.soap_advice import generate_soap_advice
+from elc_audit_engine.generators.sampling_xml import SamplingXmlError, build_sampling_xml
 from elc_audit_engine.ingest import (
     MediaExtractError,
     SamplingImportError,
@@ -21,23 +25,180 @@ from elc_audit_engine.ingest import (
 )
 from elc_audit_engine.ingest.sampling import SamplingCaseRecord, SamplingImportResult
 from elc_audit_engine.ingest.zip_support import inspect_zip_contents
-from elc_audit_engine.monthly_audit import audit_batch
 from elc_audit_engine.parsers import parse_soap_text
 from elc_audit_engine.parsers.models import OrderRecord, SubmissionCase
 from elc_audit_engine.parsers.totfa import parse_totfa_zip
 from elc_audit_engine.pipeline import run_presubmission_check
 from elc_audit_engine.rule_repository.errors import RuleRepositoryError
+from elc_audit_engine.sampling_preview import render_sampling_preview_html
+from elc_audit_engine.sampling_sampler import sample_monthly_batch
 
 from ..cases import persist_cases, to_sampling_case
 from ..context import caller_id, case_store
 from ..demo_data import DEMO_SAMPLING_CASES
 from ..errors import ApiError
-from ..records import degraded_reason, records_provider, resolve_records_source, resolve_visit_date
+from ..records import (
+    degraded_reason,
+    records_provider,
+    resolve_records_source,
+    resolve_visit_date,
+)
 from ..uploads import import_error_message, save_upload
 from ..validation import MAX_SOAP_CHARS, clean_str, json_body
 from ._lists import case_list_response
 
 bp = Blueprint("sampling", __name__)
+
+_EVIDENCE_MAX_LABS = 50
+_EVIDENCE_MAX_CLOUD_CHARS = 5000
+
+
+def _sampling_case_or_404(case_id: str):
+    """取得抽樣案件；查無或非 kind='sampling' 一律 404（不洩漏其他類別案件）。"""
+    try:
+        record = case_store().get(case_id)
+    except CaseNotFoundError:
+        raise ApiError("查無此抽樣案件", status=404)
+    if record.kind != "sampling":
+        raise ApiError("查無此抽樣案件", status=404)
+    return record
+
+
+def _lab_results(raw: Any) -> list[dict[str, str]]:
+    """檢驗數據清單驗證：每項需有 name 與 value；可選 unit、date；全部轉為字串。"""
+    if not isinstance(raw, list):
+        raise ApiError("lab_results 必須為陣列")
+    if len(raw) > _EVIDENCE_MAX_LABS:
+        raise ApiError(f"lab_results 最多 {_EVIDENCE_MAX_LABS} 筆")
+    labs: list[dict[str, str]] = []
+    for index, item in enumerate(raw, start=1):
+        if not isinstance(item, dict):
+            raise ApiError(f"lab_results 第 {index} 筆必須為物件")
+        name = str(item.get("name") or "").strip()
+        value = str(item.get("value") if item.get("value") is not None else "").strip()
+        if not name or not value:
+            raise ApiError(f"lab_results 第 {index} 筆缺少 name 或 value")
+        entry = {"name": name[:100], "value": value[:100]}
+        for optional in ("unit", "date"):
+            text = str(item.get(optional) or "").strip()
+            if text:
+                entry[optional] = text[:20]
+        labs.append(entry)
+    return labs
+
+
+@bp.route("/api/sampling/cases/<case_id>/evidence", methods=["PUT"])
+def update_sampling_evidence(case_id: str):
+    """更新抽樣案件的檢驗數據與健保雲端跨院紀錄（覆寫，不改變案件狀態）。"""
+    record = _sampling_case_or_404(case_id)
+    data = json_body(request)
+    labs = _lab_results(data.get("lab_results", []))
+    cloud = data.get("cloud_records", "")
+    if cloud is None:
+        cloud = ""
+    if not isinstance(cloud, str):
+        raise ApiError("cloud_records 必須為字串")
+    if len(cloud) > _EVIDENCE_MAX_CLOUD_CHARS:
+        raise ApiError(f"cloud_records 超過 {_EVIDENCE_MAX_CLOUD_CHARS} 字")
+
+    payload = dict(record.payload or {})
+    payload["lab_results"] = labs
+    payload["cloud_records"] = cloud.strip() or None
+    case_store().update_payload(case_id, payload)
+    return jsonify({
+        "status": "success",
+        "case_id": case_id,
+        "lab_results": labs,
+        "cloud_records": payload["cloud_records"],
+    })
+
+
+@bp.route("/api/sampling/cases/<case_id>/preview-html", methods=["GET"])
+def sampling_case_preview_html(case_id: str):
+    """單一抽樣案件的視覺化預覽卡片（HTML）；需 API Key（含病歷與個資）。"""
+    record = _sampling_case_or_404(case_id)
+    attachments = [
+        {"filename": a.filename, "mime_type": a.mime_type, "file_size": a.file_size}
+        for a in attachment_store.list_attachments(case_id)
+    ]
+    html = render_sampling_preview_html(case_id, dict(record.payload or {}), attachments)
+    return Response(html, content_type="text/html; charset=utf-8")
+
+
+@bp.route("/api/sampling/cases/<case_id>/export-xml", methods=["GET"])
+def export_sampling_case_xml(case_id: str):
+    """導出單一抽樣案件的健保抽審 XML（Big5 附件下載）。
+
+    缺來源申報總檔或必要欄位（d1/d2/d3、pdata）時回 422，不產生殘缺檔（見 sampling_xml）。
+    """
+    record = _sampling_case_or_404(case_id)
+    try:
+        body = build_sampling_xml(dict(record.payload or {}))
+    except SamplingXmlError as exc:
+        raise ApiError(str(exc), status=422)
+    safe_id = re.sub(r"[^A-Za-z0-9_-]", "_", case_id)
+    response = Response(body, content_type="application/xml")
+    response.headers["Content-Disposition"] = f'attachment; filename="sampling_{safe_id}.xml"'
+    return response
+
+
+_SAMPLE_BATCH_RE = re.compile(r"^MONTHLY-\d{6}$")
+_SAMPLE_MAX_COUNT = 200
+
+
+def _count_field(data: dict, key: str, default: int) -> int:
+    value = data.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ApiError(f"欄位 {key} 必須為整數")
+    if not 0 <= value <= _SAMPLE_MAX_COUNT:
+        raise ApiError(f"欄位 {key} 須介於 0～{_SAMPLE_MAX_COUNT}")
+    return value
+
+
+@bp.route("/api/sampling/sample-batch", methods=["POST"])
+def sample_monthly_batch_endpoint():
+    """申報批次抽樣：20 隨機＋10 立意（前三最高點數醫令合計）入庫為 kind='sampling'。
+
+    請求：{"batch": "MONTHLY-202307", "random_count": 20, "intentional_count": 10, "seed": 可選}。
+    """
+    data = json_body(request)
+    batch = clean_str(data, "batch", required=True)
+    if not _SAMPLE_BATCH_RE.match(batch):
+        raise ApiError("batch 格式應為 MONTHLY-YYYYMM")
+    random_count = _count_field(data, "random_count", 20)
+    intentional_count = _count_field(data, "intentional_count", 10)
+    seed = data.get("seed")
+    if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
+        raise ApiError("seed 必須為整數")
+
+    store = case_store()
+    if store.count_by_batch(batch) == 0:
+        raise ApiError("查無此批次", status=404)
+
+    picked = sample_monthly_batch(
+        store, batch, random_count=random_count, intentional_count=intentional_count, seed=seed
+    )
+    cases = [to_sampling_case(idx, item.record) for idx, item in enumerate(picked, start=1)]
+    for case, item in zip(cases, picked):
+        case["sample_type"] = item.sample_type
+        case["batch"] = batch
+        case["monthly_case_id"] = item.monthly_case_id
+        case["top3_points_total"] = str(item.top3_points_total)
+        case["target_order_code"] = item.target_order_code
+        # 帶入來源申報總檔案件（含 d1/d2/d3 與 orders 原始欄位），供健保抽審 XML 導出。
+        case["monthly_source"] = item.source_payload
+
+    persisted, conflicts = persist_cases(case_store(), "sampling", cases, caller_id())
+    return jsonify({
+        "status": "success",
+        "batch": batch,
+        "sampled": len(cases),
+        "random": sum(1 for item in picked if item.sample_type == "random"),
+        "intentional": sum(1 for item in picked if item.sample_type == "intentional"),
+        "case_store_persisted": persisted,
+        "case_store_conflicts": conflicts,
+        "cases": cases,
+    })
 
 _SAMPLING_REVIEW_PATH = ("parsed", "reviewing", "reviewed")
 
@@ -81,6 +242,24 @@ def advance_sampling_case(case_id: str, *, failed_reason: str | None) -> str | N
     except IllegalTransitionError as exc:
         current_app.logger.warning("sampling case_id=%s 狀態轉換衝突：%s", case_id, exc)
         return "conflict"
+
+
+def _evidence_context(store, case_id: str | None) -> str:
+    """抽樣案件的檢驗數據與雲端病歷轉為 LLM 可讀的病史脈絡行；無資料回空字串。"""
+    if not case_id:
+        return ""
+    try:
+        payload = store.get(case_id).payload or {}
+    except CaseNotFoundError:
+        return ""
+    lines = []
+    for lab in payload.get("lab_results") or []:
+        unit = f" {lab['unit']}" if lab.get("unit") else ""
+        when = f" ({lab['date']})" if lab.get("date") else ""
+        lines.append(f"- [檢驗]{when} {lab.get('name', '')}: {lab.get('value', '')}{unit}")
+    if payload.get("cloud_records"):
+        lines.append(f"- [健保雲端跨院病歷] {payload['cloud_records']}")
+    return "\n".join(lines)
 
 
 def _advice(oj) -> str:
@@ -159,12 +338,15 @@ def audit_sampling_case():
             history_desc = "\n".join(
                 f"- [{e.date}] {e.category}: {e.summary}" for e in timeline.events[:5]
             )
+        # 多源證據（檢驗數據、健保雲端跨院病歷）併入同一份病史脈絡，供 LLM 比對缺口
+        evidence_desc = _evidence_context(store, case_id)
+        patient_history = "\n".join(part for part in (history_desc, evidence_desc) if part)
         rule_desc = oj.check_item.rule_text if oj.check_item else ""
         soap_advice = generate_soap_advice(
             order_code=order_code,
             order_name=order_name or order_code,
             soap_text=soap_text or "",
-            patient_history=history_desc,
+            patient_history=patient_history,
             rule_text=rule_desc,
         )
     except Exception as exc:

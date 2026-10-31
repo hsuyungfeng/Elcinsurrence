@@ -509,6 +509,20 @@ class CaseStore:
         finally:
             conn.close()
 
+    def update_payload(self, case_id: str, payload: dict) -> CaseRecord:
+        """覆寫案件 payload 快照（不改變狀態與歷史）。案件不存在拋 CaseNotFoundError。"""
+        self.get(case_id)
+        conn = self._connect()
+        try:
+            with conn:
+                conn.execute(
+                    "UPDATE cases SET payload_json = ?, updated_at = ? WHERE case_id = ?",
+                    (json.dumps(payload, ensure_ascii=False), _now_iso(), case_id),
+                )
+        finally:
+            conn.close()
+        return self.get(case_id)
+
     def list_batches(self) -> tuple[tuple[str, int], ...]:
         """所有當月申報批次及其案件數，依批次名升冪（`(batch, count)`）。"""
         conn = self._connect()

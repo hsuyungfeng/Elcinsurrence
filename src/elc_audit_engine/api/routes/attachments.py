@@ -29,7 +29,8 @@ def resolve_attachment_case(case_ref: str):
         return store.get(case_ref)
     except CaseNotFoundError:
         pass
-    matches = [r for r in store.list_all(kind="appeal") if r.case_seq == case_ref]
+    # 舊 HIS 呼叫以 case_seq 指定：申復與抽樣案件皆可唯一對應（仍絕不猜測）
+    matches = [r for kind in ("appeal", "sampling") for r in store.list_all(kind=kind) if r.case_seq == case_ref]
     if len(matches) == 1:
         return matches[0]
     if len(matches) > 1:

@@ -23,7 +23,7 @@ def content_case_id(prefix: str, rec) -> str:
     """
     fields = {
         k: v for k, v in dataclasses.asdict(rec).items()
-        if k not in {"raw", "ocr_line", "source"}
+        if k not in {"raw", "ocr_line", "source", "lab_results", "cloud_records", "attachments"}
     }
     digest = hashlib.sha256(
         json.dumps(fields, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
@@ -48,6 +48,9 @@ def to_sampling_case(idx: int, rec) -> dict:
         "missing_reason": None,
         "source": rec.source,
         "ocr_line": rec.ocr_line,
+        "lab_results": list(getattr(rec, "lab_results", ()) or ()),
+        "cloud_records": getattr(rec, "cloud_records", None),
+        "attachments": list(getattr(rec, "attachments", ()) or ()),
     }
 
 
