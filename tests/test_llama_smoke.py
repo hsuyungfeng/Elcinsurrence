@@ -17,6 +17,9 @@ import pytest
 from elc_audit_engine.rule_repository.mapping import llm_client
 from config.settings import LLAMA_CPP_BASE_URL
 
+# 真實 LLM 服務測試：預設排除（pyproject addopts），以 `pytest -m live_llm` 執行
+pytestmark = pytest.mark.live_llm
+
 
 def _llama_server_is_up() -> bool:
     try:

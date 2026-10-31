@@ -112,3 +112,36 @@ def make_api_app(tmp_path):
 
     return _make
 
+
+
+# ── LLM 隔離：全套 regression 不依賴 live 本機 LLM 服務 ─────────────────
+# 三個模組以名字匯入 chat_completion，必須在各自模組上替換才會生效。
+# 替換後的假函式立即拋出 requests.ConnectionError，服務層走既有的降級路徑
+# （與 LLM 服務離線時行為相同），不再等待生成逾時。
+# 需要真實 LLM 的測試請標記 @pytest.mark.live_llm（預設 `-m "not live_llm"` 排除）。
+_LLM_CALL_SITES = (
+    "elc_audit_engine.rule_repository.mapping.llm_client",
+    "elc_audit_engine.comparator.soap_advice",
+    "elc_audit_engine.comparator.judger",
+    "elc_audit_engine.comparator.narratives",
+)
+
+
+@pytest.fixture(autouse=True)
+def _offline_llm(request, monkeypatch):
+    if request.node.get_closest_marker("live_llm"):
+        yield
+        return
+
+    import importlib
+
+    import requests
+
+    def _offline(*args, **kwargs):
+        raise requests.ConnectionError("測試環境：LLM 已隔離（請以 live_llm 標記執行真實呼叫）")
+
+    for module_name in _LLM_CALL_SITES:
+        module = importlib.import_module(module_name)
+        if hasattr(module, "chat_completion"):
+            monkeypatch.setattr(module, "chat_completion", _offline)
+    yield

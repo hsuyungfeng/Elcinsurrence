@@ -54,7 +54,10 @@ CSP = "; ".join(
         "default-src 'self'",
         "style-src 'self' 'unsafe-inline'",
         "script-src 'self' 'unsafe-inline'",
-        "img-src 'self' data:",
+        # blob:：佐證庫（Phase 17-02）以 authFetch 取回檔案後轉 blob URL 顯示；
+        # <img>/<audio> 無法附帶 X-API-Key 標頭，只能用同源 blob。blob: 僅能由頁面自行建立，不外送資料。
+        "img-src 'self' data: blob:",
+        "media-src 'self' blob:",
         "connect-src 'self'",
         "font-src 'self'",
         "object-src 'none'",
