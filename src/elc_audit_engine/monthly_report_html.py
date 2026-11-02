@@ -35,6 +35,11 @@ button.btn-copy { background: #10b981; color: #fff; border: none; border-radius:
 button.btn-soap-modal { background: var(--accent, #0284c7); color: #fff; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 6px; display: inline-flex; align-items: center; gap: 4px; }
 button.btn-soap-modal:hover { opacity: 0.9; }
 
+details.tier-group { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); overflow: hidden; }
+details.tier-group > summary.tier-summary { cursor: pointer; padding: 12px 16px; font-size: 14px; background: var(--bg); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; user-select: none; }
+.tier-badge { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: var(--card); border: 1px solid var(--line); }
+.tier-content { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+
 .vault-box { margin: 8px 0; padding: 8px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
 .vault-title { font-weight: 600; color: var(--accent); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
 .vault-files { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
@@ -339,8 +344,32 @@ def _case_html(case: CaseAudit, templates=None) -> str:
     return f'<details class="case"><summary>{_case_header(case)}</summary>{secondary}{vault_section}{findings}</details>'
 
 
+def _case_points(case: CaseAudit) -> float:
+    try:
+        return float(case.total_points) if case.total_points is not None else 0.0
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _render_tier_section(title: str, badge: str, cases: list[CaseAudit], templates=None) -> str:
+    if not cases:
+        return ""
+    total_tier_points = sum(_case_points(c) for c in cases)
+    summary_text = f"{title}（共 {len(cases)} 案，合計 {int(total_tier_points):,} 點）"
+    cases_items = "".join(_case_html(case, templates) for case in cases)
+    return (
+        f'<details class="tier-group" open>'
+        f'<summary class="tier-summary"><span class="tier-badge">{_e(badge)}</span> <strong>{_e(summary_text)}</strong></summary>'
+        f'<div class="tier-content">{cases_items}</div>'
+        f'</details>'
+    )
+
+
 def render_batch_report_html(batch: BatchAudit, *, templates=None) -> str:
-    """把 BatchAudit 渲染成精簡版自包含 HTML（先套用 report_view 的納入規則）。"""
+    """把 BatchAudit 渲染成精簡版自包含 HTML（先套用 report_view 的納入規則）。
+
+    案件依醫療總費用點數降冪排序，並依 > 5000、3000-5000、1000-3000 三級距分類分組呈現。
+    """
     view = report_view(batch)
     totals = view.report.get("totals", {})
     status = totals.get("rule_status", {})
@@ -354,7 +383,26 @@ def render_batch_report_html(batch: BatchAudit, *, templates=None) -> str:
             _kpi("待判定（系統故障）", status.get(STATUS_UNDETERMINED, 0), "red"),
         ]
     )
-    cases_html = "".join(_case_html(case, templates) for case in view.cases) or (
+
+    # 依醫療總費用點數降冪排序
+    sorted_cases = sorted(view.cases, key=_case_points, reverse=True)
+
+    tier_over_5000 = [c for c in sorted_cases if _case_points(c) > 5000]
+    tier_3000_to_5000 = [c for c in sorted_cases if 3000 <= _case_points(c) <= 5000]
+    tier_1000_to_3000 = [c for c in sorted_cases if 1000 <= _case_points(c) < 3000]
+    tier_other = [c for c in sorted_cases if _case_points(c) < 1000]
+
+    tier_htmls = []
+    if tier_over_5000:
+        tier_htmls.append(_render_tier_section("醫療總費用 > 5,000 點", "🔴 高額", tier_over_5000, templates))
+    if tier_3000_to_5000:
+        tier_htmls.append(_render_tier_section("醫療總費用 3,000 ~ 5,000 點", "🟠 中高額", tier_3000_to_5000, templates))
+    if tier_1000_to_3000:
+        tier_htmls.append(_render_tier_section("醫療總費用 1,000 ~ 3,000 點", "🟡 一般", tier_1000_to_3000, templates))
+    if tier_other:
+        tier_htmls.append(_render_tier_section("醫療總費用 < 1,000 點", "⚪ 其他", tier_other, templates))
+
+    cases_html = "".join(tier_htmls) or (
         '<p class="meta">本批次無符合條件（醫療總點數 > 1000，且有給付規定超過門檻）的案件。</p>'
     )
 

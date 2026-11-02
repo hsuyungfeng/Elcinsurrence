@@ -85,6 +85,15 @@ def _appeal_payload(record) -> dict:
     labs = [item for item in (src.get("lab_results") or []) if isinstance(item, dict) and item.get("name")]
     cloud = str(src.get("cloud_records") or "").strip()
     order_code = str(src.get("order_code") or "").strip()
+    order_name = src.get("order_name")
+    if not order_name and order_code:
+        try:
+            rule_obj = get_rule(order_code)
+            if rule_obj and rule_obj.found and rule_obj.name:
+                order_name = rule_obj.name
+        except Exception:
+            pass
+
     rule_text, rule_location = _rule_for(order_code)
 
     vault_files = _vault_file_names(src)
@@ -109,7 +118,7 @@ def _appeal_payload(record) -> dict:
         "record_no": src.get("record_no"),
         "visit_date": src.get("visit_date"),
         "order_code": order_code,
-        "order_name": src.get("order_name"),
+        "order_name": order_name,
         "deduct_amount": src.get("deduct_amount") or 100,
         "deduction_reason": src.get("deduction_reason") or "抽審未附完整佐證核減",
         "soap": src.get("soap") or "",

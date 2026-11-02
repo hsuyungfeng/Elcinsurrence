@@ -548,6 +548,15 @@ CASE_TOTAL_POINTS_MIN = Decimal(1000)  # 醫療費用總點數（d39）須大於
 # 「有給付規定」：規則有官方文字（有限制用語，或有文字但無限制用語）。無文字／查無規則不納入。
 REPORT_RULE_STATUSES = frozenset({STATUS_RESTRICTION, STATUS_NO_MARKERS})
 
+# 排除診療費（001開頭）與病理檢查（25001C～25004C）
+EXCLUDED_ORDER_CODES = frozenset({"25001C", "25002C", "25003C", "25004C"})
+
+
+def is_excluded_order_code(code: str | None) -> bool:
+    """判斷醫令是否為排除之診療費（001開頭）或病理切片檢查（25001C-25004C）。"""
+    c = (code or "").strip().upper()
+    return c.startswith("001") or c in EXCLUDED_ORDER_CODES
+
 
 def _total_points_over_min(case: CaseAudit) -> bool:
     if not case.total_points:
@@ -563,6 +572,7 @@ def report_view(batch: BatchAudit) -> BatchAudit:
     """套用報告納入規則並重算彙總。
 
     - 案件醫療總點數（d39）須 > 1000，缺漏或非數字者不納入。
+    - 排除診療費（001開頭）與病理檢查（25001C～25004C）。
     - 案件內只保留「有給付規定」的旗標醫令（查無規則、無文字、待判定皆排除）。
     - 沒有任何符合醫令的案件不納入。
     """
@@ -570,7 +580,10 @@ def report_view(batch: BatchAudit) -> BatchAudit:
     for case in batch.cases:
         if not _total_points_over_min(case):
             continue
-        findings = tuple(f for f in case.findings if f.rule_status in REPORT_RULE_STATUSES)
+        findings = tuple(
+            f for f in case.findings
+            if f.rule_status in REPORT_RULE_STATUSES and not is_excluded_order_code(f.code)
+        )
         if findings:
             included.append(replace(case, findings=findings))
     kept = tuple(included)

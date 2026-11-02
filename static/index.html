@@ -270,12 +270,23 @@
 
         <!-- 抽樣與審查整合動作列 -->
         <div style="background: rgba(15,23,42,0.6); border: 1px solid var(--panel-border); border-radius: 10px; padding: 12px; margin-top: 12px; display: flex; flex-direction: column; gap: 10px;">
+          <!-- 批次審查進度條 (Progress Bar) -->
+          <div id="batchAuditProgress" style="display: none; background: rgba(15,23,42,0.8); border: 1px solid var(--accent-cyan); border-radius: 8px; padding: 10px 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span id="batchProgressText" style="font-size: 12px; font-weight: 600; color: #38bdf8;">🔄 正在執行全自動批次審查（調用 LLM 評估病歷支持度）...</span>
+              <span id="batchProgressPercent" style="font-size: 12px; font-family: monospace; color: #a5f3fc;">審查中</span>
+            </div>
+            <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; position: relative;">
+              <div id="batchProgressBar" style="width: 100%; height: 100%; background: linear-gradient(90deg, #06b6d4, #10b981); border-radius: 4px; animation: progressPulse 1.5s infinite alternate;"></div>
+            </div>
+          </div>
+
           <!-- 核心流程操作條 -->
           <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;">
             <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
               <span style="font-size: 12px; font-weight: 600; color: #38bdf8; margin-right: 4px;">🎯 抽樣審查</span>
               <button class="btn-action" style="background: linear-gradient(135deg, #0284c7, #0369a1);" onclick="sampleFromMonthlyBatch()">📦 重新抽樣 (20隨機+10立意)</button>
-              <button class="btn-action" style="background: linear-gradient(135deg, #0d9488, #0f766e);" onclick="runSamplingBatchAudit()">⚡ 一鍵全自動批次審查 (30案)</button>
+              <button class="btn-action" id="btnBatchAudit" style="background: linear-gradient(135deg, #0d9488, #0f766e);" onclick="runSamplingBatchAudit()">⚡ 一鍵全自動批次審查 (30案)</button>
             </div>
             <div>
               <button class="btn-action" style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; color: #fca5a5; font-size: 12px;" onclick="clearSamplingCases()">🗑️ 清空抽樣清單</button>
@@ -441,6 +452,25 @@
               title="病歷號（Phase 3 d3），填入後生成草稿時一併查詢半年病史">
           </div>
           <button class="btn-action" onclick="generateAppealDraft()">⚡ 整合多源證據生成申復草稿</button>
+        </div>
+
+        <!-- 申復作業動作列（比照抽樣工作台） -->
+        <div style="background: rgba(15,23,42,0.6); border: 1px solid var(--panel-border); border-radius: 10px; padding: 12px; margin-top: 12px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+              <span style="font-size: 12px; font-weight: 600; color: #a855f7; margin-right: 4px;">⚖️ 申復處理</span>
+              <button class="btn-action" style="background: linear-gradient(135deg, #7c3aed, #6d28d9);" onclick="linkStage2ToAppeal()">🔄 重新自第 2 階抽選 5 案連動</button>
+            </div>
+            <div>
+              <button class="btn-action" style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; color: #fca5a5; font-size: 12px;" onclick="clearAppealCases()">🗑️ 清空申復清單</button>
+            </div>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px dashed rgba(148,163,184,0.2); padding-top: 8px;">
+            <span style="font-size: 12px; font-weight: 600; color: #94a3b8; margin-right: 4px;">📑 報告交付</span>
+            <button class="btn-action" style="background: rgba(56,189,248,0.15); border: 1px solid #38bdf8; color: #38bdf8; font-size: 12px;" onclick="openAppealCasePreview()">🔍 檢視單案申復卡片 (HTML)</button>
+            <button class="btn-action" style="background: rgba(16,185,129,0.15); border: 1px solid #10b981; color: #34d399; font-size: 12px;" onclick="openAppealBatchReport()">🗂️ 批次申復報告 (HTML)</button>
+            <button class="btn-action" style="background: rgba(99,102,241,0.15); border: 1px solid #6366f1; color: #a5b4fc; font-size: 12px;" onclick="exportAppealBatchXml()">📦 全批次導出申復 XML (TOTFA.zip)</button>
+          </div>
         </div>
 
         <!-- 2 Panels -->
@@ -1498,15 +1528,37 @@
     // ── Phase 20：批次審查、聚合報告、全批次 XML、第 2→第 3 階連動 ──
     async function runSamplingBatchAudit() {
       if (!confirm('將對全部抽樣案件執行自動審查並寫回結果，可能需要數分鐘，是否繼續？')) return;
-      const res = await authFetch('/api/sampling/batch-audit', { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        alert('批次審查失敗：' + (data.message || res.status));
-        return;
+      
+      const pContainer = document.getElementById('batchAuditProgress');
+      const pText = document.getElementById('batchProgressText');
+      const pPercent = document.getElementById('batchProgressPercent');
+      const btnAudit = document.getElementById('btnBatchAudit');
+
+      if (pContainer) pContainer.style.display = 'block';
+      if (btnAudit) btnAudit.disabled = true;
+
+      // 立即將左側所有抽樣清單標記為「🔄 審查中」
+      samplingCases.forEach(c => {
+        c.state = 'reviewing';
+      });
+      renderCaseList(samplingCases);
+
+      try {
+        const res = await authFetch('/api/sampling/batch-audit', { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert('批次審查失敗：' + (data.message || res.status));
+          return;
+        }
+        const states = Object.entries(data.by_state || {}).map(([state, n]) => `${state}：${n}`).join('\n');
+        const failed = (data.errors || []).length;
+        alert(`批次審查完成：${data.completed} / ${data.total} 案\n${states}` + (failed ? `\n失敗 ${failed} 案` : ''));
+      } finally {
+        if (pContainer) pContainer.style.display = 'none';
+        if (btnAudit) btnAudit.disabled = false;
+        // 重新自後端載入最新狀態並刷新清單與徽章
+        await loadCaseData();
       }
-      const states = Object.entries(data.by_state || {}).map(([state, n]) => `${state}：${n}`).join('\n');
-      const failed = (data.errors || []).length;
-      alert(`批次審查完成：${data.completed} / ${data.total} 案\n${states}` + (failed ? `\n失敗 ${failed} 案` : ''));
     }
 
     async function openSamplingBatchReport() {
@@ -1536,6 +1588,60 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
+    async function clearAppealCases() {
+      if (!confirm('確定要清空目前所有的申復案件嗎？此操作將重置申復清單。')) return;
+      const res = await authFetch('/api/appeal/cases/clear', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert('清空失敗：' + (data.message || res.status));
+        return;
+      }
+      alert(data.message || '已清空申復案件');
+      currentSelectedCase = null;
+      await loadCaseData();
+    }
+
+    async function openAppealCasePreview() {
+      if (!currentSelectedCase) {
+        alert('請先選擇一筆申復案件');
+        return;
+      }
+      const res = await authFetch(`/api/appeal/cases/${encodeURIComponent(currentSelectedCase.id)}/preview-html`);
+      if (!res.ok) {
+        alert('無法開啟申復卡片（' + res.status + '）');
+        return;
+      }
+      const blob = new Blob([await res.text()], { type: 'text/html;charset=utf-8' });
+      window.open(URL.createObjectURL(blob), '_blank');
+    }
+
+    async function openAppealBatchReport() {
+      const res = await authFetch('/api/appeal/batch-report');
+      if (!res.ok) {
+        alert('無法開啟申復批次報告（' + res.status + '）');
+        return;
+      }
+      const blob = new Blob([await res.text()], { type: 'text/html;charset=utf-8' });
+      window.open(URL.createObjectURL(blob), '_blank');
+    }
+
+    async function exportAppealBatchXml() {
+      const res = await authFetch('/api/appeal/export-batch-xml');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert('全批次申復導出失敗：' + (body.message || res.status));
+        return;
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'TOTFA.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
     async function linkStage2ToAppeal() {
       const res = await authFetch('/api/appeal/sample-from-stage2', {
         method: 'POST',
@@ -1549,6 +1655,9 @@
       }
       alert(`已連動 ${data.created.length} 案至第 3 階申復庫` +
         (data.duplicates.length ? `（${data.duplicates.length} 案已存在，略過）` : ''));
+      if (currentMode === 'appeal') {
+        await loadCaseData();
+      }
     }
 
     async function exportSamplingXml() {
@@ -1668,8 +1777,9 @@
       renderCaseList(appealCases);
       if (!currentSelectedCase) return;
 
-      document.getElementById('aOrderName').innerText = `${currentSelectedCase.order_code} - ${currentSelectedCase.order_name} (核減 ${currentSelectedCase.deduct_amount} 點)`;
-      document.getElementById('aDeductionReason').innerText = currentSelectedCase.deduction_reason;
+      const orderNameStr = currentSelectedCase.order_name || currentSelectedCase.order_code || '';
+      document.getElementById('aOrderName').innerText = `${currentSelectedCase.order_code} - ${orderNameStr} (核減 ${currentSelectedCase.deduct_amount || 0} 點)`;
+      document.getElementById('aDeductionReason').innerText = currentSelectedCase.deduction_reason || '抽審未附完整佐證核減';
 
       const ev = currentSelectedCase.multisource_evidence || { images: [], labs: [], cloud_sync: [] };
       document.getElementById('evImage').innerText = (ev.images && ev.images.length > 0) ? `${ev.images[0].name}: ${ev.images[0].report}` : '無相關影像紀錄';

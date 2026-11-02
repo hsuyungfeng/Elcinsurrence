@@ -7,13 +7,14 @@ import os
 
 from flask import Blueprint, Response, current_app, jsonify, request
 
-from elc_audit_engine import attachment_store
+from elc_audit_engine import attachment_store, evidence_vault
 from elc_audit_engine.appeal_linkage import (
     DEFAULT_COUNT,
     MAX_COUNT,
     appeal_xml_case,
     link_stage2_to_appeal,
 )
+from elc_audit_engine.sampling_closed_loop import fallback_soap
 from elc_audit_engine.generators.appeal_xml import (
     TOTFA_ZIP_NAME,
     AppealBatchError,
@@ -32,6 +33,12 @@ from elc_audit_engine.parsers.models import DeductionRecord
 from elc_audit_engine.parsers.totfa import parse_totfa_zip
 from elc_audit_engine.rule_repository import get_rule
 from elc_audit_engine.rule_repository.errors import RuleRepositoryError
+from elc_audit_engine.unified_review_report import (
+    build_review_case_view,
+    make_thumbnail_data_uri,
+    render_aggregated_review_html,
+    render_unified_review_html,
+)
 
 from ..cases import persist_cases, to_appeal_case
 from ..context import caller_id, case_store
@@ -189,6 +196,18 @@ def generate_appeal_draft():
     return jsonify(payload)
 
 
+@bp.route("/api/appeal/cases/clear", methods=["POST", "DELETE"])
+def clear_appeal_cases_endpoint():
+    """清空目前所有申復案件 (kind='appeal')。"""
+    store = case_store()
+    deleted = store.delete_by_kind("appeal")
+    return jsonify({
+        "status": "success",
+        "deleted_count": deleted,
+        "message": f"已成功刪除 {deleted} 筆申復案件",
+    })
+
+
 @bp.route("/api/appeal/sample-from-stage2", methods=["POST"])
 def sample_appeal_from_stage2():
     """自第 2 階抽樣案件隨機抽選 N 案（預設 5），連動建立第 3 階申復案件（Plan 20-02）。
@@ -214,6 +233,72 @@ def sample_appeal_from_stage2():
         current_app.logger.error("rule repository failure during stage2 linkage: %s", exc)
         raise ApiError("規則庫暫時無法查詢，請稍後再試或聯繫系統管理員", status=503)
     return jsonify({"status": "success", **result})
+
+
+def _stage3_view(store, record, *, with_thumbnails: bool):
+    """第 3 階統一審查/申復檢視模型（單案預覽與批次報告共用）。"""
+    case_id = record.case_id
+    payload = dict(record.payload or {})
+
+    vault_key = evidence_vault.vault_key_for_case(payload.get("record_no"), payload.get("visit_date"))
+    vault_listing = None
+    thumbnails: dict[str, str] = {}
+    if vault_key is not None:
+        files_by_cat = evidence_vault.list_vault_files(vault_key)
+        vault_listing = {cat: [{"filename": f.filename} for f in files] for cat, files in files_by_cat.items()}
+        if with_thumbnails:
+            for image in files_by_cat.get("images", [])[:24]:
+                uri = make_thumbnail_data_uri(image.path)
+                if uri:
+                    thumbnails[image.filename] = uri
+    attachments = tuple(a.filename for a in attachment_store.list_attachments(case_id))
+
+    soap_template = None
+    if not str(payload.get("soap") or "").strip():
+        soap, source = fallback_soap(store, payload)
+        if source.startswith("template") and soap is not None:
+            soap_template = soap
+
+    return build_review_case_view(
+        3,
+        case_id,
+        payload,
+        vault_listing=vault_listing,
+        soap_template=soap_template,
+        attachments=attachments,
+        thumbnails=thumbnails,
+    )
+
+
+@bp.route("/api/appeal/cases/<case_id>/preview-html", methods=["GET"])
+def appeal_case_preview_html(case_id: str):
+    """單一申復案件的統一審查格式預覽（第 3 階；HTML）。"""
+    store = case_store()
+    try:
+        record = store.get(case_id)
+    except CaseNotFoundError:
+        raise ApiError(f"找不到案件：{case_id}", status=404)
+    if record.kind != "appeal":
+        raise ApiError(f"案件 {case_id} 並非申復案件 (kind={record.kind})", status=400)
+    view = _stage3_view(store, record, with_thumbnails=True)
+    return Response(render_unified_review_html(view), content_type="text/html; charset=utf-8")
+
+
+@bp.route("/api/appeal/batch-report", methods=["GET"])
+def appeal_batch_report():
+    """全部第 3 階申復案件的聚合預審報告。"""
+    store = case_store()
+    records = list(store.list_all(kind="appeal", limit=1000))
+    if not records:
+        raise ApiError("尚無申復案件可產生報告", status=404)
+    views = [_stage3_view(store, record, with_thumbnails=False) for record in records]
+    batches = sorted({str((r.payload or {}).get("batch") or "") for r in records} - {""})
+    html = render_aggregated_review_html(
+        views,
+        title="核減事後申復批次報告",
+        batch_label=", ".join(batches) or None,
+    )
+    return Response(html, content_type="text/html; charset=utf-8")
 
 
 @bp.route("/api/appeal/export-batch-xml", methods=["GET"])

@@ -17,6 +17,7 @@ from typing import Any
 
 from elc_audit_engine.case_store.store import CaseStore
 from elc_audit_engine.ingest.sampling import SamplingCaseRecord
+from elc_audit_engine.monthly_audit import is_excluded_order_code
 
 SAMPLE_RANDOM = "random"
 SAMPLE_INTENTIONAL = "intentional"
@@ -45,19 +46,27 @@ def _points(raw: Any) -> Decimal:
 
 
 def _order_points(payload: dict) -> list[tuple[Decimal, str]]:
-    """每筆醫令的 (點數 p12, 醫令代碼 p4)；依點數由高到低排序（同點數依代碼）。"""
-    rows = [(_points(o.get("p12")), (o.get("p4") or "").strip()) for o in payload.get("orders") or []]
+    """每筆醫令的 (點數 p12, 醫令代碼 p4)；排除診療費與病理檢查，依點數由高到低排序（同點數依代碼）。"""
+    rows = [
+        (_points(o.get("p12")), (o.get("p4") or "").strip())
+        for o in payload.get("orders") or []
+        if not is_excluded_order_code(o.get("p4"))
+    ]
     return sorted(rows, key=lambda row: (-row[0], row[1]))
 
 
 def top3_points_total(payload: dict) -> Decimal:
-    """前三個最高點數醫令之點數合計（不足三筆則全部相加）。"""
+    """前三個最高點數醫令之點數合計（排除診療費與病理檢查，不足三筆則全部相加）。"""
     return sum((points for points, _code in _order_points(payload)[:TOP_ORDER_COUNT]), Decimal(0))
 
 
 def _target_code(payload: dict) -> str | None:
     ordered = _order_points(payload)
-    return ordered[0][1] or None if ordered else None
+    if ordered:
+        return ordered[0][1] or None
+    # 若所有醫令皆被排除，退回原第一筆醫令
+    all_raw = [o.get("p4") for o in payload.get("orders") or [] if o.get("p4")]
+    return all_raw[0] if all_raw else None
 
 
 def _record(payload: dict, target_code: str | None) -> SamplingCaseRecord:
