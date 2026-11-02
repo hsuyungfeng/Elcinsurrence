@@ -33,6 +33,10 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 - [x] Phase 19: Case Report 視覺化審查報告升級 (借鑑 answer-me-with-html 理念)（2/2 plans）— completed 2026-11-02
   - 19-01: 重構 unified_review_report 視覺排版（SOAP 與佐證庫圖文並列、次要區塊折疊）
   - 19-02: 路由整合與預審預覽端點閉環走通驗收
+- [ ] Phase 20: 3 階多案件聚合預審報告、申復範例連動與雙軌審查導出（0/3 plans）
+  - 20-01: 多案件聚合可收合 HTML 預審報告引擎（支援 2、3 階）
+  - 20-02: 第 3 階申復自第 2 階隨機抽選 5 案連動與草稿生成
+  - 20-03: 第 2 階雙軌審查（全自動批次審查 vs 逐筆人工審查）與全量匯整導出 (HTML & XML)
 
 </details>
 

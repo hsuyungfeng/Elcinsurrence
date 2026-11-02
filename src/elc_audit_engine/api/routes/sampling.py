@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import os
 import re
+from collections import Counter
 from typing import Any
 
 from flask import Blueprint, Response, current_app, jsonify, request
@@ -12,7 +13,11 @@ from flask import Blueprint, Response, current_app, jsonify, request
 from elc_audit_engine import attachment_store, evidence_vault
 from elc_audit_engine.case_store import CaseNotFoundError, IllegalTransitionError
 from elc_audit_engine.comparator.soap_advice import generate_soap_advice
-from elc_audit_engine.generators.sampling_xml import SamplingXmlError, build_sampling_xml
+from elc_audit_engine.generators.sampling_xml import (
+    SamplingXmlError,
+    build_batch_sampling_xml,
+    build_sampling_xml,
+)
 from elc_audit_engine.ingest import (
     MediaExtractError,
     SamplingImportError,
@@ -34,12 +39,14 @@ from elc_audit_engine.sampling_closed_loop import (
     build_review,
     fallback_soap,
     resolve_soap_text,
+    run_closed_loop,
     save_review,
 )
 from elc_audit_engine.sampling_sampler import sample_monthly_batch
 from elc_audit_engine.unified_review_report import (
     build_review_case_view,
     make_thumbnail_data_uri,
+    render_aggregated_review_html,
     render_unified_review_html,
 )
 
@@ -124,15 +131,17 @@ def update_sampling_evidence(case_id: str):
     })
 
 
-@bp.route("/api/sampling/cases/<case_id>/preview-html", methods=["GET"])
-def sampling_case_preview_html(case_id: str):
-    """單一抽樣案件的統一審查格式預覽（第 2 階；HTML）；需 API Key（含病歷與個資）。
+def _sampling_records() -> list:
+    """所有第 2 階抽樣案件（kind='sampling'），依 created_at 升冪。"""
+    return list(case_store().list_all(kind="sampling", limit=1000))
 
-    身分證字號即 record_no；佐證庫依身分證＋就醫日推導（Phase 17-03）；
-    SOAP 缺漏時以範本降級並標示須醫師審核（Plan 18-03）。
+
+def _stage2_view(store, record, *, with_thumbnails: bool):
+    """第 2 階統一審查檢視模型（單案預覽與批次報告共用）。
+
+    with_thumbnails=False 時略過影像縮圖（批次報告案數多，避免一次解析大量影像）。
     """
-    record = _sampling_case_or_404(case_id)
-    store = case_store()
+    case_id = record.case_id
     payload = dict(record.payload or {})
 
     vault_key = evidence_vault.vault_key_for_case(payload.get("record_no"), payload.get("visit_date"))
@@ -141,11 +150,12 @@ def sampling_case_preview_html(case_id: str):
     if vault_key is not None:
         files_by_cat = evidence_vault.list_vault_files(vault_key)
         vault_listing = {cat: [{"filename": f.filename} for f in files] for cat, files in files_by_cat.items()}
-        # 影像縮圖（Phase 19-01）：上限 24 張，無法解析者以檔名佔位
-        for image in files_by_cat.get("images", [])[:_PREVIEW_THUMB_LIMIT]:
-            uri = make_thumbnail_data_uri(image.path)
-            if uri:
-                thumbnails[image.filename] = uri
+        if with_thumbnails:
+            # 影像縮圖（Phase 19-01）：上限 24 張，無法解析者以檔名佔位
+            for image in files_by_cat.get("images", [])[:_PREVIEW_THUMB_LIMIT]:
+                uri = make_thumbnail_data_uri(image.path)
+                if uri:
+                    thumbnails[image.filename] = uri
     attachments = tuple(a.filename for a in attachment_store.list_attachments(case_id))
 
     soap_template = None
@@ -154,7 +164,7 @@ def sampling_case_preview_html(case_id: str):
         if source.startswith("template") and soap is not None:
             soap_template = soap
 
-    view = build_review_case_view(
+    return build_review_case_view(
         2,
         case_id,
         payload,
@@ -163,6 +173,89 @@ def sampling_case_preview_html(case_id: str):
         attachments=attachments,
         thumbnails=thumbnails,
     )
+
+
+@bp.route("/api/sampling/batch-audit", methods=["POST"])
+def batch_audit_sampling():
+    """全自動批次審查（Plan 20-03）：對全部第 2 階抽樣案件執行閉環，寫回各案 payload["review"]。
+
+    單案的 ValueError（如無有效醫令）記入 errors 並繼續；規則庫／病歷來源基礎設施故障照常穿透（P0-2）。
+    """
+    store = case_store()
+    provider = records_provider()
+    records = _sampling_records()
+    results = []
+    errors = []
+    for record in records:
+        try:
+            outcome = run_closed_loop(store, record.case_id, provider=provider)
+        except ValueError as exc:
+            errors.append({"case_id": record.case_id, "message": str(exc)})
+            continue
+        results.append({
+            "case_id": outcome.case_id,
+            "support_state": outcome.support_state,
+            "records_degraded": outcome.records_degraded,
+            "soap_source": outcome.soap_source,
+            "warnings": list(outcome.warnings),
+        })
+    by_state = dict(Counter(item["support_state"] for item in results))
+    return jsonify({
+        "status": "success",
+        "total": len(records),
+        "completed": len(results),
+        "by_state": by_state,
+        "results": results,
+        "errors": errors,
+    })
+
+
+@bp.route("/api/sampling/export-batch-xml", methods=["GET"])
+def export_sampling_batch_xml():
+    """全批次健保抽審 XML（Plan 20-03）：多案件聚合為單一 Big5 文件。
+
+    任一案件缺來源或欄位即整批拒絕（422），錯誤點名該案，不產生殘缺檔。
+    """
+    payloads = []
+    for record in _sampling_records():
+        item = dict(record.payload or {})
+        item["id"] = record.case_id
+        payloads.append(item)
+    try:
+        body = build_batch_sampling_xml(payloads)
+    except SamplingXmlError as exc:
+        raise ApiError(str(exc), status=422)
+    return Response(
+        body,
+        content_type="application/xml",
+        headers={"Content-Disposition": 'attachment; filename="sampling_batch.xml"'},
+    )
+
+
+@bp.route("/api/sampling/batch-report", methods=["GET"])
+def sampling_batch_report():
+    """全部第 2 階案件的聚合預審報告（Plan 20-01）：每案一個可收合的 case-item。"""
+    store = case_store()
+    records = _sampling_records()
+    views = [_stage2_view(store, record, with_thumbnails=False) for record in records]
+    batches = sorted({str((r.payload or {}).get("batch") or "") for r in records} - {""})
+    html = render_aggregated_review_html(
+        views,
+        title="抽樣預審批次報告",
+        batch_label=", ".join(batches) or None,
+    )
+    return Response(html, content_type="text/html; charset=utf-8")
+
+
+@bp.route("/api/sampling/cases/<case_id>/preview-html", methods=["GET"])
+def sampling_case_preview_html(case_id: str):
+    """單一抽樣案件的統一審查格式預覽（第 2 階；HTML）；需 API Key（含病歷與個資）。
+
+    身分證字號即 record_no；佐證庫依身分證＋就醫日推導（Phase 17-03）；
+    SOAP 缺漏時以範本降級並標示須醫師審核（Plan 18-03）。
+    """
+    record = _sampling_case_or_404(case_id)
+    view = _stage2_view(case_store(), record, with_thumbnails=True)
     return Response(render_unified_review_html(view), content_type="text/html; charset=utf-8")
 
 

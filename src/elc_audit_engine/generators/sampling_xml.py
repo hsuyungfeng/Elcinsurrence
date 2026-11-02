@@ -98,8 +98,44 @@ def build_sampling_xml(payload: dict) -> bytes:
     source = payload.get("monthly_source")
     if not isinstance(source, dict):
         raise SamplingXmlError("此抽樣案件缺少申報總檔來源，無法導出健保抽審 XML")
+    return _outpatient_document(payload.get("batch") or "", [_ddata_for_source(source)])
+
+
+def build_batch_sampling_xml(payloads: list[dict]) -> bytes:
+    """全批次導出（Plan 20-03）：多案件聚合為單一 `<outpatient>`（Big5）。
+
+    所有案件須屬同一申報批次（tdata 的 t3 年月取自共同批次）；每案一個 `<ddata>`。
+    任一案件缺來源或必要欄位即整批拒絕，錯誤訊息點名該案，不產生殘缺檔。
+
+    Raises:
+        SamplingXmlError: 無案件、批次不一致、任一案件缺來源或欄位、或含 Big5 無法表示的字元。
+    """
+    if not payloads:
+        raise SamplingXmlError("沒有可導出的抽樣案件")
+    batches = {str(p.get("batch") or "") for p in payloads}
+    if len(batches) != 1:
+        raise SamplingXmlError("全批次導出的案件須屬於同一申報批次")
+    ddatas = []
+    for payload in payloads:
+        label = payload.get("id") or payload.get("case_seq") or "（未知案件）"
+        source = payload.get("monthly_source")
+        if not isinstance(source, dict):
+            raise SamplingXmlError(f"案件 {label} 缺少申報總檔來源，整批無法導出")
+        try:
+            ddatas.append(_ddata_for_source(source))
+        except SamplingXmlError as exc:
+            raise SamplingXmlError(f"案件 {label}：{exc}") from exc
+    return _outpatient_document(batches.pop(), ddatas)
+
+
+def _ddata_for_source(source: dict) -> str:
     order_raws = [o for o in (source.get("orders") or []) if isinstance(o, dict)]
-    year_month = _roc_year_month(payload.get("batch") or "")
+    return _ddata_xml(source, order_raws)
+
+
+def _outpatient_document(batch: str, ddata_parts: list[str]) -> bytes:
+    """組裝完整文件（tdata＋多個 ddata）並以 Big5 編碼；無法表示的字元拋錯，不靜默替換。"""
+    year_month = _roc_year_month(batch)
     tdata = (
         "<tdata>"
         + (_field("t3", year_month) if year_month else "")
@@ -108,7 +144,7 @@ def build_sampling_xml(payload: dict) -> bytes:
         + _field("t37", 1)
         + "</tdata>"
     )
-    body = f"<outpatient>{tdata}{_ddata_xml(source, order_raws)}</outpatient>"
+    body = f"<outpatient>{tdata}{''.join(ddata_parts)}</outpatient>"
     document = f'<?xml version="1.0" encoding="Big5"?>\r\n{body}\r\n'
     try:
         return document.encode("big5")

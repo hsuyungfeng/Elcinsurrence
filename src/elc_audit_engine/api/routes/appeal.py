@@ -8,6 +8,7 @@ import os
 from flask import Blueprint, current_app, jsonify, request
 
 from elc_audit_engine import attachment_store
+from elc_audit_engine.appeal_linkage import DEFAULT_COUNT, MAX_COUNT, link_stage2_to_appeal
 from elc_audit_engine.case_store import CaseNotFoundError, IllegalTransitionError
 from elc_audit_engine.comparator.soap_advice import generate_soap_advice
 from elc_audit_engine.generators import build_appeal_draft, render_appeal_json
@@ -173,6 +174,33 @@ def generate_appeal_draft():
     payload["records_window_anchor"] = "visit_date" if visit_date else "today"
     payload["records_degraded_reason"] = degraded_reason(records_source, timeline is None)
     return jsonify(payload)
+
+
+@bp.route("/api/appeal/sample-from-stage2", methods=["POST"])
+def sample_appeal_from_stage2():
+    """自第 2 階抽樣案件隨機抽選 N 案（預設 5），連動建立第 3 階申復案件（Plan 20-02）。
+
+    請求：{"count": 5, "seed": 可選整數}。回傳抽中、新建與已存在（重複）的申復案件 ID。
+    """
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        raise ApiError("請求內容必須為 JSON 物件")
+    count = _opt_int(data, "count")
+    seed = _opt_int(data, "seed")
+    count = DEFAULT_COUNT if count is None else count
+    if not 1 <= count <= MAX_COUNT:
+        raise ApiError(f"count 須介於 1 至 {MAX_COUNT}")
+
+    store = case_store()
+    sources = store.list_all(kind="sampling", limit=1000)
+    if not sources:
+        raise ApiError("尚無第 2 階抽樣案件可供連動", status=404)
+    try:
+        result = link_stage2_to_appeal(store, sources, count=count, seed=seed, actor=caller_id())
+    except RuleRepositoryError as exc:
+        current_app.logger.error("rule repository failure during stage2 linkage: %s", exc)
+        raise ApiError("規則庫暫時無法查詢，請稍後再試或聯繫系統管理員", status=503)
+    return jsonify({"status": "success", **result})
 
 
 @bp.route("/api/appeal/import", methods=["POST"])

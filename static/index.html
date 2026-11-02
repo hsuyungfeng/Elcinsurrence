@@ -273,6 +273,10 @@
           <button class="btn-action" onclick="sampleFromMonthlyBatch()">📦 從申報總檔自動抽樣 (20隨機+10立意)</button>
           <button class="btn-action" onclick="openSamplingPreview()">🔍 檢視視覺化預審卡片 (HTML)</button>
           <button class="btn-action" onclick="exportSamplingXml()">📄 導出健保局抽審 XML</button>
+          <button class="btn-action" onclick="runSamplingBatchAudit()">⚡ 全自動批次審查（全部案件）</button>
+          <button class="btn-action" onclick="openSamplingBatchReport()">🗂️ 批次預審報告 (HTML)</button>
+          <button class="btn-action" onclick="exportSamplingBatchXml()">📦 全批次導出抽審 XML（Big5）</button>
+          <button class="btn-action" onclick="linkStage2ToAppeal()">⚖️ 第 2 階隨機抽 5 案 → 第 3 階申復庫</button>
         </div>
 
         <!-- 佐證庫（Phase 17-02）：依案件病歷號（身分證）＋就醫年月自動掛載 vault_key -->
@@ -1426,6 +1430,62 @@
       window.open(URL.createObjectURL(blob), '_blank');
     }
 
+    // ── Phase 20：批次審查、聚合報告、全批次 XML、第 2→第 3 階連動 ──
+    async function runSamplingBatchAudit() {
+      if (!confirm('將對全部抽樣案件執行自動審查並寫回結果，可能需要數分鐘，是否繼續？')) return;
+      const res = await authFetch('/api/sampling/batch-audit', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert('批次審查失敗：' + (data.message || res.status));
+        return;
+      }
+      const states = Object.entries(data.by_state || {}).map(([state, n]) => `${state}：${n}`).join('\n');
+      const failed = (data.errors || []).length;
+      alert(`批次審查完成：${data.completed} / ${data.total} 案\n${states}` + (failed ? `\n失敗 ${failed} 案` : ''));
+    }
+
+    async function openSamplingBatchReport() {
+      const res = await authFetch('/api/sampling/batch-report');
+      if (!res.ok) {
+        alert('無法開啟批次報告（' + res.status + '）');
+        return;
+      }
+      const blob = new Blob([await res.text()], { type: 'text/html;charset=utf-8' });
+      window.open(URL.createObjectURL(blob), '_blank');
+    }
+
+    async function exportSamplingBatchXml() {
+      const res = await authFetch('/api/sampling/export-batch-xml');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert('全批次導出失敗：' + (body.message || res.status));
+        return;
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'sampling_batch.xml';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    async function linkStage2ToAppeal() {
+      const res = await authFetch('/api/appeal/sample-from-stage2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: 5 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert('連動失敗：' + (data.message || res.status));
+        return;
+      }
+      alert(`已連動 ${data.created.length} 案至第 3 階申復庫` +
+        (data.duplicates.length ? `（${data.duplicates.length} 案已存在，略過）` : ''));
+    }
+
     async function exportSamplingXml() {
       if (!currentSelectedCase) {
         alert('請先選擇一筆抽樣案件');
@@ -1647,7 +1707,7 @@
       localStorage.setItem('elc_api_key', defaultDevKey);
     }
     // 預設進入第 1 軌：當月申報檔預審
-    switchWorkflowMode('monthly');
+    switchWorkflowMode('sampling');
   </script>
 </body>
 </html>

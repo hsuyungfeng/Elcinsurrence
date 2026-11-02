@@ -94,6 +94,20 @@ details.fold .fold-body { margin-top:8px; }
 .lb img { max-width:96vw; max-height:84vh; border-radius:8px; }
 .lb .cap { color:#fff; font-size:13px; margin-top:8px; word-break:break-all; text-align:center; }
 footer { margin-top:24px; color:var(--muted); font-size:12px; }
+details.case-item { background:var(--card); border:1px solid var(--line); border-radius:12px; margin:10px 0; }
+details.case-item > summary { cursor:pointer; list-style:none; display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; padding:10px 14px; }
+details.case-item > summary::-webkit-details-marker { display:none; }
+details.case-item > summary::before { content:"▸"; color:var(--accent); }
+details.case-item[open] > summary::before { content:"▾"; }
+details.case-item .case-id { font-weight:700; word-break:break-all; }
+details.case-item .case-meta { color:var(--muted); font-size:13px; flex:1; min-width:0; }
+details.case-item .case-body { padding:0 12px 12px; }
+.state { display:inline-block; border-radius:999px; padding:1px 10px; font-size:12px; font-weight:600; background:var(--box); border:1px solid var(--line); }
+.state-充分 { color:#15803d; }
+.state-薄弱 { color:var(--warn); }
+.state-裸奔 { color:#b91c1c; }
+.state-待判定, .state-未審查 { color:var(--muted); }
+table.summary-table td, table.summary-table th { padding:4px 8px; }
 """
 
 # 腳本：一鍵複製 SOAP、影像燈箱（點擊放大，Esc 或點擊遮罩關閉）。純原生 JS，無外部資源。
@@ -173,6 +187,7 @@ class ReviewCaseView:
     labs: tuple[dict, ...] = ()
     cloud_text: str | None = None
     attachments: tuple[str, ...] = ()
+    support_state: str | None = None
 
 
 def make_thumbnail_data_uri(path: str) -> str | None:
@@ -250,6 +265,7 @@ def build_review_case_view(
         labs=labs,
         cloud_text=str(payload.get("cloud_records") or "").strip() or None,
         attachments=tuple(attachments),
+        support_state=review.get("support_state"),
     )
 
 
@@ -413,6 +429,37 @@ _LIGHTBOX = (
 )
 
 
+_SECTION_BUILDERS = {
+    "warning": _section_warning,
+    "summary": _section_summary,
+    "core": _section_core,
+    "lab": _section_lab,
+    "rule": _section_rule,
+    "cloud": _section_cloud,
+}
+
+
+def _case_body_html(view: ReviewCaseView) -> str:
+    """單一案件的區塊內容（依 SECTION_ORDER），不含外層文件殼。"""
+    return "".join(_SECTION_BUILDERS[name](view) for name in SECTION_ORDER)
+
+
+def _document(title: str, body: str, *, with_lightbox: bool) -> str:
+    lightbox = _LIGHTBOX if with_lightbox else ""
+    return (
+        "<!doctype html>"
+        '<html lang="zh-Hant"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f"<title>{escape(title)}</title>"
+        f"<style>{_CSS}</style></head><body><main>"
+        f"{body}"
+        f"{lightbox}"
+        '<footer>本報告內含個人資料，請依院內規範保管與傳送。'
+        "比對輔助；不產生支持／裸奔或給付判定，最終判定由審查人員作成。</footer>"
+        f"<script>{_SCRIPT}</script></main></body></html>"
+    )
+
+
 def render_unified_review_html(view: ReviewCaseView) -> str:
     """回傳自包含 HTML（已 html.escape、無外部資源），依 SECTION_ORDER 輸出。
 
@@ -420,30 +467,71 @@ def render_unified_review_html(view: ReviewCaseView) -> str:
     頁尾沿用 PHI 警語（含身分證字號、姓名、出生日期）。
     第 2 階預審卡片（preview-html）與第 3 階申復草稿共用本函式輸出。
     """
-    builders = {
-        "warning": _section_warning,
-        "summary": _section_summary,
-        "core": _section_core,
-        "lab": _section_lab,
-        "rule": _section_rule,
-        "cloud": _section_cloud,
-    }
-    body = "".join(builders[name](view) for name in SECTION_ORDER)
-    lightbox = _LIGHTBOX if view.vault_files.get("images") else ""
     title = STAGE_TITLES[view.stage]
-    return (
-        "<!doctype html>"
-        '<html lang="zh-Hant"><head><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"<title>{escape(title)} {escape(view.case_id)}</title>"
-        f"<style>{_CSS}</style></head><body><main>"
+    header = (
         f'<header class="top"><div><div class="stage">{escape(title)}</div>'
         f"<h1>{escape(view.case_id)}</h1></div></header>"
-        f"{body}"
-        f"{lightbox}"
-        '<footer>本報告內含個人資料，請依院內規範保管與傳送。'
-        "比對輔助；不產生支持／裸奔或給付判定，最終判定由審查人員作成。</footer>"
-        f"<script>{_SCRIPT}</script></main></body></html>"
+    )
+    return _document(
+        f"{title} {view.case_id}",
+        header + _case_body_html(view),
+        with_lightbox=bool(view.vault_files.get("images")),
+    )
+
+
+def _state_label(view: ReviewCaseView) -> str:
+    """聚合頁徽章用的狀態字串；查無規則與尚未審查分開呈現，不以裸奔代替。"""
+    return view.support_state or "未審查"
+
+
+def _case_item_html(view: ReviewCaseView) -> str:
+    patient = view.header.get("病患", "")
+    order = " ".join(p for p in (view.header.get("醫令", ""), view.header.get("醫令名稱", "")) if p)
+    state = _state_label(view)
+    return (
+        '<details class="case-item">'
+        '<summary><span class="case-id">'
+        f"{escape(view.case_id)}</span>"
+        f'<span class="case-meta">{escape(patient)} · {escape(order)}</span>'
+        f'<span class="state state-{escape(state)}">{escape(state)}</span>'
+        "</summary>"
+        f'<div class="case-body">{_case_body_html(view)}</div>'
+        "</details>"
+    )
+
+
+def render_aggregated_review_html(
+    views: list[ReviewCaseView],
+    *,
+    title: str,
+    batch_label: str | None = None,
+) -> str:
+    """多案件聚合報告（Plan 20-01）：比照月審格式，每案一個可收合的 <details class="case-item">。
+
+    頂部為狀態彙總（待判定／充分／薄弱／裸奔／未審查），預設全部收合；展開單案即為其完整統一格式內容。
+    """
+    counts: dict[str, int] = {}
+    for view in views:
+        counts[_state_label(view)] = counts.get(_state_label(view), 0) + 1
+    rows = "".join(
+        f'<tr><td><span class="state state-{escape(state)}">{escape(state)}</span></td>'
+        f"<td>{count:,}</td></tr>"
+        for state, count in counts.items()
+    ) or '<tr><td colspan="2">無案件</td></tr>'
+    summary = (
+        '<section class="card"><h2>📊 狀態彙總</h2>'
+        f'<p class="muted">共 {len(views):,} 案</p>'
+        f"<table><thead><tr><th>狀態</th><th>案數</th></tr></thead><tbody>{rows}</tbody></table></section>"
+    )
+    header = (
+        f'<header class="top"><div><div class="stage">{escape(batch_label or "")}</div>'
+        f"<h1>{escape(title)}</h1></div></header>"
+    )
+    items = "".join(_case_item_html(view) for view in views)
+    return _document(
+        title,
+        header + summary + items,
+        with_lightbox=any(view.vault_files.get("images") for view in views),
     )
 
 
@@ -455,5 +543,6 @@ __all__ = [
     "Stage",
     "build_review_case_view",
     "make_thumbnail_data_uri",
+    "render_aggregated_review_html",
     "render_unified_review_html",
 ]
