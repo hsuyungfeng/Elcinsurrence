@@ -58,17 +58,20 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
 
 - **`src/elc_audit_engine/`**:
   - **`api/`**: Modular Flask app created via factory pattern (`create_app`), separated into Blueprints:
-    - `sampling`: `/api/sampling/*`
-    - `appeal`: `/api/appeal/*`
+    - `monthly`: `/api/monthly/*` (TOTFA upload, monthly batch pre-audit reports & clear endpoints)
+    - `sampling`: `/api/sampling/*` (Stage 2 pre-audit, closed-loop batch audit, batch XML export, unified batch report)
+    - `appeal`: `/api/appeal/*` (Stage 3 appeal drafts, linkage from Stage 2, batch appeal XML export, unified batch report)
     - `attachments`: `/api/appeal/attachments/*`
     - `print`: `/api/deduction/print`, `/api/appeal/evidence-packet/print`
     - `security`: Authentication, host whitelisting, and authorization hooks.
-  - **`case_store/`**: SQLite-backed case repository with ACID transitions and collision detection.
+  - **`case_store/`**: SQLite-backed case repository with ACID transitions and collision detection (supports `kind='monthly'|'sampling'|'appeal'`).
   - **`attachment_store.py`**: SQLite-indexed attachment manager keyed by `case_id`.
+  - **`evidence_vault.py`**: Local evidence vault keyed by `record_no-YYMM` storing images, audio, lab reports, and medical records.
+  - **`unified_review_report.py`**: Unified review report generator aligning Stage 2 and Stage 3 batch views with the MONTHLY-YYYYMM report format.
   - **`pipeline.py`**: Pipeline coordinators (`run_presubmission_check` and `run_case_pipeline`).
   - **`rule_repository/`**: SQLite rule store, docx tree indices, and LLM mapping scripts.
-  - **`parsers/`**: Parsers for XML declarations, deduction notifications, and outpatient SOAP text.
-  - **`generators/`**: Builders for appeal drafts, Big5 XML (`appeal_xml.py`), tracking tables, ODT/PDF templates, and evidence packets.
+  - **`parsers/`**: Parsers for XML declarations (TOTFA), deduction notifications, and outpatient SOAP text.
+  - **`generators/`**: Builders for appeal drafts, Big5 XML (`appeal_xml.py`, `sampling_xml.py`), tracking tables, ODT/PDF templates, and evidence packets.
 
 - **`server.py`**: Lightweight development entrypoint delegating to `elc_audit_engine.api.create_app()`.
 - **`scripts/`**: CLI builders for appeal print, XML, deduction sheets, and evidence packets.

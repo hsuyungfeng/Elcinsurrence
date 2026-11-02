@@ -511,6 +511,16 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 |--------|------|------|------|
 | `GET` | `/api/health` | 健康檢查 | 免認證 |
 | `GET` | `/` | 控制台首頁（Web UI） | 免認證 |
+| `POST` | `/api/monthly/upload` | 上傳 TOTFA.zip 當月申報總檔並自動預審 | 選填 |
+| `GET` | `/api/monthly/batch/<batch_id>/report` | 當月申報預審批次報告（HTML/JSON） | 選填 |
+| `POST` | `/api/monthly/batch/<batch_id>/clear` | 清空指定申報批次案件與暫存 | 選填 |
+| `GET` | `/api/sampling/batch-report` | 抽樣預審批次報告（比照當月申報預審格式） | **必填** |
+| `POST` | `/api/sampling/batch-audit` | 全自動批次審查（全部抽樣案件閉環評估） | 選填 |
+| `GET` | `/api/sampling/export-batch-xml` | 全批次導出抽審 XML（Big5） | **必填** |
+| `POST` | `/api/appeal/sample-from-stage2` | 第 2 階隨機抽選連動至第 3 階申復庫 | 選填 |
+| `GET` | `/api/appeal/batch-report` | 核減事後申復批次報告（比照當月申報預審格式） | **必填** |
+| `POST` | `/api/appeal/cases/clear` | 清空所有第 3 階申復案件 | 選填 |
+| `GET` | `/api/appeal/export-batch-xml` | 全批次導出申復 XML（Big5 TOTFA.zip） | **必填** |
 | `GET` | `/api/sampling/cases` | 抽審名冊案件列表 | **必填** |
 | `POST` | `/api/sampling/audit` | 事前預審支持度評估 | 選填 |
 | `POST` | `/api/sampling/import` | 匯入抽審名冊（CSV/PDF/影像） | 選填 |
