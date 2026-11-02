@@ -271,13 +271,19 @@
         <!-- 抽樣與審查整合動作列 -->
         <div style="background: rgba(15,23,42,0.6); border: 1px solid var(--panel-border); border-radius: 10px; padding: 12px; margin-top: 12px; display: flex; flex-direction: column; gap: 10px;">
           <!-- 批次審查進度條 (Progress Bar) -->
-          <div id="batchAuditProgress" style="display: none; background: rgba(15,23,42,0.8); border: 1px solid var(--accent-cyan); border-radius: 8px; padding: 10px 14px;">
+          <div id="batchAuditProgress" style="display: none; background: rgba(15,23,42,0.85); border: 1px solid var(--accent-cyan); border-radius: 8px; padding: 12px 16px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span id="batchProgressText" style="font-size: 12px; font-weight: 600; color: #38bdf8;">🔄 正在執行全自動批次審查（調用 LLM 評估病歷支持度）...</span>
-              <span id="batchProgressPercent" style="font-size: 12px; font-family: monospace; color: #a5f3fc;">審查中</span>
+              <span id="batchProgressText" style="font-size: 13px; font-weight: 600; color: #38bdf8; display: flex; align-items: center; gap: 8px;">
+                <span class="spinner" style="display:inline-block; width:12px; height:12px; border:2px solid #38bdf8; border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite;"></span>
+                <span>正在執行全自動批次審查（調用 LLM 評估病歷支持度）...</span>
+              </span>
+              <div style="text-align: right;">
+                <span id="batchProgressPercent" style="font-size: 13px; font-weight: 700; font-family: monospace; color: #34d399;">0%</span>
+                <span id="batchProgressEta" style="font-size: 11px; color: #94a3b8; margin-left: 8px;">預估剩餘時間：計算中...</span>
+              </div>
             </div>
-            <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; position: relative;">
-              <div id="batchProgressBar" style="width: 100%; height: 100%; background: linear-gradient(90deg, #06b6d4, #10b981); border-radius: 4px; animation: progressPulse 1.5s infinite alternate;"></div>
+            <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden; position: relative;">
+              <div id="batchProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #06b6d4, #10b981); border-radius: 5px; transition: width 0.3s ease;"></div>
             </div>
           </div>
 
@@ -1532,10 +1538,20 @@
       const pContainer = document.getElementById('batchAuditProgress');
       const pText = document.getElementById('batchProgressText');
       const pPercent = document.getElementById('batchProgressPercent');
+      const pEta = document.getElementById('batchProgressEta');
+      const pBar = document.getElementById('batchProgressBar');
       const btnAudit = document.getElementById('btnBatchAudit');
 
       if (pContainer) pContainer.style.display = 'block';
       if (btnAudit) btnAudit.disabled = true;
+
+      const totalCases = samplingCases.length;
+      if (totalCases === 0) {
+        alert('目前無抽樣案件可供審查');
+        if (pContainer) pContainer.style.display = 'none';
+        if (btnAudit) btnAudit.disabled = false;
+        return;
+      }
 
       // 立即將左側所有抽樣清單標記為「🔄 審查中」
       samplingCases.forEach(c => {
@@ -1543,20 +1559,94 @@
       });
       renderCaseList(samplingCases);
 
-      try {
-        const res = await authFetch('/api/sampling/batch-audit', { method: 'POST' });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          alert('批次審查失敗：' + (data.message || res.status));
-          return;
+      const startTime = Date.now();
+      let completedCount = 0;
+      const results = [];
+      const errors = [];
+      const stateCounts = {};
+
+      function formatEta(seconds) {
+        if (!seconds || seconds <= 0) return '即將完成';
+        const m = Math.floor(seconds / 60);
+        const s = Math.round(seconds % 60);
+        return m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`;
+      }
+
+      function updateProgress(currIndex, caseId) {
+        const percent = Math.round((currIndex / totalCases) * 100);
+        if (pBar) pBar.style.width = `${percent}%`;
+        if (pPercent) pPercent.innerText = `${percent}% (${currIndex}/${totalCases} 案)`;
+        
+        if (currIndex > 0) {
+          const elapsed = (Date.now() - startTime) / 1000;
+          const avgPerCase = elapsed / currIndex;
+          const remainingSec = (totalCases - currIndex) * avgPerCase;
+          if (pEta) pEta.innerText = `預估剩餘時間：${formatEta(remainingSec)}`;
+        } else {
+          if (pEta) pEta.innerText = '預估剩餘時間：計算中...';
         }
-        const states = Object.entries(data.by_state || {}).map(([state, n]) => `${state}：${n}`).join('\n');
-        const failed = (data.errors || []).length;
-        alert(`批次審查完成：${data.completed} / ${data.total} 案\n${states}` + (failed ? `\n失敗 ${failed} 案` : ''));
+        if (pText && caseId) {
+          pText.innerHTML = `
+            <span class="spinner" style="display:inline-block; width:12px; height:12px; border:2px solid #38bdf8; border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite;"></span>
+            <span>正在審查 (${currIndex + 1}/${totalCases})：<code>${caseId}</code>...</span>
+          `;
+        }
+      }
+
+      updateProgress(0, samplingCases[0].id);
+
+      try {
+        // 逐案執行閉環，即時推進進度條與左側狀態徽章
+        for (let i = 0; i < totalCases; i++) {
+          const c = samplingCases[i];
+          updateProgress(i, c.id);
+
+          try {
+            const res = await authFetch(`/api/sampling/cases/${encodeURIComponent(c.id)}/closed-loop`, {
+              method: 'POST'
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+              c.state = 'reviewed';
+              c.review = {
+                support_state: data.support_state,
+                warnings: data.warnings,
+                records_degraded: data.records_degraded,
+                soap_source: data.soap_source
+              };
+              c.support_level = data.support_state;
+              results.push(data);
+              stateCounts[data.support_state] = (stateCounts[data.support_state] || 0) + 1;
+            } else {
+              c.state = 'failed';
+              errors.push({ case_id: c.id, message: data.message || res.status });
+            }
+          } catch (err) {
+            c.state = 'failed';
+            errors.push({ case_id: c.id, message: String(err) });
+          }
+
+          completedCount++;
+          // 即時更新左側案件徽章
+          renderCaseList(samplingCases);
+          // 若目前選取的案件正好是這筆，同時更新中央工作區徽章
+          if (currentSelectedCase && currentSelectedCase.id === c.id) {
+            selectSamplingCase(c.id);
+          }
+        }
+
+        // 完成全部審查
+        if (pBar) pBar.style.width = '100%';
+        if (pPercent) pPercent.innerText = `100% (${completedCount}/${totalCases} 案)`;
+        if (pEta) pEta.innerText = '審查完成！';
+
+        const states = Object.entries(stateCounts).map(([state, n]) => `${state}：${n}`).join('\n');
+        alert(`批次審查完成：${completedCount} / ${totalCases} 案\n${states}` + (errors.length ? `\n失敗 ${errors.length} 案` : ''));
       } finally {
-        if (pContainer) pContainer.style.display = 'none';
-        if (btnAudit) btnAudit.disabled = false;
-        // 重新自後端載入最新狀態並刷新清單與徽章
+        setTimeout(() => {
+          if (pContainer) pContainer.style.display = 'none';
+          if (btnAudit) btnAudit.disabled = false;
+        }, 1200);
         await loadCaseData();
       }
     }

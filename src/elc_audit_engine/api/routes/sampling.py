@@ -212,6 +212,27 @@ def batch_audit_sampling():
     })
 
 
+@bp.route("/api/sampling/cases/<case_id>/closed-loop", methods=["POST"])
+def closed_loop_single_sampling_case(case_id: str):
+    """單案事前預審閉環執行（寫回 payload['review']）。"""
+    store = case_store()
+    provider = records_provider()
+    try:
+        outcome = run_closed_loop(store, case_id, provider=provider)
+    except ValueError as exc:
+        raise ApiError(str(exc), status=400)
+    except CaseNotFoundError:
+        raise ApiError(f"找不到案件：{case_id}", status=404)
+    return jsonify({
+        "status": "success",
+        "case_id": outcome.case_id,
+        "support_state": outcome.support_state,
+        "records_degraded": outcome.records_degraded,
+        "soap_source": outcome.soap_source,
+        "warnings": list(outcome.warnings),
+    })
+
+
 @bp.route("/api/sampling/export-batch-xml", methods=["GET"])
 def export_sampling_batch_xml():
     """全批次健保抽審 XML（Plan 20-03）：多案件聚合為單一 Big5 文件。
