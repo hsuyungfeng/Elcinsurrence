@@ -5,10 +5,21 @@ from __future__ import annotations
 import json
 import os
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request
 
 from elc_audit_engine import attachment_store
-from elc_audit_engine.appeal_linkage import DEFAULT_COUNT, MAX_COUNT, link_stage2_to_appeal
+from elc_audit_engine.appeal_linkage import (
+    DEFAULT_COUNT,
+    MAX_COUNT,
+    appeal_xml_case,
+    link_stage2_to_appeal,
+)
+from elc_audit_engine.generators.appeal_xml import (
+    AppealBatchError,
+    AppealXmlEncodingError,
+    appeal_root_to_big5_bytes,
+    build_batch_appeal_xml,
+)
 from elc_audit_engine.case_store import CaseNotFoundError, IllegalTransitionError
 from elc_audit_engine.comparator.soap_advice import generate_soap_advice
 from elc_audit_engine.generators import build_appeal_draft, render_appeal_json
@@ -201,6 +212,27 @@ def sample_appeal_from_stage2():
         current_app.logger.error("rule repository failure during stage2 linkage: %s", exc)
         raise ApiError("規則庫暫時無法查詢，請稍後再試或聯繫系統管理員", status=503)
     return jsonify({"status": "success", **result})
+
+
+@bp.route("/api/appeal/export-batch-xml", methods=["GET"])
+def export_appeal_batch_xml():
+    """全批次電子申復 XML（Phase 21-02）：所有申復案件聚合為單一 Big5 文件（t38/t39 加總）。
+
+    無申復案件 404；欄位缺漏、字數超限或 Big5 無法編碼 422（整批拒絕，不產生殘缺檔）。
+    """
+    records = list(case_store().list_all(kind="appeal", limit=1000))
+    if not records:
+        raise ApiError("尚無申復案件可導出", status=404)
+    try:
+        root = build_batch_appeal_xml([appeal_xml_case(r.payload or {}) for r in records])
+        body = appeal_root_to_big5_bytes(root)
+    except (AppealBatchError, AppealXmlEncodingError) as exc:
+        raise ApiError(str(exc), status=422)
+    return Response(
+        body,
+        content_type="application/xml",
+        headers={"Content-Disposition": 'attachment; filename="appeal_batch.xml"'},
+    )
 
 
 @bp.route("/api/appeal/import", methods=["POST"])

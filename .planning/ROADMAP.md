@@ -33,10 +33,14 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 - [x] Phase 19: Case Report 視覺化審查報告升級 (借鑑 answer-me-with-html 理念)（2/2 plans）— completed 2026-11-02
   - 19-01: 重構 unified_review_report 視覺排版（SOAP 與佐證庫圖文並列、次要區塊折疊）
   - 19-02: 路由整合與預審預覽端點閉環走通驗收
-- [ ] Phase 20: 3 階多案件聚合預審報告、申復範例連動與雙軌審查導出（0/3 plans）
+- [x] Phase 20: 3 階多案件聚合預審報告、申復範例連動與雙軌審查導出（3/3 plans）— completed 2026-11-02
   - 20-01: 多案件聚合可收合 HTML 預審報告引擎（支援 2、3 階）
   - 20-02: 第 3 階申復自第 2 階隨機抽選 5 案連動與草稿生成
   - 20-03: 第 2 階雙軌審查（全自動批次審查 vs 逐筆人工審查）與全量匯整導出 (HTML & XML)
+- [ ] Phase 21: 健保電子抽審檔案打包器、批次申復 XML (t38/t39) 與 Local Agent 橋接介面（0/3 plans）
+  - 21-01: 健保標準檔案打包器（Evidence Packager）與單案送審匯出端點
+  - 21-02: 批次電子申復 XML 生成（t38/t39 彙總、P6 強制為 0 與全形防護）
+  - 21-03: 雲端與地端 Local Agent 橋接 API（Bridge API for NHI_EIIAPI）
 
 </details>
 

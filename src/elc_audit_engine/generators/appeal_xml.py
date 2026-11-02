@@ -121,6 +121,115 @@ def write_appeal_xml(root: ET.Element, path: str) -> None:
     tree.write(path, encoding="big5", xml_declaration=True)
 
 
+class AppealBatchError(ValueError):
+    """批次申復資料不合規（缺必要欄位、字數超限、費用年月不一致等）；整批拒絕，不產生殘缺檔。"""
+
+
+_REASON_FIELD_MAX = 1000  # 單欄上限（官方問答集 Q15：p8／p9 各 1000 字）
+_REASON_TOTAL_MAX = 2000  # 合計上限（Q15）
+_ATTACHMENT_FLAG = {True: "Y", False: "N"}  # p7：有附件 Y，無附件 N（規格兩值皆需填，不可省略）
+
+
+def _p6_points(item: dict, label: str) -> int:
+    """p6 點數受理：不申復的醫令強制 0（規格：不可漏報）；申復者必須填整數點數。"""
+    if not item.get("is_appealing", True):
+        return 0
+    raw = item.get("claimed_points")
+    if raw is None or raw == "":
+        raise AppealBatchError(f"{label}：申復醫令缺少申復點數（p6）")
+    try:
+        points = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise AppealBatchError(f"{label}：申復點數（p6）須為整數") from exc
+    if points < 0:
+        raise AppealBatchError(f"{label}：申復點數（p6）不得為負數")
+    return points
+
+
+def _reason_fields(item: dict, label: str) -> tuple[str, str]:
+    """p8／p9 申復理由切分：不申復者皆空；超過單欄上限的內容順延至 p9，合計超過 2000 字則拒絕。"""
+    if not item.get("is_appealing", True):
+        return "", ""
+    reason1 = str(item.get("reason1") or "")
+    reason2 = str(item.get("reason2") or "")
+    if len(reason1) > _REASON_FIELD_MAX:
+        reason2 = reason1[_REASON_FIELD_MAX:] + reason2
+        reason1 = reason1[:_REASON_FIELD_MAX]
+    if len(reason2) > _REASON_FIELD_MAX:
+        raise AppealBatchError(f"{label}：申復理由超過合計 {_REASON_TOTAL_MAX} 字上限（p8＋p9）")
+    return reason1, reason2
+
+
+def build_batch_appeal_xml(cases_payload: list[dict]) -> ET.Element:
+    """全批次申復 XML（Phase 21-02）：多案件聚合為單一 `<outpatient>`。
+
+    cases_payload 每案格式：{case_class(d1), case_seq(d2), fee_year_month(t2), items: [...]}；
+    每筆 item 為一個醫令申復項目：{order_seq(p1), order_code(p2), p3, p4, p5, is_appealing,
+    claimed_points(p6), has_attachment(p7), reason1(p8), reason2(p9)}。
+
+    tdata 加總：t38＝申復醫令項目總件數（每筆 pdata 計 1 件）；t39＝全部 p6 點數加總。
+    全批次的費用年月（t2）必須一致。任何缺漏或超限都拋 AppealBatchError（fail-fast）。
+    """
+    if not cases_payload:
+        raise AppealBatchError("沒有可導出的申復案件")
+    fee_months: set[str] = set()
+    ddata_list: list[dict] = []
+    total_items = 0
+    total_points = 0
+    for index, case in enumerate(cases_payload, start=1):
+        label = f"案件 {case.get('case_seq') or index}"
+        if not case.get("case_class") or not case.get("case_seq"):
+            raise AppealBatchError(f"{label}：缺少案件分類（d1）或案件流水號（d2）")
+        items = case.get("items") or []
+        if not items:
+            raise AppealBatchError(f"{label}：沒有醫令申復項目")
+        fee_months.add(str(case.get("fee_year_month") or ""))
+
+        pdata_list: list[dict] = []
+        for position, item in enumerate(items, start=1):
+            item_label = f"{label} 第 {position} 筆醫令"
+            if not item.get("order_seq") or not item.get("order_code"):
+                raise AppealBatchError(f"{item_label}：缺少醫令序號（p1）或醫令代碼（p2）")
+            points = _p6_points(item, item_label)
+            reason1, reason2 = _reason_fields(item, item_label)
+            pdata_list.append({
+                "p1": item["order_seq"],
+                "p2": item["order_code"],
+                "p3": item.get("p3"),
+                "p4": item.get("p4"),
+                "p5": item.get("p5"),
+                "p6": points,
+                "p7": _ATTACHMENT_FLAG[bool(item.get("has_attachment"))],
+                "p8": reason1,
+                "p9": reason2,
+            })
+            total_items += 1
+            total_points += points
+        ddata_list.append({
+            "dhead": {"d1": case["case_class"], "d2": case["case_seq"]},
+            "dbody": {},
+            "pdata_list": pdata_list,
+        })
+
+    if len(fee_months) != 1 or "" in fee_months:
+        raise AppealBatchError("全批次申復的費用年月（t2）須一致且不可空白")
+    tdata = {"t2": fee_months.pop(), "t38": total_items, "t39": total_points}
+    return build_appeal_xml(tdata, ddata_list)
+
+
+def appeal_root_to_big5_bytes(root: ET.Element) -> bytes:
+    """序列化為 Big5 位元組（含宣告）。無法以 Big5 表示的字元 fail-fast 拋錯，不靜默替換。"""
+    body = ET.tostring(root, encoding="unicode")
+    try:
+        encoded = body.encode("big5")
+    except UnicodeEncodeError as exc:
+        bad_char = body[exc.start:exc.end]
+        raise AppealXmlEncodingError(
+            f"XML 內容含有 Big5 無法編碼之字元 '{bad_char}' (U+{ord(bad_char):04X})，無法導出",
+        ) from exc
+    return b'<?xml version="1.0" encoding="Big5"?>\r\n' + encoded + b"\r\n"
+
+
 def draft_json_to_appeal_xml_fields(appeal_json: dict) -> tuple[dict, list[dict]]:
     """將 render_appeal_json() 產出的 JSON dict 轉換為 build_appeal_xml() 的入參。"""
     tdata = {

@@ -28,6 +28,12 @@ FACILITY_CONFIG_PATH = os.getenv(
 # FACILITY_CONFIG_PATH 模式）；預設 data/samples/records。
 RECORDS_DIR = os.getenv("RECORDS_DIR", os.path.join(DATA_DIR, "samples", "records"))
 
+# Phase 21-01：健保送審檔名的第一階層代碼（2 碼）與第二階層代碼（1 碼）。
+# 規格（電子抽審.md §二.2）只給範例 `13B`，未定義代碼來源，故由部署端設定；
+# 未設定時導出端點明確拒絕（503），不以猜測值產生檔名。
+NHI_STAGE1_CODE = os.getenv("NHI_STAGE1_CODE", "")
+NHI_STAGE2_CODE = os.getenv("NHI_STAGE2_CODE", "")
+
 # Phase 9-01：存取審計日誌路徑（JSON Lines，無 PHI）。
 AUDIT_LOG_PATH = os.getenv("AUDIT_LOG_PATH", os.path.join(DATA_DIR, "audit", "access.log"))
 

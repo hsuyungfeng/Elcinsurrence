@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import random
+import re
 
 from elc_audit_engine import evidence_vault
 from elc_audit_engine.case_store import DuplicateCaseError
@@ -101,6 +102,8 @@ def _appeal_payload(record) -> dict:
         "source": "stage2",
         "source_case_id": record.case_id,
         "case_seq": src.get("case_seq") or "1",
+        "case_class": (src.get("monthly_source") or {}).get("case_class"),
+        "fee_year_month": _fee_year_month(src.get("batch")),
         "order_seq": src.get("order_seq") or "1",
         "patient_name": src.get("patient_name"),
         "record_no": src.get("record_no"),
@@ -126,6 +129,34 @@ def _appeal_payload(record) -> dict:
         "appeal_total_chars": draft.total_chars,
         "appeal_over_limit": draft.over_limit,
         "appeal_validation_errors": list(draft.validation_errors),
+    }
+
+
+def _fee_year_month(batch: object) -> str | None:
+    """`MONTHLY-202307` → `202307`（費用年月 YYYYMM）；格式不符回 None。"""
+    match = re.fullmatch(r"MONTHLY-(\d{6})", str(batch or ""))
+    return match.group(1) if match else None
+
+
+def appeal_xml_case(payload: dict) -> dict:
+    """申復案件 payload → build_batch_appeal_xml 的單案輸入。
+
+    申復點數（claimed_points）、是否申復（is_appealing）、附件（has_attachment）由醫師於申復工作台填寫；
+    未填寫時不會自動推算，批次導出會以 422 明確拒絕，避免把推測值送審。
+    """
+    return {
+        "case_class": payload.get("case_class"),
+        "case_seq": payload.get("case_seq"),
+        "fee_year_month": payload.get("fee_year_month"),
+        "items": [{
+            "order_seq": payload.get("order_seq"),
+            "order_code": payload.get("order_code"),
+            "is_appealing": payload.get("is_appealing", True),
+            "claimed_points": payload.get("claimed_points"),
+            "has_attachment": bool(payload.get("has_attachment", False)),
+            "reason1": payload.get("appeal_reason1"),
+            "reason2": payload.get("appeal_reason2"),
+        }],
     }
 
 

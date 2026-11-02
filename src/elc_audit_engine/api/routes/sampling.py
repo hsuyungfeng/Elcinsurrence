@@ -13,11 +13,13 @@ from flask import Blueprint, Response, current_app, jsonify, request
 from elc_audit_engine import attachment_store, evidence_vault
 from elc_audit_engine.case_store import CaseNotFoundError, IllegalTransitionError
 from elc_audit_engine.comparator.soap_advice import generate_soap_advice
+from config import settings
 from elc_audit_engine.generators.sampling_xml import (
     SamplingXmlError,
     build_batch_sampling_xml,
     build_sampling_xml,
 )
+from elc_audit_engine.packagers import PackagerError, build_base_name, build_case_package
 from elc_audit_engine.ingest import (
     MediaExtractError,
     SamplingImportError,
@@ -229,6 +231,46 @@ def export_sampling_batch_xml():
         body,
         content_type="application/xml",
         headers={"Content-Disposition": 'attachment; filename="sampling_batch.xml"'},
+    )
+
+
+@bp.route("/api/sampling/cases/<case_id>/export-package", methods=["GET"])
+def export_sampling_case_package(case_id: str):
+    """單案健保送審資料夾（Phase 21-01）：送審 XML＋佐證庫檔案，依 11 碼規則命名，一次性整包導出。
+
+    需設定 NHI_STAGE1_CODE／NHI_STAGE2_CODE（未設定 503）；缺來源申報總檔或欄位 422；
+    不符規格的佐證檔不會靜默略過，而是列於包內 MANIFEST.txt 並於回應標頭說明數量。
+    """
+    record = _sampling_case_or_404(case_id)
+    payload = dict(record.payload or {})
+    stage1, stage2 = settings.NHI_STAGE1_CODE, settings.NHI_STAGE2_CODE
+    if not stage1 or not stage2:
+        raise ApiError("未設定健保檔名第一、第二階層代碼（NHI_STAGE1_CODE／NHI_STAGE2_CODE）", status=503)
+
+    source = payload.get("monthly_source") if isinstance(payload.get("monthly_source"), dict) else {}
+    try:
+        xml_bytes = build_sampling_xml(payload)
+        base_name = build_base_name(stage1, stage2, source.get("case_class"), source.get("case_seq"))
+    except (SamplingXmlError, PackagerError) as exc:
+        raise ApiError(str(exc), status=422)
+
+    evidence: list[tuple[str, bytes]] = []
+    vault_key = evidence_vault.vault_key_for_case(payload.get("record_no"), payload.get("visit_date"))
+    if vault_key is not None:
+        for files in evidence_vault.list_vault_files(vault_key).values():
+            for vault_file in files:
+                with open(vault_file.path, "rb") as handle:
+                    evidence.append((vault_file.filename, handle.read()))
+
+    package, report = build_case_package(base_name=base_name, xml_bytes=xml_bytes, evidence=evidence)
+    return Response(
+        package,
+        content_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{base_name}.zip"',
+            "X-Package-Accepted": str(len(report["accepted"])),
+            "X-Package-Rejected": str(len(report["rejected"])),
+        },
     )
 
 
