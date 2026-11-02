@@ -37,7 +37,11 @@ from elc_audit_engine.sampling_closed_loop import (
     save_review,
 )
 from elc_audit_engine.sampling_sampler import sample_monthly_batch
-from elc_audit_engine.unified_review_report import build_review_case_view, render_unified_review_html
+from elc_audit_engine.unified_review_report import (
+    build_review_case_view,
+    make_thumbnail_data_uri,
+    render_unified_review_html,
+)
 
 from ..cases import persist_cases, to_sampling_case
 from ..context import caller_id, case_store
@@ -55,6 +59,7 @@ from ._lists import case_list_response
 
 bp = Blueprint("sampling", __name__)
 
+_PREVIEW_THUMB_LIMIT = 24
 _EVIDENCE_MAX_LABS = 50
 _EVIDENCE_MAX_CLOUD_CHARS = 5000
 
@@ -132,11 +137,15 @@ def sampling_case_preview_html(case_id: str):
 
     vault_key = evidence_vault.vault_key_for_case(payload.get("record_no"), payload.get("visit_date"))
     vault_listing = None
+    thumbnails: dict[str, str] = {}
     if vault_key is not None:
-        vault_listing = {
-            cat: [{"filename": f.filename} for f in files]
-            for cat, files in evidence_vault.list_vault_files(vault_key).items()
-        }
+        files_by_cat = evidence_vault.list_vault_files(vault_key)
+        vault_listing = {cat: [{"filename": f.filename} for f in files] for cat, files in files_by_cat.items()}
+        # 影像縮圖（Phase 19-01）：上限 24 張，無法解析者以檔名佔位
+        for image in files_by_cat.get("images", [])[:_PREVIEW_THUMB_LIMIT]:
+            uri = make_thumbnail_data_uri(image.path)
+            if uri:
+                thumbnails[image.filename] = uri
     attachments = tuple(a.filename for a in attachment_store.list_attachments(case_id))
 
     soap_template = None
@@ -152,6 +161,7 @@ def sampling_case_preview_html(case_id: str):
         vault_listing=vault_listing,
         soap_template=soap_template,
         attachments=attachments,
+        thumbnails=thumbnails,
     )
     return Response(render_unified_review_html(view), content_type="text/html; charset=utf-8")
 

@@ -26,10 +26,13 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
   - 17-01: 佐證庫檔案系統規範與 Vault Service 實作（身分證-YYMM 結構化自動歸檔、讀取與安全防護）
   - 17-02: 前端第二階介面升級（身分證佐證庫多源掛載、影像畫廊、錄音播放器、報告檢視）
   - 17-03: 以 MONTHLY-202307.zip 進行二階核實全流程走通與 E2E 整合驗收
-- [ ] Phase 18: 簡潔範例病歷預生成與抽審事前自動化審查升級（0/3 plans）
+- [x] Phase 18: 簡潔範例病歷預生成與抽審事前自動化審查升級（3/3 plans）— completed 2026-10-31
   - 18-01: 精簡範例病歷批次預生成（500-1000字元）並存入資料庫
   - 18-02: 統一第 2、3 階審查報告格式（比照 MONTHLY-202307 月審風格）
   - 18-03: 重新設計自動化抽樣事前預審閉環與工作台
+- [x] Phase 19: Case Report 視覺化審查報告升級 (借鑑 answer-me-with-html 理念)（2/2 plans）— completed 2026-11-02
+  - 19-01: 重構 unified_review_report 視覺排版（SOAP 與佐證庫圖文並列、次要區塊折疊）
+  - 19-02: 路由整合與預審預覽端點閉環走通驗收
 
 </details>
 

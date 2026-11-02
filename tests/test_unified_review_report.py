@@ -7,10 +7,9 @@ from elc_audit_engine import unified_review_report as report
 # ── 公開契約 ─────────────────────────────────────────────────
 
 
-def test_section_order_matches_monthly_202307_layout():
-    assert report.SECTION_ORDER == (
-        "warning", "kpi", "header", "rule", "soap", "lab", "cloud", "vault",
-    )
+def test_section_order_is_case_report_layout():
+    """Phase 19-01：警示 → 摘要 → 核心對照（SOAP｜佐證庫）→ 檢驗 → 折疊區塊。"""
+    assert report.SECTION_ORDER == ("warning", "summary", "core", "lab", "rule", "cloud")
 
 
 def test_stage_titles_cover_stage_2_and_3():
@@ -120,7 +119,7 @@ def test_render_follows_section_order():
         vault_files={"images": ("x.jpg",)},
     )
     html = report.render_unified_review_html(view)
-    positions = [html.index(marker) for marker in ("申復理由", "就醫日", "原文", "SOAP", "A123456789-2607")]
+    positions = [html.index(marker) for marker in ("申復理由", "就醫日", "SOAP", "A123456789-2607", "原文")]
     assert positions == sorted(positions)
 
 
@@ -174,4 +173,72 @@ def test_render_is_self_contained_without_external_resources():
     view = report.ReviewCaseView(case_id="C-8", stage=2, soap={"s": "S"}, soap_source="case")
     html = report.render_unified_review_html(view)
     assert "<link" not in html
-    assert "src=" not in html
+    assert 'src="http' not in html
+    assert "cdn" not in html.lower()
+
+
+def test_rules_and_cloud_are_collapsed_by_default():
+    view = report.ReviewCaseView(
+        case_id="C-11",
+        stage=2,
+        rules=(report.RuleBlock(label="給付規定", text="原文", is_payment_text=True),),
+        cloud_text="外院紀錄",
+    )
+    html = report.render_unified_review_html(view)
+    assert '<details class="fold"><summary>📜 給付規定條文' in html
+    assert '<details class="fold"><summary>☁️ 健保跨院雲端病歷' in html
+    assert "<details open" not in html
+    assert "<details class=\"fold\" open" not in html
+    assert "外院紀錄" in html
+
+
+def test_core_places_soap_and_vault_side_by_side():
+    view = report.ReviewCaseView(
+        case_id="C-12",
+        stage=2,
+        soap={"s": "S", "o": "O", "a": "A", "p": "P"},
+        soap_source="case",
+        vault_key="A123456789-2607",
+        vault_files={"images": ("x.jpg",)},
+    )
+    html = report.render_unified_review_html(view)
+    core_start = html.index('<div class="core">')
+    assert html.index("SOAP 臨床病歷", core_start) < html.index("佐證庫（A123456789-2607）", core_start)
+
+
+def test_vault_images_without_thumbnail_show_placeholder_not_lightbox_target():
+    view = report.ReviewCaseView(
+        case_id="C-13",
+        stage=2,
+        vault_key="A123456789-2607",
+        vault_files={"images": ("scan.jpg",)},
+    )
+    html = report.render_unified_review_html(view)
+    assert '<div class="ph">scan.jpg</div>' in html
+    assert "<img" not in html.split('<div class="core">', 1)[1].split("</section>", 1)[0]
+
+
+def test_thumbnail_becomes_clickable_lightbox_tile(tmp_path):
+    from PIL import Image
+
+    image_path = tmp_path / "wound.png"
+    Image.new("RGB", (800, 400), color="red").save(image_path)
+    uri = report.make_thumbnail_data_uri(str(image_path))
+    assert uri is not None and uri.startswith("data:image/jpeg;base64,")
+
+    view = report.ReviewCaseView(
+        case_id="C-14",
+        stage=2,
+        vault_key="A123456789-2607",
+        vault_files={"images": ("wound.png",)},
+        thumbnails={"wound.png": uri},
+    )
+    html = report.render_unified_review_html(view)
+    assert 'class="tile"><img src="data:image/jpeg;base64,' in html
+    assert 'id="lb"' in html
+
+
+def test_thumbnail_returns_none_for_non_image(tmp_path):
+    bogus = tmp_path / "note.txt"
+    bogus.write_text("not an image", encoding="utf-8")
+    assert report.make_thumbnail_data_uri(str(bogus)) is None
