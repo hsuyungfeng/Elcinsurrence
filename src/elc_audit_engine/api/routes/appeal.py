@@ -34,6 +34,7 @@ from elc_audit_engine.parsers.totfa import parse_totfa_zip
 from elc_audit_engine.rule_repository import get_rule
 from elc_audit_engine.rule_repository.errors import RuleRepositoryError
 from elc_audit_engine.unified_review_report import (
+    RuleBlock,
     build_review_case_view,
     make_thumbnail_data_uri,
     render_aggregated_review_html,
@@ -259,10 +260,25 @@ def _stage3_view(store, record, *, with_thumbnails: bool):
         if source.startswith("template") and soap is not None:
             soap_template = soap
 
+    # 查詢該醫令規則，裝填給付規定與條文全文
+    rules_list = []
+    order_code = payload.get("order_code") or (payload.get("monthly_source") or {}).get("order_code")
+    if order_code:
+        try:
+            r = get_rule(order_code)
+            if r.found:
+                if r.payment_text:
+                    rules_list.append(RuleBlock(label="給付規定（payment_text）", text=r.payment_text, is_payment_text=True))
+                if r.article_full_text:
+                    rules_list.append(RuleBlock(label="條文全文（article_full_text）", text=r.article_full_text))
+        except Exception:
+            pass
+
     return build_review_case_view(
         3,
         case_id,
         payload,
+        rules=tuple(rules_list),
         vault_listing=vault_listing,
         soap_template=soap_template,
         attachments=attachments,

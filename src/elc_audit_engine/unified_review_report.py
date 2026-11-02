@@ -19,6 +19,7 @@ from html import escape
 from typing import Literal
 
 from elc_audit_engine import evidence_vault
+from elc_audit_engine.rule_repository.icd_titles import get_icd_chinese_title
 from elc_audit_engine.sampling_preview import split_soap
 
 Stage = Literal[2, 3]
@@ -108,13 +109,69 @@ details.case-item .case-body { padding:0 12px 12px; }
 .state-裸奔 { color:#b91c1c; }
 .state-待判定, .state-未審查 { color:var(--muted); }
 table.summary-table td, table.summary-table th { padding:4px 8px; }
+
+/* 比照 MONTHLY-202307 預審報告樣式 */
+.case-head { font-size: 14px; font-weight: 600; line-height: 1.5; }
+.meta { color: var(--muted); font-size: 13px; margin: 4px 0 8px; }
+.item { border-top: 1px dashed var(--line); padding: 10px 0; margin-top: 8px; }
+.item-title { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.item-title strong { font-size: 14px; }
+.pill { display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 12px; background: var(--box); border: 1px solid var(--line); color: var(--fg); }
+.amounts { font-size: 14px; font-weight: 600; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
+.rule-blocks { margin-top: 8px; }
+.rule-payment { background: var(--box); border-left: 3px solid var(--accent); border-radius: 4px; padding: 8px 12px; margin: 6px 0; }
+.rule-payment-title { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+.rule-payment-text { font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+details.rule-fulltext { margin-top: 6px; }
+details.rule-fulltext > summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 600; }
+.rule-body { margin-top: 8px; }
+.rule-src + .rule-src { margin-top: 10px; }
+.src { color: var(--muted); font-size: 11px; }
+pre.rule-text { white-space: pre-wrap; word-break: break-word; background: var(--box); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 13px/1.7 "Noto Sans TC", "Microsoft JhengHei", sans-serif; margin: 4px 0 0; }
+details.soap-example { margin-top: 8px; }
+details.soap-example > summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 600; }
+textarea.soap-text { width: 100%; min-height: 130px; font: 12px/1.6 monospace; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--fg); resize: vertical; margin-top: 6px; }
+.soap-actions { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+button.btn-copy { background: #10b981; color: #fff; border: none; border-radius: 4px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+button.btn-soap-modal { background: var(--accent, #0284c7); color: #fff; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 6px; display: inline-flex; align-items: center; gap: 4px; }
+button.btn-soap-modal:hover { opacity: 0.9; }
+.vault-box { margin: 8px 0; padding: 8px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
+.vault-title { font-weight: 600; color: var(--accent); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.vault-files { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.vault-file-item { display: inline-flex; align-items: center; gap: 4px; background: var(--bg); padding: 2px 8px; border-radius: 4px; font-size: 12px; border: 1px solid var(--line); }
 """
 
-# 腳本：一鍵複製 SOAP、影像燈箱（點擊放大，Esc 或點擊遮罩關閉）。純原生 JS，無外部資源。
+# 腳本：一鍵複製 SOAP、影像燈箱（點擊放大，Esc 或點擊遮罩關閉）、開啟範例病歷彈窗。純原生 JS，無外部資源。
 _SCRIPT = """
 function copySoap(btn){
-  var t=btn.closest('.card').querySelector('.soap-grid').innerText;
-  if(navigator.clipboard){navigator.clipboard.writeText(t).then(function(){btn.textContent='已複製';});}
+  var card=btn.closest('.card')||btn.closest('.item');
+  var t='';
+  if(card){
+    var ta=card.querySelector('textarea.soap-text');
+    if(ta){
+      ta.select();
+      t=ta.value;
+    } else {
+      var grid=card.querySelector('.soap-grid');
+      if(grid){t=grid.innerText;}
+    }
+  }
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(function(){btn.textContent='已複製';},function(){btn.textContent='請手動複製';});
+  } else {
+    var ok=false;
+    try{ok=document.execCommand('copy');}catch(e){ok=false;}
+    btn.textContent=ok?'已複製':'請手動複製';
+  }
+}
+function openSoapModal(orderCode, diagCode, caseId) {
+  if (window.parent && window.parent.generateExampleRecord) {
+    window.parent.generateExampleRecord(orderCode, diagCode, caseId);
+  } else if (typeof generateExampleRecord === 'function') {
+    generateExampleRecord(orderCode, diagCode, caseId);
+  } else {
+    window.parent.postMessage({ type: 'OPEN_EX_MODAL', order_code: orderCode, primary_diagnosis: diagCode, case_id: caseId }, '*');
+  }
 }
 document.addEventListener('click',function(e){
   var lb=document.getElementById('lb');
@@ -171,6 +228,22 @@ class ReviewCaseView:
         labs: 檢驗數據（dict：name／value／unit／date）。
         cloud_text: 健保跨院雲端病歷文字（收合顯示）；None 表示無。
         attachments: 上傳附件檔名。
+        support_state: 審查狀態（充分／薄弱／裸奔／待判定／未審查）。
+        case_seq: 流水號。
+        patient_id: 身分證字號。
+        patient_name: 姓名。
+        birth_date: 出生日期。
+        total_points: 醫療總費用點數。
+        clinic: 科別。
+        doctor_code: 醫師代碼。
+        visit_date: 就醫日。
+        primary_diagnosis: 主診斷碼。
+        secondary_diagnoses: 次診斷碼列表。
+        order_code: 醫令代碼。
+        order_name: 醫令名稱。
+        unit_price: 醫令單價。
+        points: 醫令點數。
+        total_qty: 醫令總量。
     """
 
     case_id: str
@@ -188,6 +261,21 @@ class ReviewCaseView:
     cloud_text: str | None = None
     attachments: tuple[str, ...] = ()
     support_state: str | None = None
+    case_seq: str | None = None
+    patient_id: str | None = None
+    patient_name: str | None = None
+    birth_date: str | None = None
+    total_points: str | None = None
+    clinic: str | None = None
+    doctor_code: str | None = None
+    visit_date: str | None = None
+    primary_diagnosis: str | None = None
+    secondary_diagnoses: tuple[str, ...] = ()
+    order_code: str | None = None
+    order_name: str | None = None
+    unit_price: str | None = None
+    points: str | None = None
+    total_qty: str | None = None
 
 
 def make_thumbnail_data_uri(path: str) -> str | None:
@@ -250,6 +338,45 @@ def build_review_case_view(
     kpis = {label: count for label, count in kpis.items() if count}
     id_no = payload.get("record_no") or payload.get("patient_id")
     vault_key = evidence_vault.vault_key_for_case(id_no, payload.get("visit_date"))
+
+    # 自 payload 與 monthly_source 解析比照當月申報預審報告所需欄位
+    src = payload.get("monthly_source") if isinstance(payload.get("monthly_source"), dict) else {}
+    case_seq = payload.get("case_seq") or src.get("case_seq")
+    patient_id = id_no
+    patient_name = payload.get("patient_name") or src.get("patient_name")
+    birth_date = payload.get("birth_date") or src.get("birth_date")
+    total_points = payload.get("total_points") or src.get("total_points")
+    clinic = payload.get("clinic") or src.get("clinic")
+    doctor_code = payload.get("doctor_code") or src.get("doctor_code")
+    visit_date = payload.get("visit_date") or src.get("visit_date")
+    primary_diagnosis = payload.get("primary_diagnosis") or src.get("primary_diagnosis")
+    secondary_raw = payload.get("secondary_diagnoses") or src.get("secondary_diagnoses") or []
+    if isinstance(secondary_raw, list):
+        secondary_diagnoses = tuple(str(x) for x in secondary_raw if x)
+    elif isinstance(secondary_raw, (tuple, set)):
+        secondary_diagnoses = tuple(str(x) for x in secondary_raw if x)
+    else:
+        secondary_diagnoses = (str(secondary_raw),) if secondary_raw else ()
+
+    order_code = payload.get("order_code") or payload.get("target_order_code") or src.get("order_code")
+    order_name = payload.get("order_name") or src.get("order_name")
+    unit_price = payload.get("unit_price")
+    points = payload.get("points")
+    total_qty = payload.get("total_qty")
+
+    # 若未直接提供單價／點數／總量，嘗試從 monthly_source.orders 中比對 target_order_code 取得
+    orders = src.get("orders") or []
+    if isinstance(orders, list) and order_code:
+        for ord_item in orders:
+            if isinstance(ord_item, dict) and ord_item.get("p4") == order_code:
+                if unit_price is None and ord_item.get("p11") not in (None, ""):
+                    unit_price = str(ord_item["p11"])
+                if points is None and ord_item.get("p12") not in (None, ""):
+                    points = str(ord_item["p12"])
+                if total_qty is None and ord_item.get("p10") not in (None, ""):
+                    total_qty = str(ord_item["p10"])
+                break
+
     return ReviewCaseView(
         case_id=case_id,
         stage=stage,
@@ -266,6 +393,21 @@ def build_review_case_view(
         cloud_text=str(payload.get("cloud_records") or "").strip() or None,
         attachments=tuple(attachments),
         support_state=review.get("support_state"),
+        case_seq=str(case_seq) if case_seq not in (None, "") else None,
+        patient_id=str(patient_id) if patient_id not in (None, "") else None,
+        patient_name=str(patient_name) if patient_name not in (None, "") else None,
+        birth_date=str(birth_date) if birth_date not in (None, "") else None,
+        total_points=str(total_points) if total_points not in (None, "") else None,
+        clinic=str(clinic) if clinic not in (None, "") else None,
+        doctor_code=str(doctor_code) if doctor_code not in (None, "") else None,
+        visit_date=str(visit_date) if visit_date not in (None, "") else None,
+        primary_diagnosis=str(primary_diagnosis) if primary_diagnosis not in (None, "") else None,
+        secondary_diagnoses=secondary_diagnoses,
+        order_code=str(order_code) if order_code not in (None, "") else None,
+        order_name=str(order_name) if order_name not in (None, "") else None,
+        unit_price=str(unit_price) if unit_price not in (None, "") else None,
+        points=str(points) if points not in (None, "") else None,
+        total_qty=str(total_qty) if total_qty not in (None, "") else None,
     )
 
 
@@ -440,8 +582,144 @@ _SECTION_BUILDERS = {
 
 
 def _case_body_html(view: ReviewCaseView) -> str:
-    """單一案件的區塊內容（依 SECTION_ORDER），不含外層文件殼。"""
-    return "".join(_SECTION_BUILDERS[name](view) for name in SECTION_ORDER)
+    """單一案件的區塊內容，若具備申報總檔/案件明細結構則比照當月申報預審報告渲染。"""
+    # 判斷是否具備月審/案件明細表現資訊（主診斷、次診斷、醫令點數單價或規則）
+    has_monthly_style = bool(view.order_code or view.primary_diagnosis or view.secondary_diagnoses)
+
+    if not has_monthly_style:
+        return "".join(_SECTION_BUILDERS[name](view) for name in SECTION_ORDER)
+
+    # 1. 警告警示（若有）
+    warning_part = _section_warning(view)
+
+    # 2. 次診斷
+    secondary_part = (
+        f'<p class="meta">次診斷：{escape("、".join(view.secondary_diagnoses))}</p>'
+        if view.secondary_diagnoses
+        else ""
+    )
+
+    # 3. 佐證庫附加檔案列表（比照 monthly_report_html.py 的 _case_vault_html）
+    vault_items = []
+    cat_icons = {
+        "images": "🖼️ 影像",
+        "audio": "🎙️ 錄音",
+        "reports": "📄 檢驗報告",
+        "records": "📝 病歷紀錄",
+    }
+    for cat, icon in cat_icons.items():
+        for filename in view.vault_files.get(cat, ()):
+            vault_items.append(f'<li class="vault-file-item">{icon} {escape(filename)}</li>')
+    for att in view.attachments:
+        vault_items.append(f'<li class="vault-file-item">📎 {escape(att)}</li>')
+
+    vault_part = ""
+    if vault_items:
+        key_label = escape(view.vault_key) if view.vault_key else "本案"
+        vault_part = (
+            f'<div class="vault-box">'
+            f'<div class="vault-title">📁 佐證庫附加檔案（{key_label}）</div>'
+            f'<ul class="vault-files">{"".join(vault_items)}</ul>'
+            f'</div>'
+        )
+
+    # 4. 醫令區塊
+    order_code_esc = escape(view.order_code or "")
+    order_name_esc = escape(view.order_name or "")
+    # 標籤（flag）
+    pill_label = "醫令點數 > 350"
+    try:
+        if view.points and float(view.points) <= 350:
+            pill_label = f"醫令點數: {int(float(view.points))}"
+    except (ValueError, TypeError):
+        pass
+    pill_html = f'<span class="pill">{escape(pill_label)}</span>'
+    title_line = f'<div class="item-title"><strong>{order_code_esc}</strong> {order_name_esc} {pill_html}</div>'
+
+    # 單價、點數、總量
+    amount_parts = []
+    if view.unit_price not in (None, ""):
+        amount_parts.append(f"單價: {view.unit_price} 元")
+    if view.points not in (None, ""):
+        amount_parts.append(f"點數: {view.points} 點")
+    if view.total_qty not in (None, ""):
+        amount_parts.append(f"總量: {view.total_qty}")
+    amount_line = (
+        f'<div class="amounts">{escape(" · ".join(amount_parts))}</div>'
+        if amount_parts
+        else ""
+    )
+
+    # 5. 給付規定 payment_text 與條文全文
+    payment_boxes = []
+    fulltext_blocks = []
+    for r in view.rules:
+        if r.is_payment_text or r.label in ("給付規定（payment_text）", "payment_text"):
+            payment_boxes.append(
+                f'<div class="rule-payment">'
+                f'<div class="rule-payment-title">📜 給付規定（payment_text）</div>'
+                f'<div class="rule-payment-text">{escape(r.text)}</div>'
+                f'</div>'
+            )
+        fulltext_blocks.append(
+            f'<div class="rule-src"><div class="src">{escape(r.label)}</div>'
+            f'<pre class="rule-text">{escape(r.text)}</pre></div>'
+        )
+
+    rules_html = ""
+    if payment_boxes or fulltext_blocks:
+        expander = (
+            '<details class="rule-fulltext"><summary>📜 檢視完整給付規定條文</summary>'
+            f'<div class="rule-body">{"".join(fulltext_blocks)}</div></details>'
+            if fulltext_blocks
+            else ""
+        )
+        rules_html = f'<div class="rule-blocks">{"".join(payment_boxes)}{expander}</div>'
+
+    # 6. 範例病歷（可複製、可修改）
+    c_id = escape(view.case_id or "")
+    c_order = order_code_esc
+    c_diag = escape(view.primary_diagnosis or "")
+    modal_btn = (
+        f'<button type="button" class="btn-soap-modal" '
+        f'onclick="openSoapModal(\'{c_order}\', \'{c_diag}\', \'{c_id}\')">'
+        f'🧾 範例病歷彈窗'
+        f'</button>'
+    )
+
+    soap_body = ""
+    if view.soap:
+        if "raw" in view.soap:
+            soap_body = view.soap["raw"]
+        else:
+            soap_body = "\n".join(
+                f"{k.upper()}: {view.soap.get(k, '')}"
+                for k in ("s", "o", "a", "p")
+                if view.soap.get(k)
+            )
+
+    if soap_body.strip():
+        soap_html = (
+            '<details class="soap-example" open><summary>📝 範例病歷（可複製、可修改）</summary>'
+            '<div class="soap-box">'
+            f'<textarea class="soap-text" spellcheck="false">{escape(soap_body)}</textarea>'
+            '<div class="soap-actions">'
+            '<button type="button" class="btn-copy" onclick="copySoap(this)">📋 複製</button>'
+            f'{modal_btn}'
+            '<span class="src">AI 範例，須醫師審核後方可使用；非病歷事實紀錄。</span></div>'
+            "</div></details>"
+        )
+    else:
+        soap_html = f'<div style="margin-top:6px;">{modal_btn}</div>'
+
+    # 7. 檢驗數據與雲端病歷（若有）
+    lab_part = _section_lab(view)
+    cloud_part = _section_cloud(view)
+
+    # 組合 item
+    item_html = f'<div class="item">{title_line}{amount_line}{rules_html}{soap_html}</div>'
+
+    return f"{warning_part}{secondary_part}{vault_part}{item_html}{lab_part}{cloud_part}"
 
 
 def _document(title: str, body: str, *, with_lightbox: bool) -> str:
@@ -484,15 +762,49 @@ def _state_label(view: ReviewCaseView) -> str:
     return view.support_state or "未審查"
 
 
+def _case_summary_line(view: ReviewCaseView) -> str:
+    """產出比照當月申報預審報告的標題字串：
+    流水號 27 · 身分證字號 L123828113 · 姓名 洪秉成 · 出生日期 0761224 · 醫療總費用: 17533 點 · 科別 03 · 醫師 L122448086 · 就醫日 1120708 · 主診斷 D234 (頭皮及頸部皮膚良性腫瘤)
+    """
+    diag_text = None
+    if view.primary_diagnosis:
+        c_title = get_icd_chinese_title(view.primary_diagnosis)
+        diag_text = f"{view.primary_diagnosis} ({c_title})" if c_title else view.primary_diagnosis
+
+    segments = [
+        ("流水號", view.case_seq),
+        ("身分證字號", view.patient_id),
+        ("姓名", view.patient_name),
+        ("出生日期", view.birth_date),
+        ("醫療總費用", f"{view.total_points} 點" if view.total_points else None),
+        ("科別", view.clinic),
+        ("醫師", view.doctor_code),
+        ("就醫日", view.visit_date),
+        ("主診斷", diag_text),
+    ]
+    parts = []
+    for label, val in segments:
+        if val:
+            parts.append(f"{label}: {val}" if label == "醫療總費用" else f"{label} {val}")
+    if not parts:
+        # 降級相容測試用簡化 header
+        patient = view.header.get("病患") or view.patient_name or ""
+        order = " ".join(p for p in (view.header.get("醫令", ""), view.header.get("醫令名稱", "")) if p)
+        return f"{patient} · {order}".strip(" ·")
+    return " · ".join(parts)
+
+
 def _case_item_html(view: ReviewCaseView) -> str:
+    state = _state_label(view)
+    header_line = _case_summary_line(view)
     patient = view.header.get("病患", "")
     order = " ".join(p for p in (view.header.get("醫令", ""), view.header.get("醫令名稱", "")) if p)
-    state = _state_label(view)
+    # 確保包含既有測試斷言需要的類別與資訊
     return (
         '<details class="case-item">'
         '<summary><span class="case-id">'
         f"{escape(view.case_id)}</span>"
-        f'<span class="case-meta">{escape(patient)} · {escape(order)}</span>'
+        f'<span class="case-meta case-head">{escape(header_line)}</span>'
         f'<span class="state state-{escape(state)}">{escape(state)}</span>'
         "</summary>"
         f'<div class="case-body">{_case_body_html(view)}</div>'
