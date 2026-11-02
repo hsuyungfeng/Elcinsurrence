@@ -564,3 +564,14 @@ class CaseStore:
         finally:
             conn.close()
         return {row["state"]: row["n"] for row in rows}
+
+    def delete_by_kind(self, kind: str) -> int:
+        """依 kind 批次刪除案件，回傳刪除筆數。"""
+        conn = self._connect()
+        try:
+            cur = conn.execute("DELETE FROM cases WHERE kind = ?", (kind,))
+            deleted = cur.rowcount
+            conn.commit()
+            return deleted
+        finally:
+            conn.close()

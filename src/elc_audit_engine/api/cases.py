@@ -32,7 +32,15 @@ def content_case_id(prefix: str, rec) -> str:
 
 
 def to_sampling_case(idx: int, rec) -> dict:
-    """SamplingCaseRecord → 前端列表契約 dict。"""
+    """SamplingCaseRecord → 前端列表契約 dict（醫令名稱優先自規則庫查詢）。"""
+    order_name = getattr(rec, "order_name", None)
+    if not order_name and rec.order_code:
+        try:
+            rule = get_rule(rec.order_code)
+            if rule and rule.found and rule.name:
+                order_name = rule.name
+        except Exception:
+            pass
     return {
         "id": content_case_id("SAMP", rec),
         "demo": False,
@@ -40,7 +48,7 @@ def to_sampling_case(idx: int, rec) -> dict:
         "record_no": rec.record_no,
         "patient_name": rec.patient_name,
         "order_code": rec.order_code,
-        "order_name": rec.order_name,
+        "order_name": order_name,
         "visit_date": rec.visit_date,
         "clinic": rec.clinic,
         "soap": rec.soap_text or "",

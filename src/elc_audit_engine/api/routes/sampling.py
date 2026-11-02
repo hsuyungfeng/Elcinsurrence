@@ -331,6 +331,18 @@ def _count_field(data: dict, key: str, default: int) -> int:
     return value
 
 
+@bp.route("/api/sampling/cases/clear", methods=["POST", "DELETE"])
+def clear_sampling_cases_endpoint():
+    """清空目前所有抽樣案件 (kind='sampling')。"""
+    store = case_store()
+    deleted = store.delete_by_kind("sampling")
+    return jsonify({
+        "status": "success",
+        "deleted_count": deleted,
+        "message": f"已成功刪除 {deleted} 筆抽樣案件",
+    })
+
+
 @bp.route("/api/sampling/sample-batch", methods=["POST"])
 def sample_monthly_batch_endpoint():
     """申報批次抽樣：20 隨機＋10 立意（前三最高點數醫令合計）入庫為 kind='sampling'。
