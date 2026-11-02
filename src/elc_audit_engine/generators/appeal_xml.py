@@ -10,8 +10,10 @@
 
 from __future__ import annotations
 
+import io
 import os
 import xml.etree.ElementTree as ET
+import zipfile
 
 from elc_audit_engine.generators._xmltext import xml_safe
 
@@ -125,8 +127,9 @@ class AppealBatchError(ValueError):
     """批次申復資料不合規（缺必要欄位、字數超限、費用年月不一致等）；整批拒絕，不產生殘缺檔。"""
 
 
-_REASON_FIELD_MAX = 1000  # 單欄上限（官方問答集 Q15：p8／p9 各 1000 字）
-_REASON_TOTAL_MAX = 2000  # 合計上限（Q15）
+# 門診申復格式說明（104 年）表 9：P8 申復理由一 X(2000)，說明「1000 個中文字」——
+# 上限以 Big5 位元組計（每個中文字 2 bytes）。特殊字元先轉全形（全形字在 Big5 同為 2 bytes）後再計算。
+_REASON_FIELD_MAX_BYTES = 2000
 _ATTACHMENT_FLAG = {True: "Y", False: "N"}  # p7：有附件 Y，無附件 N（規格兩值皆需填，不可省略）
 
 
@@ -146,17 +149,37 @@ def _p6_points(item: dict, label: str) -> int:
     return points
 
 
+def _big5_bytes(text: str) -> int:
+    """Big5 位元組數（無法編碼的字元以 1 byte 估算；真正的編碼錯誤由輸出時 fail-fast 攔截）。"""
+    return len(text.encode("big5", errors="replace"))
+
+
+def _split_by_big5_bytes(text: str, limit: int) -> tuple[str, str]:
+    """依字元邊界切分，使前段 Big5 位元組數不超過 limit；不切斷任何一個字元。"""
+    head_len = 0
+    for index, char in enumerate(text):
+        char_bytes = _big5_bytes(char)
+        if head_len + char_bytes > limit:
+            return text[:index], text[index:]
+        head_len += char_bytes
+    return text, ""
+
+
 def _reason_fields(item: dict, label: str) -> tuple[str, str]:
-    """p8／p9 申復理由切分：不申復者皆空；超過單欄上限的內容順延至 p9，合計超過 2000 字則拒絕。"""
+    """p8／p9 申復理由切分（Big5 位元組計）：不申復者皆空；p8 超過 2000 bytes 時，溢出段順延至 p9；
+    p9 仍超過 2000 bytes 則拒絕（整批不產生殘缺檔）。
+    """
     if not item.get("is_appealing", True):
         return "", ""
-    reason1 = str(item.get("reason1") or "")
-    reason2 = str(item.get("reason2") or "")
-    if len(reason1) > _REASON_FIELD_MAX:
-        reason2 = reason1[_REASON_FIELD_MAX:] + reason2
-        reason1 = reason1[:_REASON_FIELD_MAX]
-    if len(reason2) > _REASON_FIELD_MAX:
-        raise AppealBatchError(f"{label}：申復理由超過合計 {_REASON_TOTAL_MAX} 字上限（p8＋p9）")
+    reason1 = _to_fullwidth_specials(str(item.get("reason1") or ""))
+    reason2 = _to_fullwidth_specials(str(item.get("reason2") or ""))
+    if _big5_bytes(reason1) > _REASON_FIELD_MAX_BYTES:
+        reason1, overflow = _split_by_big5_bytes(reason1, _REASON_FIELD_MAX_BYTES)
+        reason2 = overflow + reason2
+    if _big5_bytes(reason2) > _REASON_FIELD_MAX_BYTES:
+        raise AppealBatchError(
+            f"{label}：申復理由超過上限（p8、p9 各 {_REASON_FIELD_MAX_BYTES} bytes，Big5 約 1000 中文字）",
+        )
     return reason1, reason2
 
 
@@ -228,6 +251,21 @@ def appeal_root_to_big5_bytes(root: ET.Element) -> bytes:
             f"XML 內容含有 Big5 無法編碼之字元 '{bad_char}' (U+{ord(bad_char):04X})，無法導出",
         ) from exc
     return b'<?xml version="1.0" encoding="Big5"?>\r\n' + encoded + b"\r\n"
+
+
+TOTFA_XML_NAME = "TOTFA.xml"
+TOTFA_ZIP_NAME = "TOTFA.zip"
+
+
+def wrap_totfa_zip(xml_bytes: bytes) -> bytes:
+    """門診申復上傳包（104 年格式說明 §五）：主檔名 TOTFA，zip 內只能含一個 TOTFA.xml。
+
+    其他檔案一律不得放入，否則整份退件。
+    """
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(TOTFA_XML_NAME, xml_bytes)
+    return buffer.getvalue()
 
 
 def draft_json_to_appeal_xml_fields(appeal_json: dict) -> tuple[dict, list[dict]]:

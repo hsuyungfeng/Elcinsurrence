@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import io
 import re
 import xml.etree.ElementTree as ET
+import zipfile
 
 import pytest
 
@@ -12,6 +14,7 @@ from elc_audit_engine.generators.appeal_xml import (
     AppealXmlEncodingError,
     appeal_root_to_big5_bytes,
     build_batch_appeal_xml,
+    wrap_totfa_zip,
 )
 
 KEY = {"X-API-Key": "valid-key-123"}
@@ -113,6 +116,35 @@ def test_combined_reason_over_limit_is_rejected():
         build_batch_appeal_xml([_case("1", [_item(reason1="甲" * 1000, reason2="乙" * 1001)])])
 
 
+def test_limit_is_counted_in_big5_bytes_not_characters():
+    # 1000 個中文字 = 2000 bytes：剛好不溢出
+    root = build_batch_appeal_xml([_case("1", [_item(reason1="甲" * 1000, reason2="")])])
+    pdata = root.find("ddata/dbody/pdata")
+    assert pdata.find("p8").text == "甲" * 1000
+    assert pdata.find("p9") is None
+    # 1001 個中文字 = 2002 bytes：溢出 2 bytes，末一字順延至 p9
+    root = build_batch_appeal_xml([_case("1", [_item(reason1="甲" * 1001, reason2="")])])
+    pdata = root.find("ddata/dbody/pdata")
+    assert pdata.find("p8").text == "甲" * 1000
+    assert pdata.find("p9").text == "甲"
+
+
+def test_fullwidth_conversion_counts_toward_byte_limit():
+    # 半形 "<" 為 1 byte，轉全形「＜」為 2 bytes：1000 個 "<" 轉換後剛好 2000 bytes
+    root = build_batch_appeal_xml([_case("1", [_item(reason1="<" * 1000, reason2="")])])
+    pdata = root.find("ddata/dbody/pdata")
+    assert pdata.find("p8").text == "＜" * 1000
+    assert pdata.find("p9") is None
+    root = build_batch_appeal_xml([_case("1", [_item(reason1="<" * 1001, reason2="")])])
+    assert root.find("ddata/dbody/pdata/p9").text == "＜"
+
+
+def test_wrap_totfa_zip_contains_exactly_one_totfa_xml():
+    with zipfile.ZipFile(io.BytesIO(wrap_totfa_zip(b"<outpatient/>"))) as archive:
+        assert archive.namelist() == ["TOTFA.xml"]
+        assert archive.read("TOTFA.xml") == b"<outpatient/>"
+
+
 # ── 全形特殊字元 ────────────────────────────────────────────
 
 
@@ -199,8 +231,11 @@ def test_export_endpoint_returns_big5_attachment(client, api):
     )
     res = client.get("/api/appeal/export-batch-xml", headers=KEY)
     assert res.status_code == 200
-    assert "attachment" in res.headers["Content-Disposition"]
-    root = ET.fromstring(re.sub(r"^<\?xml[^>]*\?>", "", res.data.decode("big5")).strip())
+    assert res.headers["Content-Disposition"] == 'attachment; filename="TOTFA.zip"'
+    with zipfile.ZipFile(io.BytesIO(res.data)) as archive:
+        assert archive.namelist() == ["TOTFA.xml"]
+        inner = archive.read("TOTFA.xml")
+    root = ET.fromstring(re.sub(r"^<\?xml[^>]*\?>", "", inner.decode("big5")).strip())
     assert root.find("tdata/t38").text == "1"
     assert root.find("tdata/t39").text == "120"
     assert root.find("ddata/dbody/pdata/p7").text == "Y"

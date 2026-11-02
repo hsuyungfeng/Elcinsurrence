@@ -15,10 +15,12 @@ from elc_audit_engine.appeal_linkage import (
     link_stage2_to_appeal,
 )
 from elc_audit_engine.generators.appeal_xml import (
+    TOTFA_ZIP_NAME,
     AppealBatchError,
     AppealXmlEncodingError,
     appeal_root_to_big5_bytes,
     build_batch_appeal_xml,
+    wrap_totfa_zip,
 )
 from elc_audit_engine.case_store import CaseNotFoundError, IllegalTransitionError
 from elc_audit_engine.comparator.soap_advice import generate_soap_advice
@@ -225,13 +227,14 @@ def export_appeal_batch_xml():
         raise ApiError("尚無申復案件可導出", status=404)
     try:
         root = build_batch_appeal_xml([appeal_xml_case(r.payload or {}) for r in records])
-        body = appeal_root_to_big5_bytes(root)
+        xml_bytes = appeal_root_to_big5_bytes(root)
     except (AppealBatchError, AppealXmlEncodingError) as exc:
         raise ApiError(str(exc), status=422)
+    # 門診申復上傳包：TOTFA.zip 內僅含 TOTFA.xml（格式說明 §五）
     return Response(
-        body,
-        content_type="application/xml",
-        headers={"Content-Disposition": 'attachment; filename="appeal_batch.xml"'},
+        wrap_totfa_zip(xml_bytes),
+        content_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{TOTFA_ZIP_NAME}"'},
     )
 
 
