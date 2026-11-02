@@ -556,6 +556,7 @@
             <button class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669);" onclick="openMonthlyHtmlReport()">🔍 開啟視覺化審核卡片 (HTML)</button>
             <button class="btn-action" style="background: linear-gradient(135deg, #6366f1, #4f46e5);" onclick="mailMonthlyReport()">📧 郵寄報告至信箱</button>
             <button class="btn-action" style="background: linear-gradient(135deg, #0ea5e9, #0284c7);" onclick="generateExampleRecord()" title="以本機 LLM 依規則生成英文範例病歷（需醫師審核）">🧾 產生範例病歷</button>
+            <button class="btn-action" style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; color: #fca5a5; font-size: 12px;" onclick="clearMonthlyBatch()" title="清空目前申報批次案件">🗑️ 清空申報批次</button>
             <div id="exampleDialog" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:99999; max-width: 680px; width: 92%; background: #1e293b; color: #f8fafc; border: 1px solid rgba(148,163,184,0.4); border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); padding: 16px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
                 <div style="font-weight: 700; font-size: 15px; color: #38bdf8;">🧾 範例病歷（AI 生成，須醫師審核後才可使用）</div>
@@ -565,6 +566,7 @@
                 <input type="text" id="diagInput" placeholder="主診斷 (例: S90221A)" style="flex:1; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc; font-size:13px;" value="S90221A">
                 <input type="text" id="orderInput" placeholder="醫令代碼 (例: 64140C)" style="flex:1; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc; font-size:13px;" value="64140C">
                 <button class="btn-action" onclick="fetchCustomSoapTemplate()" style="background:#0284c7; white-space:nowrap;">🔄 重新生成</button>
+                <button class="btn-action" onclick="clearExampleSoapInputs()" style="background:rgba(239,68,68,0.2); border:1px solid #ef4444; color:#fca5a5; white-space:nowrap;">🗑️ 清空內容</button>
               </div>
               <div style="position:relative;">
                 <textarea id="exampleRecordOut" style="width:100%; height:260px; font-family:monospace; font-size:13px; line-height:1.6; background:#0f172a; padding:10px; border-radius:6px; border:1px solid #475569; color:#f8fafc; resize:vertical; box-sizing:border-box;"></textarea>
@@ -760,6 +762,37 @@
       } catch (err) {
         out.value = '無法連線至服務：' + err;
       }
+    }
+
+    function clearExampleSoapInputs() {
+      document.getElementById('diagInput').value = '';
+      document.getElementById('orderInput').value = '';
+      document.getElementById('exampleRecordOut').value = '';
+      document.getElementById('exampleRecordNote').textContent = '';
+      document.getElementById('saveDbStatus').textContent = '';
+    }
+
+    async function clearMonthlyBatch() {
+      if (!currentMonthlyBatchId) {
+        alert('目前未選取任何申報批次');
+        return;
+      }
+      if (!confirm(`確定要清空申報批次 ${currentMonthlyBatchId} 嗎？此操作將自資料庫中刪除該批次的所有案件。`)) {
+        return;
+      }
+      const res = await authFetch(`/api/monthly/batch/${encodeURIComponent(currentMonthlyBatchId)}/clear`, {
+        method: 'POST'
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert('清空批次失敗：' + (data.message || res.status));
+        return;
+      }
+      alert(data.message || '批次案件已成功清空');
+      currentMonthlyBatchId = null;
+      document.getElementById('mBatchTitle').innerText = '尚未載入申報批次';
+      document.getElementById('monthlyReportIframe').srcdoc = '';
+      await loadCaseData();
     }
 
     // 監聽 iframe postMessage（當使用者從內嵌報告點擊彈窗按鈕時）

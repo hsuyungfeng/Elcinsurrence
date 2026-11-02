@@ -575,3 +575,17 @@ class CaseStore:
             return deleted
         finally:
             conn.close()
+
+    def delete_by_batch(self, batch: str) -> int:
+        """依申報批次刪除當月申報案件，回傳刪除筆數。"""
+        conn = self._connect()
+        try:
+            cur = conn.execute(
+                "DELETE FROM cases WHERE kind = 'monthly' AND json_extract(payload_json, '$.batch') = ?",
+                (batch,),
+            )
+            deleted = cur.rowcount
+            conn.commit()
+            return deleted
+        finally:
+            conn.close()

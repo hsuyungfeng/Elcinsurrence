@@ -297,3 +297,30 @@ def monthly_batch_pregen(batch_id: str):
     )
     counts = pregen_batch(store, report_view(audit), limit=limit)
     return jsonify({"status": "success", "batch": batch_id, **counts})
+
+
+@bp.route("/api/monthly/batches/clear", methods=["POST", "DELETE"])
+def clear_all_monthly_batches():
+    """清空所有當月申報批次案件 (kind='monthly')。"""
+    store = case_store()
+    deleted = store.delete_by_kind("monthly")
+    return jsonify({
+        "status": "success",
+        "deleted_count": deleted,
+        "message": f"已成功清空 {deleted} 筆當月申報案件",
+    })
+
+
+@bp.route("/api/monthly/batch/<batch_id>/clear", methods=["POST", "DELETE"])
+def clear_single_monthly_batch(batch_id: str):
+    """清空指定申報批次的案件。"""
+    if not _BATCH_RE.match(batch_id):
+        raise ApiError("batch_id 格式應為 MONTHLY-YYYYMM")
+    store = case_store()
+    deleted = store.delete_by_batch(batch_id)
+    return jsonify({
+        "status": "success",
+        "batch": batch_id,
+        "deleted_count": deleted,
+        "message": f"已成功清空批次 {batch_id}（共 {deleted} 筆案件）",
+    })
