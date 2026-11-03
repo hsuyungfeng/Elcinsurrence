@@ -87,6 +87,7 @@ def report_bridge_job_status(job_id: str):
             nhi_id=data.get("sNHI_ID") or None,
             nhi_status=data.get("NHI_Query") or data.get("nhi_status") or None,
             actor=caller_id(),
+            expected_status=data.get("expected_status") or None,
         )
     except BridgeConflictError as exc:
         raise ApiError(str(exc), status=409)

@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -75,6 +76,10 @@ class MissingFailureReasonError(CaseStoreError):
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+# cas_update_payload 的期望鍵會嵌入 JSON 路徑，僅允許小寫英文與底線。
+_JSON_KEY_RE = re.compile(r"[a-z_]+")
 
 
 def _template_key(order_code: str, primary_diagnosis: str | None) -> tuple[str, str]:
@@ -522,6 +527,73 @@ class CaseStore:
         finally:
             conn.close()
         return self.get(case_id)
+
+    def cas_update_payload(self, case_id: str, payload: dict, *, expect: dict) -> bool:
+        """條件式覆寫（Compare-And-Swap）：僅當 payload 中每個 `expect` 鍵的目前值相等時才寫入。
+
+        比對以 `IS` 進行，因此 None 可與 SQL NULL 比對。整個比對與寫入在 BEGIN IMMEDIATE
+        寫鎖內完成，併發的兩個寫入者只有一個會成功。回傳 True 表示寫入成功，False 表示
+        期望值不符（呼叫端應視為衝突）。案件不存在時亦回傳 False。
+
+        `expect` 的鍵只允許小寫英文與底線（會直接嵌入 JSON 路徑，故需白名單式驗證）。
+        """
+        if not expect:
+            raise ValueError("cas_update_payload 需要至少一個期望條件")
+        where_parts: list[str] = []
+        params: list = []
+        for key, value in expect.items():
+            if not _JSON_KEY_RE.fullmatch(key):
+                raise ValueError(f"非法的 payload 鍵：{key!r}")
+            where_parts.append(f"json_extract(payload_json, '$.{key}') IS ?")
+            params.append(value)
+        sql = (
+            "UPDATE cases SET payload_json = ?, updated_at = ? WHERE case_id = ? AND "
+            + " AND ".join(where_parts)
+        )
+        conn = self._connect()
+        try:
+            with conn:
+                conn.execute("BEGIN IMMEDIATE")
+                cursor = conn.execute(
+                    sql,
+                    (json.dumps(payload, ensure_ascii=False), _now_iso(), case_id, *params),
+                )
+                return cursor.rowcount == 1
+        finally:
+            conn.close()
+
+    def list_bridge_jobs(
+        self,
+        *,
+        status: str | None = None,
+        s_type_code: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[CaseRecord, ...]:
+        """地端橋接任務（kind='bridge'）的 SQL 層篩選與分頁，依 `created_at`、`case_id` 升冪。
+
+        篩選直接在資料庫以 `json_extract(payload_json, '$.status')` 等進行，不在 Python 端掃描，
+        因此即使歷史紀錄遠超過 limit，較新的符合條件任務仍會被查出。
+        """
+        conditions = ["kind = 'bridge'"]
+        params: list = []
+        if status is not None:
+            conditions.append("json_extract(payload_json, '$.status') = ?")
+            params.append(status)
+        if s_type_code is not None:
+            conditions.append("json_extract(payload_json, '$.s_type_code') = ?")
+            params.append(s_type_code)
+        params.extend([limit, offset])
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM cases WHERE " + " AND ".join(conditions)
+                + " ORDER BY created_at ASC, case_id ASC LIMIT ? OFFSET ?",
+                params,
+            ).fetchall()
+        finally:
+            conn.close()
+        return tuple(_row_to_case_record(row) for row in rows)
 
     def list_batches(self) -> tuple[tuple[str, int], ...]:
         """所有當月申報批次及其案件數，依批次名升冪（`(batch, count)`）。"""

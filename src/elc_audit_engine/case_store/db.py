@@ -73,6 +73,12 @@ SCHEMA_INDEX_CASES_STATE_KIND = (
 SCHEMA_INDEX_TRANSITIONS_CASE = (
     "CREATE INDEX IF NOT EXISTS idx_transitions_case ON case_transitions (case_id, id)"
 )
+# 地端橋接任務查詢（kind='bridge'，依 payload.status 篩選後按 created_at 排序）。
+# 取代舊的「讀 1000 筆再於 Python 過濾」寫法（P1-1），避免歷史紀錄超過上限時靜默丟件。
+SCHEMA_INDEX_CASES_BRIDGE_STATUS = (
+    "CREATE INDEX IF NOT EXISTS idx_cases_bridge_status "
+    "ON cases (kind, json_extract(payload_json, '$.status'), created_at)"
+)
 # 當月申報批次查詢（kind='monthly'，payload.batch 如 MONTHLY-202307）。
 # 表達式索引不需遷移既有資料表；IF NOT EXISTS 對舊 DB 冪等。
 SCHEMA_INDEX_CASES_BATCH = (
@@ -129,6 +135,7 @@ def init_schema(db_path: str) -> None:
         conn.execute(SCHEMA_INDEX_CASES_STATE_KIND)
         conn.execute(SCHEMA_INDEX_TRANSITIONS_CASE)
         conn.execute(SCHEMA_INDEX_CASES_BATCH)
+        conn.execute(SCHEMA_INDEX_CASES_BRIDGE_STATUS)
         conn.execute(SCHEMA_SOAP_TEMPLATES)
         conn.commit()
     finally:
