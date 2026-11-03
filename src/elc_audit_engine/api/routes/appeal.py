@@ -317,6 +317,57 @@ def appeal_batch_report():
     return Response(html, content_type="text/html; charset=utf-8")
 
 
+@bp.route("/api/appeal/cases/<case_id>/export-xml", methods=["GET"])
+def export_single_appeal_xml(case_id: str):
+    """單案電子申復 XML 導出（Big5 編碼，單案 TOTFA 格式）。"""
+    store = case_store()
+    try:
+        record = store.get(case_id)
+    except CaseNotFoundError:
+        raise ApiError(f"找不到案件：{case_id}", status=404)
+    if record.kind != "appeal":
+        raise ApiError(f"案件 {case_id} 並非申復案件 (kind={record.kind})", status=400)
+
+    payload = dict(record.payload or {})
+    case_dict = appeal_xml_case(payload)
+    try:
+        root = build_batch_appeal_xml([case_dict])
+        xml_bytes = appeal_root_to_big5_bytes(root)
+    except (AppealBatchError, AppealXmlEncodingError) as exc:
+        raise ApiError(str(exc), status=422)
+
+    safe_id = re.sub(r"[^A-Za-z0-9_-]", "_", case_id)
+    return Response(
+        xml_bytes,
+        content_type="application/xml; charset=big5",
+        headers={"Content-Disposition": f'attachment; filename="appeal_{safe_id}.xml"'},
+    )
+
+
+@bp.route("/api/appeal/cases/<case_id>/export-json", methods=["GET"])
+def export_single_appeal_json(case_id: str):
+    """單案申復 JSON 導出（render_appeal_json 契約結構）。"""
+    store = case_store()
+    try:
+        record = store.get(case_id)
+    except CaseNotFoundError:
+        raise ApiError(f"找不到案件：{case_id}", status=404)
+    if record.kind != "appeal":
+        raise ApiError(f"案件 {case_id} 並非申復案件 (kind={record.kind})", status=400)
+
+    # 優先從 case_artifacts 獲取最近通過驗證的 appeal.json，若無則回傳 payload
+    artifacts = store.get_artifacts(case_id)
+    appeal_json_str = artifacts.get("appeal.json")
+    if appeal_json_str:
+        try:
+            data = json.loads(appeal_json_str)
+            return jsonify(data)
+        except Exception:
+            pass
+
+    return jsonify(dict(record.payload or {}))
+
+
 @bp.route("/api/appeal/export-batch-xml", methods=["GET"])
 def export_appeal_batch_xml():
     """全批次電子申復 XML（Phase 21-02）：所有申復案件聚合為單一 Big5 文件（t38/t39 加總）。

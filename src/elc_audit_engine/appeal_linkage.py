@@ -97,10 +97,14 @@ def _appeal_payload(record) -> dict:
     rule_text, rule_location = _rule_for(order_code)
 
     vault_files = _vault_file_names(src)
+    # 連動預設以核減金額作為申復訴求點數，使新連動案件符合申復 XML 導出規範（p6 點數受理）
+    default_deduct = src.get("deduct_amount") or 100
+    claimed_points = src.get("claimed_points") if src.get("claimed_points") is not None else default_deduct
+
     draft = build_appeal_draft(
-        DeductionRecord(case_seq=src.get("case_seq") or None, order_code=order_code or None),
+        DeductionRecord(case_seq=src.get("case_seq") or None, order_code=order_code or None, non_reimbursed_amount=default_deduct),
         is_appealing=True,
-        claimed_points=None,
+        claimed_points=claimed_points,
         timeline=None,
         rule_text=rule_text,
         rule_location=rule_location,
@@ -126,7 +130,9 @@ def _appeal_payload(record) -> dict:
         "visit_date": src.get("visit_date"),
         "order_code": order_code,
         "order_name": order_name,
-        "deduct_amount": src.get("deduct_amount") or 100,
+        "deduct_amount": default_deduct,
+        "claimed_points": claimed_points,
+        "p6_points": claimed_points,
         "deduction_reason": src.get("deduction_reason") or "抽審未附完整佐證核減",
         "soap": src.get("soap") or "",
         "lab_results": labs,
