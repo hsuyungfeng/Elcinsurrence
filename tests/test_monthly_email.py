@@ -229,10 +229,10 @@ def client(app):
         yield c
 
 
-def test_email_endpoint_allows_access_without_api_key_for_integration(client):
-    """月申報郵寄端點免強制 X-API-Key（與 monthly 其他端點一致，方便前端直連）。"""
+def test_email_endpoint_requires_api_key(client):
+    """月申報郵寄端點含全月病歷報告，依資安 P0-2 原則必須帶 X-API-Key 認證。"""
     resp = client.post(f"/api/monthly/batch/{BATCH}/email", json={"email": RECIPIENT})
-    assert resp.status_code == 200
+    assert resp.status_code == 401
 
 
 def test_email_dev_mode_writes_eml_and_warns(client, app, monkeypatch):

@@ -42,7 +42,6 @@ AUTH_EXEMPT_ENDPOINTS = AUDIT_EXEMPT_ENDPOINTS | frozenset({
     "monthly.upload_monthly",
     "monthly.list_monthly_batches",
     "monthly.monthly_batch_report",
-    "monthly.email_monthly_report",
 })
 
 #: P1-5 縱深防禦：即使前端某處遺漏轉義，CSP 也擋掉外部腳本與資料外送。

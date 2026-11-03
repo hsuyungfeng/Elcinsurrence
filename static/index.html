@@ -1643,7 +1643,12 @@
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok) {
-              c.state = 'reviewed';
+              // 若 support_state 為待判定或系統異常，標記為待判定/failed而非 reviewed
+              if (data.support_state === '待判定') {
+                c.state = 'failed';
+              } else {
+                c.state = 'reviewed';
+              }
               c.review = {
                 support_state: data.support_state,
                 warnings: data.warnings,

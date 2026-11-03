@@ -136,12 +136,13 @@ def _ddata_for_source(source: dict) -> str:
 def _outpatient_document(batch: str, ddata_parts: list[str]) -> bytes:
     """組裝完整文件（tdata＋多個 ddata）並以 Big5 編碼；無法表示的字元拋錯，不靜默替換。"""
     year_month = _roc_year_month(batch)
+    case_count = len(ddata_parts)
     tdata = (
         "<tdata>"
         + (_field("t3", year_month) if year_month else "")
-        + _field("t9", 1)
-        + _field("t17", 1)
-        + _field("t37", 1)
+        + _field("t9", case_count)
+        + _field("t17", case_count)
+        + _field("t37", case_count)
         + "</tdata>"
     )
     body = f"<outpatient>{tdata}{''.join(ddata_parts)}</outpatient>"
