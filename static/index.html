@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Elcinsurrence - 健保雙軌自動化審核與申復工作台</title>
   <!-- P1-5：移除 Google Fonts 外鏈——本服務接觸病歷資料，外鏈字型會把
        使用者 IP 與瀏覽行為送到第三方，與 D2「個資不出本機」相衝；且離線／
@@ -228,13 +231,50 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-title" id="sidebarListTitle">事前預審抽樣清單</div>
-        <button style="background: rgba(6,182,212,0.15); border: 1px solid var(--accent-cyan); color: #38bdf8; font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer;" onclick="document.getElementById('importFile').click()" title="匯入 TOTFA.zip／CSV／PDF／影像">📂 匯入 ZIP/CSV/PDF</button>
+        <button style="background: rgba(6,182,212,0.15); border: 1px solid var(--accent-cyan); color: #38bdf8; font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer;" onclick="document.getElementById('importFile').click()" title="匯入 TOTFA.zip／CSV／PDF／影像">📂 匯入</button>
+        <button style="background: rgba(239,68,68,0.15); border: 1px solid #ef4444; color: #fca5a5; font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer;" onclick="clearCacheAndReload()" title="清除本機快取與金鑰並強制重整頁面">🧹 清快取</button>
         <input type="file" id="importFile" accept=".csv,.pdf,.jpg,.jpeg,.png,.tif,.tiff,.bmp,.webp,.zip" style="display:none;" onchange="importCases(this.files[0])">
       </div>
+      <!-- 院所機構檔案狀態與設定（User Requirement: web use and save into clinit file） -->
+      <div style="padding: 6px 12px; background: rgba(15,23,42,0.4); border-bottom: 1px solid rgba(148,163,184,0.15); font-size: 11px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+          <span style="color: #38bdf8; font-weight: 600;">🏥 機構：<span id="displayFacilityCode">載入中...</span></span>
+          <button onclick="toggleFacilityModal(true)" style="background: none; border: none; color: #94a3b8; cursor: pointer; text-decoration: underline; font-size: 11px;" title="查看與編輯院所檔案 (facility.json)">✏️ 院所設定</button>
+        </div>
+        <div style="color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="displayFacilityName"></div>
+      </div>
       <div style="padding: 6px 12px; display: flex; gap: 6px; align-items: center;">
-        <input type="password" id="apiKeyInput" placeholder="API Key（讀取案件清單必填）" autocomplete="off"
+        <input type="password" id="apiKeyInput" placeholder="機構代碼 / API Key（預設使用機構代碼）" autocomplete="off"
           style="flex: 1; min-width: 0; font-size: 11px; padding: 4px 6px; background: rgba(15,23,42,0.6); color: inherit; border: 1px solid rgba(148,163,184,0.4); border-radius: 4px;"
           onchange="saveApiKey(this.value)">
+      </div>
+      <!-- 院所檔案設定彈窗 -->
+      <div id="facilityModal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:99999; max-width: 480px; width: 90%; background: #1e293b; color: #f8fafc; border: 1px solid rgba(148,163,184,0.4); border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); padding: 18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; border-bottom: 1px solid #334155; padding-bottom: 8px;">
+          <div style="font-weight: 700; font-size: 15px; color: #38bdf8;">🏥 院所檔案設定 (config/facility.json)</div>
+          <button type="button" class="btn-action" style="padding: 2px 8px; font-size: 12px; background: transparent; border: 1px solid var(--border);" onclick="toggleFacilityModal(false)">✕ 關閉</button>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:10px; font-size:13px;">
+          <div>
+            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">醫事機構代碼 (code / 亦為授權 KEY)：</label>
+            <input type="text" id="facCodeInput" placeholder="例: 01015C 或 3503250461" style="width:100%; box-sizing:border-box; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc;">
+          </div>
+          <div>
+            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">醫療院所名稱 (name)：</label>
+            <input type="text" id="facNameInput" placeholder="例: 示例診所" style="width:100%; box-sizing:border-box; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc;">
+          </div>
+          <div>
+            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">院所地址 (address)：</label>
+            <input type="text" id="facAddressInput" placeholder="例: 台北市..." style="width:100%; box-sizing:border-box; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc;">
+          </div>
+          <div>
+            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">負責醫師姓名 (physician_name)：</label>
+            <input type="text" id="facPhysicianInput" placeholder="例: 醫師姓名" style="width:100%; box-sizing:border-box; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc;">
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:6px;">
+            <button class="btn-action" style="background:#10b981; color:#fff;" onclick="saveFacilityFromWeb()">💾 儲存至院所檔案</button>
+          </div>
+        </div>
       </div>
       <!-- 規則庫管理（每月規則更新）：上傳來源 CSV 到 data/rules/ 並同步到 rules.sqlite3 -->
       <details id="rulesPanel" style="margin: 6px 12px; font-size: 12px;">
@@ -557,7 +597,6 @@
             <input type="file" id="monthlyFileInput" accept=".zip" style="display:none;" onchange="uploadMonthlyZip(this.files[0])">
             <button class="btn-action" onclick="document.getElementById('monthlyFileInput').click()">📦 上傳 TOTFA.zip 總檔</button>
             <button class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669);" onclick="openMonthlyHtmlReport()">🔍 開啟視覺化審核卡片 (HTML)</button>
-            <button class="btn-action" style="background: linear-gradient(135deg, #6366f1, #4f46e5);" onclick="mailMonthlyReport()">📧 郵寄報告至信箱</button>
             <button class="btn-action" style="background: linear-gradient(135deg, #0ea5e9, #0284c7);" onclick="generateExampleRecord()" title="以本機 LLM 依規則生成英文範例病歷（需醫師審核）">🧾 產生範例病歷</button>
             <button class="btn-action" style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; color: #fca5a5; font-size: 12px;" onclick="clearMonthlyBatch()" title="清空目前申報批次案件">🗑️ 清空申報批次</button>
             <div id="exampleDialog" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:99999; max-width: 680px; width: 92%; background: #1e293b; color: #f8fafc; border: 1px solid rgba(148,163,184,0.4); border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); padding: 16px;">
@@ -584,7 +623,6 @@
                 </div>
               </div>
             </div>
-            <span id="mailStatus" style="font-size: 12px; color: var(--text-muted);"></span>
           </div>
         </div>
 
@@ -610,9 +648,117 @@
     let currentMonthlyBatchId = null;
     let currentSelectedCase = null;
 
+    let currentFacility = { code: '', name: '', address: '', physician_name: '' };
+
     function getApiKey() {
       const input = document.getElementById('apiKeyInput');
-      return (input && input.value) ? input.value.trim() : (localStorage.getItem('elc_api_key') || 'dev_api_key_for_local_development_1234567890abcdef');
+      if (input && input.value && input.value.trim()) {
+        return input.value.trim();
+      }
+      const saved = localStorage.getItem('elc_api_key');
+      if (saved && saved.trim() && saved !== 'dev_api_key_for_local_development_1234567890abcdef') {
+        return saved.trim();
+      }
+      return currentFacility.code || '';
+    }
+
+    async function loadFacilityConfig() {
+      try {
+        const res = await fetch('/api/facility');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.facility) {
+            currentFacility = data.facility;
+            updateFacilityUI(currentFacility);
+            const savedKey = localStorage.getItem('elc_api_key');
+            if (!savedKey || savedKey === 'dev_api_key_for_local_development_1234567890abcdef') {
+              if (currentFacility.code) {
+                localStorage.setItem('elc_api_key', currentFacility.code);
+                const ki = document.getElementById('apiKeyInput');
+                if (ki) ki.value = currentFacility.code;
+              } else {
+                localStorage.removeItem('elc_api_key');
+              }
+            } else {
+              const ki = document.getElementById('apiKeyInput');
+              if (ki) ki.value = savedKey;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('載入院所檔案失敗：', e);
+      }
+    }
+
+    function updateFacilityUI(fac) {
+      if (!fac) return;
+      const codeSpan = document.getElementById('displayFacilityCode');
+      const nameSpan = document.getElementById('displayFacilityName');
+      if (codeSpan) codeSpan.textContent = fac.code || '未設定';
+      if (nameSpan) nameSpan.textContent = fac.name || '';
+      const cIn = document.getElementById('facCodeInput');
+      const nIn = document.getElementById('facNameInput');
+      const aIn = document.getElementById('facAddressInput');
+      const pIn = document.getElementById('facPhysicianInput');
+      if (cIn) cIn.value = fac.code || '';
+      if (nIn) nIn.value = fac.name || '';
+      if (aIn) aIn.value = fac.address || '';
+      if (pIn) pIn.value = fac.physician_name || '';
+    }
+
+    function toggleFacilityModal(show) {
+      const m = document.getElementById('facilityModal');
+      if (m) m.style.display = show ? 'block' : 'none';
+      if (show) updateFacilityUI(currentFacility);
+    }
+
+    async function saveFacilityFromWeb() {
+      const code = (document.getElementById('facCodeInput').value || '').trim();
+      const name = (document.getElementById('facNameInput').value || '').trim();
+      const address = (document.getElementById('facAddressInput').value || '').trim();
+      const physician_name = (document.getElementById('facPhysicianInput').value || '').trim();
+
+      if (!code) {
+        alert('請輸入醫事服務機構代碼！');
+        return;
+      }
+      try {
+        const res = await authFetch('/api/facility', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, name: name || ('醫療院所 (' + code + ')'), address, physician_name }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert('儲存失敗：' + (data.message || res.status));
+          return;
+        }
+        currentFacility = data.facility;
+        updateFacilityUI(currentFacility);
+        localStorage.setItem('elc_api_key', currentFacility.code);
+        const ki = document.getElementById('apiKeyInput');
+        if (ki) ki.value = currentFacility.code;
+        toggleFacilityModal(false);
+        alert('已成功存入院所檔案 (config/facility.json) 並設定為存取 KEY！');
+        await loadCaseData();
+      } catch (err) {
+        alert('儲存失敗：' + err.message);
+      }
+    }
+
+    async function clearCacheAndReload() {
+      if (!confirm('確定要清除瀏覽器本機快取與金鑰、並重新載入頁面嗎？')) return;
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+        if (window.caches) {
+          const names = await caches.keys();
+          await Promise.all(names.map(n => caches.delete(n)));
+        }
+      } catch (e) {
+        console.warn('Clear cache error:', e);
+      }
+      window.location.href = window.location.pathname + '?_t=' + Date.now();
     }
 
     async function authFetch(url, options = {}) {
@@ -665,38 +811,6 @@
         );
       } catch (err) {
         setRulesStatus('同步失敗：無法連線至服務');
-      }
-    }
-
-    // 郵寄報告：收件人以輸入框取得；狀態一律以 textContent 寫入
-    function setMailStatus(text) {
-      document.getElementById('mailStatus').textContent = text;
-    }
-
-    async function mailMonthlyReport() {
-      if (!currentMonthlyBatchId) {
-        setMailStatus('請先選擇批次');
-        return;
-      }
-      const email = (window.prompt('收件人 Email（報告含身分證字號、姓名與出生日期，請確認收件人可接收個資）') || '').trim();
-      if (!email) return;
-      setMailStatus('寄送中 …');
-      try {
-        const resp = await authFetch(`/api/monthly/batch/${encodeURIComponent(currentMonthlyBatchId)}/email`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email }),
-        });
-        const body = await resp.json();
-        if (!resp.ok) {
-          setMailStatus(`寄送失敗：${body.message}`);
-        } else if (body.status === 'sent') {
-          setMailStatus('已寄出');
-        } else {
-          setMailStatus(`${body.warning}（${body.saved_as}）`);
-        }
-      } catch (err) {
-        setMailStatus('寄送失敗：無法連線至服務');
       }
     }
 
@@ -877,7 +991,14 @@
         alert('上傳失敗：' + (data.message || '請確認檔案是否為 TOTFA.zip'));
         return;
       }
-      alert(`申報總檔已解析成功！批次：${data.batch}\n共 ${data.total_cases} 筆門診案件，已完成規則核對。`);
+      if (data.facility_code) {
+        currentFacility.code = data.facility_code;
+        localStorage.setItem('elc_api_key', data.facility_code);
+        const ki = document.getElementById('apiKeyInput');
+        if (ki) ki.value = data.facility_code;
+        updateFacilityUI(currentFacility);
+      }
+      alert(`申報總檔已解析成功！批次：${data.batch}\n機構代碼：${data.facility_code || '未註記'}\n共 ${data.total_cases || 0} 筆門診案件，已完成規則核對。`);
       document.getElementById('monthlyFileInput').value = '';
       currentMonthlyBatchId = data.batch;
       await loadMonthlyReport(data.batch);
@@ -930,6 +1051,13 @@
       if (data.status === 'partial') {
         alert(data.message + (data.extracted_text_preview ? '\n\n【OCR 預覽】\n' + data.extracted_text_preview : ''));
         return;
+      }
+      if (data.facility_code) {
+        currentFacility.code = data.facility_code;
+        localStorage.setItem('elc_api_key', data.facility_code);
+        const ki = document.getElementById('apiKeyInput');
+        if (ki) ki.value = data.facility_code;
+        updateFacilityUI(currentFacility);
       }
       let msg = `匯入完成：${data.imported} 筆（來源 ${data.source}）`;
       if (data.rejected > 0) {
@@ -1622,10 +1750,20 @@
           if (pEta) pEta.innerText = '預估剩餘時間：計算中...';
         }
         if (pText && caseId) {
-          pText.innerHTML = `
-            <span class="spinner" style="display:inline-block; width:12px; height:12px; border:2px solid #38bdf8; border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite;"></span>
-            <span>正在審查 (${currIndex + 1}/${totalCases})：<code>${caseId}</code>...</span>
-          `;
+          pText.innerHTML = '';
+          const spin = document.createElement('span');
+          spin.className = 'spinner';
+          spin.style.cssText = 'display:inline-block; width:12px; height:12px; border:2px solid #38bdf8; border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite;';
+          const msg = document.createElement('span');
+          msg.textContent = `正在審查 (${currIndex + 1}/${totalCases})：`;
+          const codeEl = document.createElement('code');
+          codeEl.textContent = caseId;
+          const dots = document.createTextNode('...');
+          msg.appendChild(codeEl);
+          msg.appendChild(dots);
+          pText.appendChild(spin);
+          pText.appendChild(document.createTextNode(' '));
+          pText.appendChild(msg);
         }
       }
 
@@ -2049,16 +2187,16 @@
       return out;
     }
 
-    // Init
-    const defaultDevKey = 'dev_api_key_for_local_development_1234567890abcdef';
-    const savedKey = localStorage.getItem('elc_api_key') || defaultDevKey;
-    const keyInput = document.getElementById('apiKeyInput');
-    if (keyInput) keyInput.value = savedKey;
-    if (!localStorage.getItem('elc_api_key')) {
-      localStorage.setItem('elc_api_key', defaultDevKey);
-    }
-    // 預設進入第 1 軌：當月申報檔預審
-    switchWorkflowMode('sampling');
+    // Init：載入院所機構設定（機構代碼優先作為授權 Key），自動清除舊 dev key
+    (async function init() {
+      const oldKey = localStorage.getItem('elc_api_key');
+      if (oldKey === 'dev_api_key_for_local_development_1234567890abcdef') {
+        localStorage.removeItem('elc_api_key');
+      }
+      await loadFacilityConfig();
+      // 預設進入第 1 軌：當月申報檔預審
+      switchWorkflowMode('sampling');
+    })();
   </script>
 </body>
 </html>

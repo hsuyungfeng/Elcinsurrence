@@ -230,64 +230,18 @@ def client(app):
 
 
 def test_email_endpoint_requires_api_key(client):
-    """月申報郵寄端點含全月病歷報告，依資安 P0-2 原則必須帶 X-API-Key 認證。"""
+    """月申報郵寄端點含全月病歷報告，未認證者一律回 401。"""
     resp = client.post(f"/api/monthly/batch/{BATCH}/email", json={"email": RECIPIENT})
     assert resp.status_code == 401
 
 
-def test_email_dev_mode_writes_eml_and_warns(client, app, monkeypatch):
-    monkeypatch.delenv("SMTP_HOST", raising=False)
+def test_email_endpoint_is_permanently_disabled_for_security(client):
+    """依醫療隱私與資安政策，不使用 Email 傳輸申報報告與個資，端點已全面停用回 403。"""
     resp = client.post(f"/api/monthly/batch/{BATCH}/email", json={"email": RECIPIENT}, headers=KEY)
-    assert resp.status_code == 200
+    assert resp.status_code == 403
     body = resp.get_json()
-    assert body["status"] == "dev_mode"
-    assert "SMTP_HOST" in body["warning"]
-    saved = Path(app.config["ELC_OUTPUT_DIR"]) / body["saved_as"]
-    assert saved.exists()
-    parsed = email.message_from_bytes(saved.read_bytes())
-    attachment = next(p for p in parsed.walk() if p.get_content_type() == "text/html")
-    assert "<!doctype html>" in attachment.get_payload(decode=True).decode("utf-8")
+    assert "已依資安與醫療隱私政策停用" in body["message"]
 
-
-def test_email_sends_via_smtp_when_configured(client, fake_smtp, monkeypatch):
-    monkeypatch.setenv("SMTP_HOST", "smtp.example.org")
-    monkeypatch.setenv("SMTP_USER", "mailer")
-    monkeypatch.setenv("SMTP_PASSWORD", "secret")
-    resp = client.post(f"/api/monthly/batch/{BATCH}/email", json={"email": RECIPIENT}, headers=KEY)
-    assert resp.status_code == 200
-    assert resp.get_json() == {"status": "sent", "batch": BATCH}
-    sent = fake_smtp.instances[0].sent
-    assert sent["To"] == RECIPIENT
-    assert sent["From"] == "noreply@elcinsurrence.local"
-
-
-def test_email_accepts_form_data(client, fake_smtp, monkeypatch):
-    monkeypatch.setenv("SMTP_HOST", "smtp.example.org")
-    resp = client.post(f"/api/monthly/batch/{BATCH}/email", data={"email": RECIPIENT}, headers=KEY)
-    assert resp.status_code == 200
-
-
-def test_email_rejects_invalid_address(client):
-    resp = client.post(f"/api/monthly/batch/{BATCH}/email", json={"email": "x@y.z\nBcc: a@b.c"}, headers=KEY)
-    assert resp.status_code == 400
-
-
-def test_email_smtp_failure_is_502_without_leaking_recipient(client, fake_smtp, monkeypatch):
-    monkeypatch.setenv("SMTP_HOST", "smtp.example.org")
-    fake_smtp.fail_with = smtplib.SMTPServerDisconnected("gone")
-    resp = client.post(f"/api/monthly/batch/{BATCH}/email", json={"email": RECIPIENT}, headers=KEY)
-    assert resp.status_code == 502
-    assert RECIPIENT not in resp.get_data(as_text=True)
-
-
-def test_email_unknown_batch_is_404(client):
-    resp = client.post("/api/monthly/batch/MONTHLY-209901/email", json={"email": RECIPIENT}, headers=KEY)
-    assert resp.status_code == 404
-
-
-def test_email_bad_batch_id_is_400(client):
-    resp = client.post("/api/monthly/batch/MONTHLY-2023/email", json={"email": RECIPIENT}, headers=KEY)
-    assert resp.status_code == 400
 
 
 # ── 報告納入門檻（report_view） ─────────────────────────────────────

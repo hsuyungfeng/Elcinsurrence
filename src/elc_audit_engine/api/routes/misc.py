@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from flask import Blueprint, current_app, jsonify, send_from_directory
+from flask import Blueprint, current_app, jsonify, request, send_from_directory
 
 from config import settings
 
@@ -20,13 +20,45 @@ def output_url(pdf_path: str) -> str:
 
 @bp.route("/")
 def index():
-    return send_from_directory(current_app.static_folder, "index.html")
+    resp = send_from_directory(current_app.static_folder, "index.html")
+    # 支援前端防快取（User Requirement: reflash brower then clear cath）
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 @bp.route("/api/health", methods=["GET"])
 def health():
     """健康檢查（供 HIS 與監控探測，豁免 API key，不含任何案件資料）。"""
     return jsonify({"status": "ok"})
+
+
+@bp.route("/api/facility", methods=["GET"])
+def get_facility():
+    """取得當前院所機構設定（code, name, address, physician_name）。"""
+    try:
+        cfg = settings.load_facility_config()
+    except Exception:
+        cfg = {"code": "", "name": ""}
+    return jsonify({"status": "success", "facility": cfg})
+
+
+@bp.route("/api/facility", methods=["POST", "PUT"])
+def update_facility():
+    """更新院所機構設定並持久化至 config/facility.json。"""
+    payload = request.get_json(silent=True)
+    if payload is None:
+        payload = request.form.to_dict()
+    if not isinstance(payload, dict):
+        raise ApiError("請求格式錯誤：需為 JSON 物件或表單")
+    allowed = ("code", "name", "address", "physician_name")
+    updates = {k: str(payload[k]).strip() for k in allowed if k in payload and payload[k] is not None}
+    if not updates:
+        raise ApiError("無提供任何院所欄位進行更新")
+    saved = settings.save_facility_config(updates)
+    return jsonify({"status": "success", "facility": saved})
+
 
 
 @bp.route("/api/output/<name>", methods=["GET"])

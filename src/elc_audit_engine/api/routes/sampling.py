@@ -655,6 +655,12 @@ def import_sampling_cases():
             zip_cat, zip_items = inspect_zip_contents(path)
             if zip_cat == "totfa":
                 totfa_res = parse_totfa_zip(path)
+                t2_code = (totfa_res.header.get("t2") or "").strip()
+                if t2_code:
+                    try:
+                        settings.save_facility_config({"code": t2_code})
+                    except Exception:
+                        pass
                 # 建立抽樣案件清單：醫療費用>1000, (醫令點數>=350 或 藥令單價>=5), 取前50筆高風險項
                 records = []
                 seen_cases = set()
@@ -740,10 +746,16 @@ def import_sampling_cases():
         }), 400
 
     persisted, conflicts = persist_cases(case_store(), "sampling", cases, caller_id())
+    fac_code = ""
+    try:
+        fac_code = settings.load_facility_config().get("code", "")
+    except Exception:
+        pass
     return jsonify({
         "status": "success",
         "media_type": media_type,
         "source": source,
+        "facility_code": fac_code,
         "imported": len(cases),
         "rejected": len(rejected),
         "rejected_rows": rejected,

@@ -93,3 +93,30 @@ def load_facility_config() -> dict:
             f"facility config 缺必填欄位：{', '.join(missing)}（{FACILITY_CONFIG_PATH}）"
         )
     return cfg
+
+
+def save_facility_config(updates: dict) -> dict:
+    """更新並寫入院所層固定欄位設定（config/facility.json，D-04）。
+
+    保留原有未更新的欄位，確保必填項（code/name）維持完整。
+    """
+    path = FACILITY_CONFIG_PATH
+    current = {}
+    if os.path.isfile(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    current = data
+        except Exception:
+            current = {}
+
+    current.update({k: v for k, v in updates.items() if v is not None and str(v).strip()})
+    if "code" in current and not current.get("name"):
+        current["name"] = f"醫療院所 ({current['code']})"
+
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(current, f, ensure_ascii=False, indent=2)
+    return current
+

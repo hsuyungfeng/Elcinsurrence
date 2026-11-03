@@ -143,7 +143,27 @@ def load_api_keys(raw: str | None = None) -> dict[str, str]:
     return parse_api_keys(raw)
 
 
-def resolve_caller(presented_key: str | None, keys: dict[str, str]) -> str:
+def get_facility_code() -> str | None:
+    """嘗試自院所設定檔（config/facility.json）讀取機構代碼。
+
+    支援以申報資料或院所檔案中之機構代碼作為授權 API KEY。
+    """
+    try:
+        from config.settings import FACILITY_CONFIG_PATH
+        if os.path.isfile(FACILITY_CONFIG_PATH):
+            import json
+            with open(FACILITY_CONFIG_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    code = str(data.get("code") or "").strip()
+                    if code:
+                        return code
+    except Exception:
+        pass
+    return None
+
+
+def resolve_caller(presented_key: str | None, keys: dict[str, str], allow_facility_key: bool = True) -> str:
     """以 constant-time 比對找出 `presented_key` 對應的 caller_id。
 
     **禁止使用 `==` 比對 key**（時序側通道）：`==` 在 CPython 對字串
@@ -153,12 +173,12 @@ def resolve_caller(presented_key: str | None, keys: dict[str, str]) -> str:
     **無論命中與否都走完全部 key 的比對迴圈**，不可 early-return——
     提前結束迴圈本身就會洩漏「第幾把 key 比對到相符」的資訊。
 
-    `presented_key` 為 None 或空字串時仍執行一次 dummy `compare_digest`
-    才拋錯，避免「完全沒帶 header」比「帶了錯的 key」耗時明顯更短。
+    支援以機構代碼（上傳資料或 facility.json 之代碼）作為合法金鑰。
 
     Args:
         presented_key: 呼叫方於 `X-API-Key` header 帶的值。
         keys: `load_api_keys` 回傳的 `{key: caller_id}` 對照表。
+        allow_facility_key: 是否允許比對 facility.json 的機構代碼（預設 True）。
 
     Returns:
         命中的 caller_id。
@@ -175,6 +195,14 @@ def resolve_caller(presented_key: str | None, keys: dict[str, str]) -> str:
         if is_match and presented_key:
             matched_caller_id = caller_id
         # 不 break、不 continue 提前跳過——確保迴圈耗時只取決於 keys 數量。
+
+    # 比對上傳資料或設定檔中的機構代碼
+    if allow_facility_key:
+        fac_code = get_facility_code()
+        if fac_code:
+            is_fac = hmac.compare_digest(candidate, fac_code.encode("utf-8"))
+            if is_fac and presented_key and matched_caller_id is None:
+                matched_caller_id = f"clinic_{fac_code}"
 
     if not presented_key:
         # 缺 header 仍執行一次額外 dummy 比對，讓「缺 header」與「錯 key」

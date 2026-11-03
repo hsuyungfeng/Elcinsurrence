@@ -92,6 +92,13 @@ def upload_monthly():
         try:
             result: SubmissionParseResult = parse_totfa_zip(dest)
             ingest = ingest_monthly_declaration(store, result, actor=caller_id())
+            # 自動將申報資料中之機構代碼寫入院所檔案（User Requirement: KEY 使用上傳資料中機構代碼、存入院所檔案）
+            facility_code = (result.header.get("t2") or "").strip()
+            if facility_code:
+                try:
+                    settings.save_facility_config({"code": facility_code})
+                except Exception as exc:
+                    current_app.logger.warning("自動寫入院所機構代碼失敗：%s", exc)
         except SubmissionXmlError as exc:
             current_app.logger.warning("monthly upload rejected: %s", type(exc).__name__)
             raise ApiError(_PARSE_FAILED)
@@ -118,9 +125,12 @@ def upload_monthly():
         if os.path.exists(dest):
             os.remove(dest)  # 清理暫存檔（原始檔已安全備份至 saved_zip）
 
+    fac_code = (result.header.get("t2") or "").strip()
     return jsonify({
         "status": "success",
         "batch": ingest.batch,
+        "facility_code": fac_code,
+        "total_cases": len(result.cases),
         "ingest": {
             "created": ingest.created,
             "skipped_existing": ingest.skipped_existing,
@@ -174,56 +184,8 @@ def monthly_batch_report(batch_id: str):
 
 @bp.route("/api/monthly/batch/<batch_id>/email", methods=["POST"])
 def email_monthly_report(batch_id: str):
-    """把批次 HTML 報告寄到指定信箱。
-
-    請求：JSON `{"email": "..."}` 或表單欄位 `email`。
-    回應：`sent`（已寄出）、`dev_mode`（未設 SMTP_HOST，已寫入 data/output 的 .eml 檔，附警告）。
-    SMTP 失敗回 502，訊息不含收件人或內容。
-    """
-    if not _BATCH_RE.match(batch_id):
-        raise ApiError("batch_id 格式應為 MONTHLY-YYYYMM")
-    payload = request.get_json(silent=True)
-    raw_email = payload.get("email") if isinstance(payload, dict) else None
-    if raw_email is None:
-        raw_email = request.form.get("email")
-    email = str(raw_email or "").strip()
-    if not is_valid_email(email):
-        raise ApiError("收件人 Email 格式不正確")
-
-    store = case_store()
-    if store.count_by_batch(batch_id) == 0:
-        raise ApiError("查無此批次", status=404)
-    audit = audit_batch(
-        store,
-        batch_id,
-        rules_db_path=current_app.config.get("ELC_RULES_DB_PATH"),
-        persist=False,
-    )
-    html_report = render_batch_report_html(audit, templates=load_templates(store, report_view(audit)))
-
-    config = smtp_config_from_env()
-    sender = config.sender if config else (os.environ.get("SMTP_FROM") or DEFAULT_FROM)
-    message = build_report_email(to=email, sender=sender, batch=batch_id, html_report=html_report)
-
-    if config is None:
-        out_dir = current_app.config.get("ELC_OUTPUT_DIR") or settings.OUTPUT_DIR
-        saved = write_eml(message, out_dir, batch_id)
-        current_app.logger.warning("SMTP 未設定（開發模式）：郵件已寫入本機檔案 batch=%s", batch_id)
-        return jsonify({
-            "status": "dev_mode",
-            "batch": batch_id,
-            "warning": "SMTP 未設定（SMTP_HOST），郵件未寄出，已寫入本機 .eml 檔案。",
-            "saved_as": saved,
-        })
-
-    try:
-        send_message(config, message)
-    except MailError as exc:
-        # 只記錄例外類別；不記錄收件人、主旨或內容
-        current_app.logger.warning("郵件寄送失敗 batch=%s error=%s", batch_id, exc)
-        raise ApiError("郵件寄送失敗（請檢查 SMTP 設定與網路）", status=502)
-    current_app.logger.info("郵件已寄出 batch=%s", batch_id)
-    return jsonify({"status": "sent", "batch": batch_id})
+    """已停用 Email 寄送端點（依資安與醫療隱私保護政策，全面停用 Email 傳輸個資與申報報告）。"""
+    raise ApiError("已依資安與醫療隱私政策停用 Email 寄送功能（不使用 Email 傳輸申報報告）", status=403)
 
 
 @bp.route("/api/monthly/template", methods=["POST"])

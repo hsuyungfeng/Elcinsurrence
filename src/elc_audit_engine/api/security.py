@@ -21,7 +21,7 @@ from elc_audit_engine.auth import (
 # 審計豁免清單：靜態頁與健康檢查不含病歷存取，記錄會被探測流量淹沒。
 # 這份清單只決定「寫不寫審計」，與是否強制認證無關——業務端點即使
 # 免強制 API Key，仍接觸病歷資料，審計軌跡不可因此消失。
-AUDIT_EXEMPT_ENDPOINTS = frozenset({"misc.index", "misc.health", "static"})
+AUDIT_EXEMPT_ENDPOINTS = frozenset({"misc.index", "misc.health", "static", "misc.get_facility"})
 
 # 認證豁免清單：**僅決定認證是否強制，不得沿用來判斷審計**——兩份清單刻意
 # 分開（歷史教訓：曾共用一份清單，導致免認證的業務端點連審計日誌都被一併
@@ -42,6 +42,8 @@ AUTH_EXEMPT_ENDPOINTS = AUDIT_EXEMPT_ENDPOINTS | frozenset({
     "monthly.upload_monthly",
     "monthly.list_monthly_batches",
     "monthly.monthly_batch_report",
+    "misc.get_facility",
+    "misc.update_facility",
 })
 
 #: P1-5 縱深防禦：即使前端某處遺漏轉義，CSP 也擋掉外部腳本與資料外送。
