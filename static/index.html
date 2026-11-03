@@ -231,23 +231,31 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-title" id="sidebarListTitle">事前預審抽樣清單</div>
+        <button style="background: rgba(16,185,129,0.15); border: 1px solid #10b981; color: #34d399; font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer;" onclick="togglePatientEntryModal(true)" title="依病患身分證／生日／姓名鍵入加入案件">➕ 鍵入</button>
         <button style="background: rgba(6,182,212,0.15); border: 1px solid var(--accent-cyan); color: #38bdf8; font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer;" onclick="document.getElementById('importFile').click()" title="匯入 TOTFA.zip／CSV／PDF／影像">📂 匯入</button>
         <button style="background: rgba(239,68,68,0.15); border: 1px solid #ef4444; color: #fca5a5; font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer;" onclick="clearCacheAndReload()" title="清除本機快取與金鑰並強制重整頁面">🧹 清快取</button>
         <input type="file" id="importFile" accept=".csv,.pdf,.jpg,.jpeg,.png,.tif,.tiff,.bmp,.webp,.zip" style="display:none;" onchange="importCases(this.files[0])">
       </div>
-      <!-- 院所機構檔案狀態與設定（User Requirement: web use and save into clinit file） -->
-      <div style="padding: 6px 12px; background: rgba(15,23,42,0.4); border-bottom: 1px solid rgba(148,163,184,0.15); font-size: 11px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+      <!-- 院所機構檔案狀態與設定（同一機構同一月份不須一直驗證） -->
+      <div style="padding: 8px 12px; background: rgba(15,23,42,0.4); border-bottom: 1px solid rgba(148,163,184,0.15); font-size: 11px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
           <span style="color: #38bdf8; font-weight: 600;">🏥 機構：<span id="displayFacilityCode">載入中...</span></span>
           <button onclick="toggleFacilityModal(true)" style="background: none; border: none; color: #94a3b8; cursor: pointer; text-decoration: underline; font-size: 11px;" title="查看與編輯院所檔案 (facility.json)">✏️ 院所設定</button>
         </div>
-        <div style="color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="displayFacilityName"></div>
+        <div style="color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px;" id="displayFacilityName"></div>
+        <div style="display: flex; justify-content: space-between; align-items: center; color: #34d399; font-weight: 500;">
+          <span>📅 月份：<span id="displayActiveMonth">載入中...</span></span>
+          <span style="font-size: 10px; color: #34d399; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); padding: 1px 4px; border-radius: 3px;" title="同一機構與同一月份已自動認證">免重複驗證</span>
+        </div>
       </div>
-      <div style="padding: 6px 12px; display: flex; gap: 6px; align-items: center;">
-        <input type="password" id="apiKeyInput" placeholder="機構代碼 / API Key（預設使用機構代碼）" autocomplete="off"
-          style="flex: 1; min-width: 0; font-size: 11px; padding: 4px 6px; background: rgba(15,23,42,0.6); color: inherit; border: 1px solid rgba(148,163,184,0.4); border-radius: 4px;"
-          onchange="saveApiKey(this.value)">
-      </div>
+      <details id="advancedAuthPanel" style="padding: 2px 12px 6px 12px; font-size: 11px; color: #64748b;">
+        <summary style="cursor: pointer; font-size: 10px;">⚙️ 自訂 API Key（預設使用機構代碼自動授權）</summary>
+        <div style="padding-top: 4px; display: flex; gap: 6px; align-items: center;">
+          <input type="password" id="apiKeyInput" placeholder="自訂 API Key（選填）" autocomplete="off"
+            style="flex: 1; min-width: 0; font-size: 11px; padding: 4px 6px; background: rgba(15,23,42,0.6); color: inherit; border: 1px solid rgba(148,163,184,0.4); border-radius: 4px;"
+            onchange="saveApiKey(this.value)">
+        </div>
+      </details>
       <!-- 院所檔案設定彈窗 -->
       <div id="facilityModal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:99999; max-width: 480px; width: 90%; background: #1e293b; color: #f8fafc; border: 1px solid rgba(148,163,184,0.4); border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); padding: 18px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; border-bottom: 1px solid #334155; padding-bottom: 8px;">
@@ -256,23 +264,54 @@
         </div>
         <div style="display:flex; flex-direction:column; gap:10px; font-size:13px;">
           <div>
-            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">醫事機構代碼 (code / 亦為授權 KEY)：</label>
+            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">醫事機構代碼 (code / 亦為授權 KEY，必填)：</label>
             <input type="text" id="facCodeInput" placeholder="例: 01015C 或 3503250461" style="width:100%; box-sizing:border-box; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc;">
           </div>
           <div>
-            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">醫療院所名稱 (name)：</label>
+            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">醫療院所名稱 (name，必填)：</label>
             <input type="text" id="facNameInput" placeholder="例: 示例診所" style="width:100%; box-sizing:border-box; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc;">
           </div>
           <div>
-            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">院所地址 (address)：</label>
+            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">聯絡信箱 (email / Mail Address，必填)：</label>
+            <input type="email" id="facEmailInput" placeholder="例: clinic@example.com" style="width:100%; box-sizing:border-box; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc;">
+          </div>
+          <div>
+            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">院所地址 (address，選填)：</label>
             <input type="text" id="facAddressInput" placeholder="例: 台北市..." style="width:100%; box-sizing:border-box; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc;">
           </div>
           <div>
-            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">負責醫師姓名 (physician_name)：</label>
+            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">負責醫師姓名 (physician_name，選填)：</label>
             <input type="text" id="facPhysicianInput" placeholder="例: 醫師姓名" style="width:100%; box-sizing:border-box; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc;">
           </div>
           <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:6px;">
             <button class="btn-action" style="background:#10b981; color:#fff;" onclick="saveFacilityFromWeb()">💾 儲存至院所檔案</button>
+          </div>
+        </div>
+      </div>
+      <!-- 單一病患鍵入加入案件彈窗 (User Requirement: 身分證字號 出生月日 姓名 在當月審資料內鍵入加入) -->
+      <div id="patientEntryModal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:99999; max-width: 460px; width: 90%; background: #1e293b; color: #f8fafc; border: 1px solid rgba(148,163,184,0.4); border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); padding: 18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; border-bottom: 1px solid #334155; padding-bottom: 8px;">
+          <div style="font-weight: 700; font-size: 15px; color: #34d399;">➕ 依病患鍵入加入案件</div>
+          <button type="button" class="btn-action" style="padding: 2px 8px; font-size: 12px; background: transparent; border: 1px solid var(--border);" onclick="togglePatientEntryModal(false)">✕ 關閉</button>
+        </div>
+        <div style="font-size:12px; color:#94a3b8; margin-bottom:12px; line-height:1.5;">
+          輸入病患資料後，系統將自動比對當月預審（TOTFA.zip）申報資料，將該案全數醫令、診斷與金額自動帶入案件清單。若無相符紀錄亦可手動建案。
+        </div>
+        <div style="display:flex; flex-direction:column; gap:10px; font-size:13px;">
+          <div>
+            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">身分證統一編號／病歷號：</label>
+            <input type="text" id="peIdCardInput" placeholder="例: A123456789 或 M220518024" style="width:100%; box-sizing:border-box; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc;">
+          </div>
+          <div>
+            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">出生年月日 (民國年或西元)：</label>
+            <input type="text" id="peBirthDateInput" placeholder="例: 0761224 或 1987-12-24" style="width:100%; box-sizing:border-box; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc;">
+          </div>
+          <div>
+            <label style="display:block; color:#94a3b8; font-size:12px; margin-bottom:3px;">病患姓名：</label>
+            <input type="text" id="peNameInput" placeholder="例: 王大明" style="width:100%; box-sizing:border-box; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc;">
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+            <button class="btn-action" style="background:#10b981; color:#fff;" onclick="submitPatientEntry()">🔍 檢索並加入案件</button>
           </div>
         </div>
       </div>
@@ -331,7 +370,9 @@
           <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;">
             <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
               <span style="font-size: 12px; font-weight: 600; color: #38bdf8; margin-right: 4px;">🎯 抽樣審查</span>
-              <button class="btn-action" style="background: linear-gradient(135deg, #0284c7, #0369a1);" onclick="sampleFromMonthlyBatch()">📦 重新抽樣 (20隨機+10立意)</button>
+              <button class="btn-action" style="background: linear-gradient(135deg, #0284c7, #0369a1);" onclick="importSamplingFromMonthly()" title="自當月預審申報檔直接帶入案件，免重複填寫或重複存檔">📥 載入當月預審資料</button>
+              <button class="btn-action" style="background: linear-gradient(135deg, #059669, #047857);" onclick="togglePatientEntryModal(true)" title="依病患身分證／生日／姓名自當月預審資料檢索加入">➕ 依病患鍵入加入</button>
+              <button class="btn-action" style="background: rgba(14,165,233,0.2); border: 1px solid #0ea5e9; color: #38bdf8;" onclick="sampleFromMonthlyBatch()">📦 重新抽樣 (20隨機+10立意)</button>
               <button class="btn-action" id="btnBatchAudit" style="background: linear-gradient(135deg, #0d9488, #0f766e);" onclick="runSamplingBatchAudit()">⚡ 一鍵全自動批次審查 (30案)</button>
             </div>
             <div>
@@ -505,7 +546,9 @@
           <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;">
             <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
               <span style="font-size: 12px; font-weight: 600; color: #a855f7; margin-right: 4px;">⚖️ 申復處理</span>
-              <button class="btn-action" style="background: linear-gradient(135deg, #7c3aed, #6d28d9);" onclick="linkStage2ToAppeal()">🔄 重新自第 2 階抽選 5 案連動</button>
+              <button class="btn-action" style="background: linear-gradient(135deg, #7c3aed, #6d28d9);" onclick="importAppealFromMonthly()" title="自當月預審申報檔直接帶入高額案件至申復清單，免重複填寫或重複存檔">📥 載入當月預審資料</button>
+              <button class="btn-action" style="background: linear-gradient(135deg, #059669, #047857);" onclick="togglePatientEntryModal(true)" title="依病患身分證／生日／姓名自當月預審資料檢索加入">➕ 依病患鍵入加入</button>
+              <button class="btn-action" style="background: rgba(168,85,247,0.2); border: 1px solid #a855f7; color: #d8b4fe;" onclick="linkStage2ToAppeal()">🔄 重新自第 2 階抽選 5 案連動</button>
             </div>
             <div>
               <button class="btn-action" style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; color: #fca5a5; font-size: 12px;" onclick="clearAppealCases()">🗑️ 清空申復清單</button>
@@ -670,23 +713,45 @@
           if (data && data.facility) {
             currentFacility = data.facility;
             updateFacilityUI(currentFacility);
-            const savedKey = localStorage.getItem('elc_api_key');
-            if (!savedKey || savedKey === 'dev_api_key_for_local_development_1234567890abcdef') {
-              if (currentFacility.code) {
-                localStorage.setItem('elc_api_key', currentFacility.code);
-                const ki = document.getElementById('apiKeyInput');
-                if (ki) ki.value = currentFacility.code;
-              } else {
-                localStorage.removeItem('elc_api_key');
-              }
-            } else {
+            if (currentFacility.code) {
+              localStorage.setItem('elc_api_key', currentFacility.code);
               const ki = document.getElementById('apiKeyInput');
-              if (ki) ki.value = savedKey;
+              if (ki) ki.value = currentFacility.code;
             }
           }
         }
       } catch (e) {
         console.warn('載入院所檔案失敗：', e);
+      }
+    }
+
+    async function loadActiveMonthlyBatch() {
+      try {
+        const res = await authFetch('/api/monthly/batches');
+        if (res.ok) {
+          const data = await res.json();
+          monthlyBatches = Array.isArray(data) ? data : (data && data.batches ? data.batches : []);
+          if (monthlyBatches.length > 0) {
+            const savedBatch = localStorage.getItem('elc_active_month_batch');
+            const found = monthlyBatches.find(b => b.batch === savedBatch);
+            currentMonthlyBatchId = found ? found.batch : monthlyBatches[0].batch;
+            localStorage.setItem('elc_active_month_batch', currentMonthlyBatchId);
+          }
+        }
+      } catch (e) {
+        console.warn('載入當前申報月份失敗：', e);
+      }
+      updateBatchDisplay();
+    }
+
+    function updateBatchDisplay() {
+      const el = document.getElementById('displayActiveMonth');
+      if (el) {
+        el.textContent = currentMonthlyBatchId ? currentMonthlyBatchId.replace('MONTHLY-', '') : '未上傳';
+      }
+      const mTitle = document.getElementById('mBatchTitle');
+      if (mTitle && currentMonthlyBatchId) {
+        mTitle.textContent = `申報批次：${currentMonthlyBatchId}`;
       }
     }
 
@@ -698,10 +763,12 @@
       if (nameSpan) nameSpan.textContent = fac.name || '';
       const cIn = document.getElementById('facCodeInput');
       const nIn = document.getElementById('facNameInput');
+      const eIn = document.getElementById('facEmailInput');
       const aIn = document.getElementById('facAddressInput');
       const pIn = document.getElementById('facPhysicianInput');
       if (cIn) cIn.value = fac.code || '';
       if (nIn) nIn.value = fac.name || '';
+      if (eIn) eIn.value = fac.email || '';
       if (aIn) aIn.value = fac.address || '';
       if (pIn) pIn.value = fac.physician_name || '';
     }
@@ -715,18 +782,27 @@
     async function saveFacilityFromWeb() {
       const code = (document.getElementById('facCodeInput').value || '').trim();
       const name = (document.getElementById('facNameInput').value || '').trim();
+      const email = (document.getElementById('facEmailInput').value || '').trim();
       const address = (document.getElementById('facAddressInput').value || '').trim();
       const physician_name = (document.getElementById('facPhysicianInput').value || '').trim();
 
       if (!code) {
-        alert('請輸入醫事服務機構代碼！');
+        alert('請輸入醫事機構代碼（必填欄位）！');
+        return;
+      }
+      if (!name) {
+        alert('請輸入醫療院所名稱（必填欄位）！');
+        return;
+      }
+      if (!email) {
+        alert('請輸入聯絡信箱 Mail Address（必填欄位）！');
         return;
       }
       try {
         const res = await authFetch('/api/facility', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, name: name || ('醫療院所 (' + code + ')'), address, physician_name }),
+          body: JSON.stringify({ source: 'web', code, name, email, address, physician_name }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -743,6 +819,94 @@
         await loadCaseData();
       } catch (err) {
         alert('儲存失敗：' + err.message);
+      }
+    }
+
+    function togglePatientEntryModal(show) {
+      const m = document.getElementById('patientEntryModal');
+      if (m) m.style.display = show ? 'block' : 'none';
+      if (show) {
+        const idIn = document.getElementById('peIdCardInput');
+        if (idIn) idIn.focus();
+      }
+    }
+
+    async function submitPatientEntry() {
+      const id_card = (document.getElementById('peIdCardInput').value || '').trim();
+      const birth_date = (document.getElementById('peBirthDateInput').value || '').trim();
+      const patient_name = (document.getElementById('peNameInput').value || '').trim();
+
+      if (!id_card && !birth_date && !patient_name) {
+        alert('請至少填寫身分證字號、出生年月日或姓名其中一項！');
+        return;
+      }
+
+      const endpoint = currentMode === 'appeal' 
+        ? '/api/appeal/cases/add-by-patient' 
+        : '/api/sampling/cases/add-by-patient';
+
+      try {
+        const res = await authFetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id_card, birth_date, patient_name, batch: currentMonthlyBatchId || '' })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert('加入案件失敗：' + (data.message || res.status));
+          return;
+        }
+        togglePatientEntryModal(false);
+        document.getElementById('peIdCardInput').value = '';
+        document.getElementById('peBirthDateInput').value = '';
+        document.getElementById('peNameInput').value = '';
+
+        if (data.matched_monthly) {
+          alert(`✅ 成功自當月預審申報檔帶入 ${data.count} 筆案件！全案醫令、就診日與診斷資料已自動填妥。`);
+        } else {
+          alert(`ℹ️ 當月預審申報資料中查無完全相符紀錄，已為該病患建立新案件供後續維護。`);
+        }
+        await loadCaseData();
+      } catch (err) {
+        alert('加入案件失敗：' + err.message);
+      }
+    }
+
+    async function importSamplingFromMonthly() {
+      try {
+        const res = await authFetch('/api/sampling/import-from-monthly', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batch: currentMonthlyBatchId || '' })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert('載入當月預審資料失敗：' + (data.message || res.status));
+          return;
+        }
+        alert(`已自當月申報批次 ${data.batch} 成功載入預審資料！\n全批共 ${data.total_in_batch} 筆，帶入 ${data.imported} 筆。\n（新增 ${data.persisted} 筆，既有略過 ${data.conflicts.length} 筆）`);
+        await loadCaseData();
+      } catch (err) {
+        alert('載入失敗：' + err.message);
+      }
+    }
+
+    async function importAppealFromMonthly() {
+      try {
+        const res = await authFetch('/api/appeal/import-from-monthly', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batch: currentMonthlyBatchId || '' })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert('載入當月預審資料失敗：' + (data.message || res.status));
+          return;
+        }
+        alert(`已自當月申報批次 ${data.batch} 成功載入申復清單！\n全批共 ${data.total_in_batch} 筆，帶入 ${data.imported} 筆高額案件。\n（新增 ${data.persisted} 筆，既有略過 ${data.conflicts.length} 筆）`);
+        await loadCaseData();
+      } catch (err) {
+        alert('載入失敗：' + err.message);
       }
     }
 
@@ -1001,6 +1165,8 @@
       alert(`申報總檔已解析成功！批次：${data.batch}\n機構代碼：${data.facility_code || '未註記'}\n共 ${data.total_cases || 0} 筆門診案件，已完成規則核對。`);
       document.getElementById('monthlyFileInput').value = '';
       currentMonthlyBatchId = data.batch;
+      localStorage.setItem('elc_active_month_batch', data.batch);
+      updateBatchDisplay();
       await loadMonthlyReport(data.batch);
       await loadCaseData();
     }
@@ -1008,6 +1174,8 @@
     async function loadMonthlyReport(batchId) {
       if (!batchId) return;
       currentMonthlyBatchId = batchId;
+      localStorage.setItem('elc_active_month_batch', batchId);
+      updateBatchDisplay();
       document.getElementById('mBatchTitle').innerText = `申報批次：${batchId}`;
       const res = await authFetch(`/api/monthly/batch/${batchId}/report?format=html`);
       if (res.ok) {
@@ -1628,8 +1796,11 @@
     }
 
     async function sampleFromMonthlyBatch() {
-      const batch = currentMonthlyBatchId || window.prompt('請輸入申報批次代號（例如 MONTHLY-202307）', 'MONTHLY-202307');
-      if (!batch) return;
+      const batch = currentMonthlyBatchId || (monthlyBatches.length > 0 ? monthlyBatches[0].batch : null);
+      if (!batch) {
+        alert('尚未上傳當月申報檔，請先於「1. 當月申報檔預審」上傳 TOTFA.zip 總檔');
+        return;
+      }
       const res = await authFetch('/api/sampling/sample-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1774,6 +1945,13 @@
         for (let i = 0; i < totalCases; i++) {
           const c = samplingCases[i];
           updateProgress(i, c.id);
+
+          // 同一機構同一月份：若本案已完成審查且具有判定結果，不須一直重複驗證
+          if (c.state === 'reviewed' && c.support_level && c.support_level !== '待判定') {
+            completedCount++;
+            stateCounts[c.support_level] = (stateCounts[c.support_level] || 0) + 1;
+            continue;
+          }
 
           try {
             const res = await authFetch(`/api/sampling/cases/${encodeURIComponent(c.id)}/closed-loop`, {
@@ -2187,14 +2365,14 @@
       return out;
     }
 
-    // Init：載入院所機構設定（機構代碼優先作為授權 Key），自動清除舊 dev key
+    // Init：載入院所機構設定與當月申報月份（同一機構同一月份免重複驗證）
     (async function init() {
       const oldKey = localStorage.getItem('elc_api_key');
       if (oldKey === 'dev_api_key_for_local_development_1234567890abcdef') {
         localStorage.removeItem('elc_api_key');
       }
       await loadFacilityConfig();
-      // 預設進入第 1 軌：當月申報檔預審
+      await loadActiveMonthlyBatch();
       switchWorkflowMode('sampling');
     })();
   </script>

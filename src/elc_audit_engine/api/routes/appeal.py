@@ -8,6 +8,10 @@ import os
 from flask import Blueprint, Response, current_app, jsonify, request
 
 from elc_audit_engine import attachment_store, evidence_vault
+from elc_audit_engine.monthly_patient_service import (
+    add_appeal_case_by_patient,
+    import_monthly_to_appeal,
+)
 from elc_audit_engine.appeal_linkage import (
     DEFAULT_COUNT,
     MAX_COUNT,
@@ -234,6 +238,48 @@ def sample_appeal_from_stage2():
         current_app.logger.error("rule repository failure during stage2 linkage: %s", exc)
         raise ApiError("規則庫暫時無法查詢，請稍後再試或聯繫系統管理員", status=503)
     return jsonify({"status": "success", **result})
+
+
+@bp.route("/api/appeal/import-from-monthly", methods=["POST"])
+def import_appeal_from_monthly():
+    """自當月申報批次一鍵匯入申復清單（免重複填寫或重複上傳）。"""
+    data = request.get_json(silent=True) or {}
+    batch = data.get("batch")
+    limit = data.get("limit", 20)
+    store = case_store()
+    res = import_monthly_to_appeal(
+        store,
+        batch_id=batch,
+        limit=int(limit) if str(limit).isdigit() else 20,
+        actor=caller_id(),
+    )
+    if res.get("status") == "error":
+        raise ApiError(res.get("message", "匯入失敗"), status=400)
+    return jsonify(res)
+
+
+@bp.route("/api/appeal/cases/add-by-patient", methods=["POST"])
+def add_appeal_by_patient():
+    """依病患身分證字號／出生年月日／姓名自當月申報檢索並鍵入加入申復清單。"""
+    data = request.get_json(silent=True) or {}
+    id_card = str(data.get("id_card") or "").strip()
+    birth_date = str(data.get("birth_date") or "").strip()
+    patient_name = str(data.get("patient_name") or "").strip()
+    batch = str(data.get("batch") or "").strip() or None
+
+    if not id_card and not birth_date and not patient_name:
+        raise ApiError("身分證字號、出生年月日與姓名至少需提供一項進行查詢", status=400)
+
+    store = case_store()
+    res = add_appeal_case_by_patient(
+        store,
+        id_card=id_card,
+        birth_date=birth_date,
+        patient_name=patient_name,
+        batch_id=batch,
+        actor=caller_id(),
+    )
+    return jsonify(res)
 
 
 def _stage3_view(store, record, *, with_thumbnails: bool):

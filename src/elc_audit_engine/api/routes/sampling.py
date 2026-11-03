@@ -44,6 +44,10 @@ from elc_audit_engine.sampling_closed_loop import (
     run_closed_loop,
     save_review,
 )
+from elc_audit_engine.monthly_patient_service import (
+    add_sampling_case_by_patient,
+    import_monthly_to_sampling,
+)
 from elc_audit_engine.sampling_sampler import sample_monthly_batch
 from elc_audit_engine.unified_review_report import (
     RuleBlock,
@@ -425,6 +429,48 @@ def sample_monthly_batch_endpoint():
         "case_store_conflicts": conflicts,
         "cases": cases,
     })
+
+
+@bp.route("/api/sampling/import-from-monthly", methods=["POST"])
+def import_sampling_from_monthly():
+    """自當月申報批次一鍵匯入抽樣清單（免重複填寫或重複上傳）。"""
+    data = request.get_json(silent=True) or {}
+    batch = data.get("batch")
+    limit = data.get("limit", 30)
+    store = case_store()
+    res = import_monthly_to_sampling(
+        store,
+        batch_id=batch,
+        limit=int(limit) if str(limit).isdigit() else 30,
+        actor=caller_id(),
+    )
+    if res.get("status") == "error":
+        raise ApiError(res.get("message", "匯入失敗"), status=400)
+    return jsonify(res)
+
+
+@bp.route("/api/sampling/cases/add-by-patient", methods=["POST"])
+def add_sampling_by_patient():
+    """依病患身分證字號／出生年月日／姓名自當月申報檢索並鍵入加入抽審清單。"""
+    data = request.get_json(silent=True) or {}
+    id_card = str(data.get("id_card") or "").strip()
+    birth_date = str(data.get("birth_date") or "").strip()
+    patient_name = str(data.get("patient_name") or "").strip()
+    batch = str(data.get("batch") or "").strip() or None
+
+    if not id_card and not birth_date and not patient_name:
+        raise ApiError("身分證字號、出生年月日與姓名至少需提供一項進行查詢", status=400)
+
+    store = case_store()
+    res = add_sampling_case_by_patient(
+        store,
+        id_card=id_card,
+        birth_date=birth_date,
+        patient_name=patient_name,
+        batch_id=batch,
+        actor=caller_id(),
+    )
+    return jsonify(res)
 
 _SAMPLING_REVIEW_PATH = ("parsed", "reviewing", "reviewed")
 

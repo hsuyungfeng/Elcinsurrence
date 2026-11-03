@@ -52,10 +52,19 @@ def update_facility():
         payload = request.form.to_dict()
     if not isinstance(payload, dict):
         raise ApiError("請求格式錯誤：需為 JSON 物件或表單")
-    allowed = ("code", "name", "address", "physician_name")
+    allowed = ("code", "name", "email", "address", "physician_name")
     updates = {k: str(payload[k]).strip() for k in allowed if k in payload and payload[k] is not None}
     if not updates:
         raise ApiError("無提供任何院所欄位進行更新")
+    # 若為 Web 介面儲存或指定驗證，檢查必填欄位 (code, name, email) 須填寫才可存入診所檔案
+    if payload.get("source") == "web" or "email" in payload:
+        if not updates.get("code"):
+            raise ApiError("醫事機構代碼為必填欄位，須填寫才可存入診所檔案")
+        if not updates.get("name"):
+            raise ApiError("醫療院所名稱為必填欄位，須填寫才可存入診所檔案")
+        if not updates.get("email"):
+            raise ApiError("聯絡信箱 (Mail Address) 為必填欄位，須填寫才可存入診所檔案")
+
     saved = settings.save_facility_config(updates)
     return jsonify({"status": "success", "facility": saved})
 

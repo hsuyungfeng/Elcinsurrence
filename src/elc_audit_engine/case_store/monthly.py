@@ -46,6 +46,7 @@ def _payload(batch: str, case: SubmissionCase) -> dict:
         "record_no": case.record_no,
         "patient_name": case.patient_name,
         "birth_date": case.birth_date,
+        "id_card": case.raw.get("d3", ""),
         "total_points": case.raw.get("d39"),  # 醫療費用總點數（報告門檻）
         "clinic": case.clinic,
         # d30 診治醫事人員代號（電子抽審.md）；僅作彙總鍵，不做其他用途。
