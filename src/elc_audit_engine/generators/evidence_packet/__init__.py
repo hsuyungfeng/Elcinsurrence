@@ -59,7 +59,7 @@ def render_evidence_packet(
         appeal_draft=payload,
         attachment_records=attachments
     )
-    
+
     buf = io.BytesIO()
     doc.save(buf)
     return buf.getvalue(), warnings
@@ -99,5 +99,5 @@ def write_evidence_packet(
     warnings = list(warnings) + convert_docx_and_merge_pdfs(
         docx_bytes, output_pdf_path, pdf_attachments
     )
-    
+
     return output_pdf_path, warnings

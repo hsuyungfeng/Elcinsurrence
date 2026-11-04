@@ -344,7 +344,10 @@
             <span style="font-size: 12px; color: var(--text-muted); margin-right: 10px;">預審支持度評估：</span>
             <span class="badge badge-weak" id="sSupportBadge">⚠️ 薄弱</span>
           </div>
-          <button class="btn-action" onclick="runSamplingAudit()">⚡ 審核病歷並評估支持度</button>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669);" onclick="openSamplingBatchReport()">🔍 開啟視覺化審核卡片 (HTML)</button>
+            <button class="btn-action" onclick="runSamplingAudit()">⚡ 審核病歷並評估支持度</button>
+          </div>
         </div>
 
         <!-- 抽樣與審查整合動作列 -->
@@ -538,7 +541,10 @@
               style="font-size: 13px; padding: 6px 10px; border: 1px solid var(--panel-border); border-radius: 6px; background: var(--panel-bg); color: var(--text-color); width: 170px;"
               title="病歷號（Phase 3 d3），填入後生成草稿時一併查詢半年病史">
           </div>
-          <button class="btn-action" onclick="generateAppealDraft()">⚡ 整合多源證據生成申復草稿</button>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669);" onclick="openAppealBatchReport()">🔍 開啟視覺化審核卡片 (HTML)</button>
+            <button class="btn-action" onclick="generateAppealDraft()">⚡ 整合多源證據生成申復草稿</button>
+          </div>
         </div>
 
         <!-- 申復作業動作列（比照抽樣工作台） -->
@@ -1257,12 +1263,40 @@
         const res = await authFetch('/api/sampling/cases');
         if (res.status === 401) return showCaseListMessage('請先在上方輸入 API Key 以讀取案件清單。');
         samplingCases = await res.json();
+        // autoload：若抽樣清單為空但有當月預審批次，自動帶入當月預審案件
+        if ((!Array.isArray(samplingCases) || samplingCases.length === 0) && currentMonthlyBatchId) {
+          try {
+            await authFetch('/api/sampling/import-from-monthly', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ batch: currentMonthlyBatchId })
+            });
+            const r2 = await authFetch('/api/sampling/cases');
+            if (r2.ok) samplingCases = await r2.json();
+          } catch (e) {
+            console.warn('Autoload sampling cases failed:', e);
+          }
+        }
         renderCaseList(samplingCases);
         if (Array.isArray(samplingCases) && samplingCases.length > 0) selectSamplingCase(samplingCases[0].id);
       } else if (currentMode === 'appeal') {
         const res = await authFetch('/api/appeal/cases');
         if (res.status === 401) return showCaseListMessage('請先在上方輸入 API Key 以讀取案件清單。');
         appealCases = await res.json();
+        // autoload：若申復清單為空但有當月預審批次，自動帶入高額申報案件
+        if ((!Array.isArray(appealCases) || appealCases.length === 0) && currentMonthlyBatchId) {
+          try {
+            await authFetch('/api/appeal/import-from-monthly', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ batch: currentMonthlyBatchId })
+            });
+            const r2 = await authFetch('/api/appeal/cases');
+            if (r2.ok) appealCases = await r2.json();
+          } catch (e) {
+            console.warn('Autoload appeal cases failed:', e);
+          }
+        }
         renderCaseList(appealCases);
         if (Array.isArray(appealCases) && appealCases.length > 0) selectAppealCase(appealCases[0].id);
       } else {
@@ -1270,8 +1304,11 @@
         const data = await res.json();
         monthlyBatches = Array.isArray(data) ? data : (data && data.batches ? data.batches : []);
         renderMonthlyBatchList(monthlyBatches);
-        if (monthlyBatches.length > 0 && !currentMonthlyBatchId) {
-          loadMonthlyReport(monthlyBatches[0].batch);
+        if (monthlyBatches.length > 0) {
+          if (!currentMonthlyBatchId) {
+            currentMonthlyBatchId = monthlyBatches[0].batch;
+          }
+          loadMonthlyReport(currentMonthlyBatchId);
         }
       }
     }

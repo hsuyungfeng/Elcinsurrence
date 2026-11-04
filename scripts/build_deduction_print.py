@@ -111,7 +111,7 @@ def main(argv: list[str] | None = None) -> int:
         file_stem = Path(args.output).stem
         if file_stem.startswith("核減明細_"):
             file_stem = file_stem[len("核減明細_"):]
-            
+
     try:
         stem = safe_filename(file_stem, "file_stem")
     except UnsafeIdentifierError as exc:

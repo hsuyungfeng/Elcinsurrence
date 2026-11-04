@@ -271,15 +271,7 @@ def diagnosis_matches(case_codes: tuple[str, ...], rule_codes: tuple[str, ...]) 
     return False
 
 
-def roc7_to_date(value: str | None) -> date | None:
-    """民國七碼日期（YYYMMDD，如 1120718）→ date；格式或日期不合法回 None。"""
-    text = (value or "").strip()
-    if not re.fullmatch(r"\d{7}", text):
-        return None
-    try:
-        return date(int(text[:3]) + 1911, int(text[3:5]), int(text[5:7]))
-    except ValueError:
-        return None
+from elc_audit_engine.services.date_utils import roc7_to_date  # noqa: E402,F401  (Phase 22-04 共用)
 
 
 def order_flags(order: OrderRecord) -> tuple[str, ...]:
@@ -461,13 +453,19 @@ def audit_case(
         case_id=case_id,
         batch=str(data.get("batch") or ""),
         case_seq=_str_or_none(data.get("case_seq")),
-        patient_id=_str_or_none(data.get("record_no")),
+        patient_id=(
+            _str_or_none(data.get("record_no"))
+            or _str_or_none(data.get("id_card"))
+            or _str_or_none(data.get("patient_id"))
+            or _str_or_none(data.get("id_number"))
+            or _str_or_none(data.get("d3"))
+        ),
         patient_name=_str_or_none(data.get("patient_name")),
         birth_date=_str_or_none(data.get("birth_date")),
         total_points=_str_or_none(data.get("total_points")),
         department=_str_or_none(data.get("clinic")),
         doctor_code=_str_or_none(data.get("doctor_code")),
-        visit_date=_str_or_none(data.get("visit_date")),
+        visit_date=_str_or_none(data.get("visit_date")) or _str_or_none(data.get("d9")),
         primary_diagnosis=_str_or_none(primary),
         secondary_diagnoses=secondary,
         findings=tuple(finding for _order, finding in ordered),

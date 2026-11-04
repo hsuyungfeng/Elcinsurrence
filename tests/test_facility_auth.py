@@ -1,7 +1,6 @@
 """測試機構代碼作為授權金鑰、院所設定檔存取與更新、以及停用 Email 之安全政策。"""
 
 import json
-from pathlib import Path
 import pytest
 
 from config import settings

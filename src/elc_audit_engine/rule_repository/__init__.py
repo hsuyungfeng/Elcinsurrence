@@ -116,5 +116,5 @@ def get_rule(code: str, db_path: str | None = None) -> models.RuleResult:
     except sqlite3.Error as exc:
         # 系統性故障：不降級為「查無」，改拋 RuleRepositoryError，讓呼叫端
         # 區分「DB 壞掉」與「此醫令真的沒有規則」（P0-2）。
-        warnings.warn(f"get_rule({code!r}) SQLite error: {exc}")
+        warnings.warn(f"get_rule({code!r}) SQLite error: {exc}", stacklevel=2)
         raise RuleRepositoryError(f"rule repository query failed for code {code!r}: {exc}") from exc

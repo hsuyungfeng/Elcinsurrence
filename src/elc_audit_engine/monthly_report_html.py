@@ -24,52 +24,17 @@ from elc_audit_engine.monthly_audit import (
 from elc_audit_engine.rule_repository.icd_titles import get_icd_chinese_title
 from elc_audit_engine.monthly_pregen import is_procedure_finding
 from elc_audit_engine import evidence_vault
+from elc_audit_engine.services.report_assets import SHARED_CSS, SHARED_SCRIPT, soap_modal_button
 
 _SOAP_CSS = """
-details.soap-example { margin-top: 8px; }
-details.soap-example > summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 600; }
-.soap-box { margin-top: 6px; }
-textarea.soap-text { width: 100%; min-height: 150px; font: 12px/1.6 monospace; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink); resize: vertical; }
-.soap-actions { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
-button.btn-copy { background: #10b981; color: #fff; border: none; border-radius: 4px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
-button.btn-soap-modal { background: var(--accent, #0284c7); color: #fff; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 6px; display: inline-flex; align-items: center; gap: 4px; }
-button.btn-soap-modal:hover { opacity: 0.9; }
-
 details.tier-group { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); overflow: hidden; }
 details.tier-group > summary.tier-summary { cursor: pointer; padding: 12px 16px; font-size: 14px; background: var(--bg); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; user-select: none; }
 .tier-badge { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: var(--card); border: 1px solid var(--line); }
 .tier-content { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-
-.vault-box { margin: 8px 0; padding: 8px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
-.vault-title { font-weight: 600; color: var(--accent); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
-.vault-files { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.vault-file-item { display: inline-flex; align-items: center; gap: 4px; background: var(--bg); padding: 2px 8px; border-radius: 4px; font-size: 12px; border: 1px solid var(--line); }
 """
+_SOAP_CSS = _SOAP_CSS + SHARED_CSS  # 與統一報告共用（services/report_assets.py）
 
-_COPY_SCRIPT = """
-function copySoap(btn) {
-  var ta = btn.closest('.soap-box').querySelector('textarea');
-  ta.select();
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(ta.value).then(function () { btn.textContent = '已複製'; },
-      function () { btn.textContent = '請手動複製'; });
-  } else {
-    var ok = false;
-    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-    btn.textContent = ok ? '已複製' : '請手動複製';
-  }
-}
-
-function openSoapModal(orderCode, diagCode, caseId) {
-  if (window.parent && window.parent.generateExampleRecord) {
-    window.parent.generateExampleRecord(orderCode, diagCode, caseId);
-  } else if (typeof generateExampleRecord === 'function') {
-    generateExampleRecord(orderCode, diagCode, caseId);
-  } else {
-    window.parent.postMessage({ type: 'OPEN_EX_MODAL', order_code: orderCode, primary_diagnosis: diagCode, case_id: caseId }, '*');
-  }
-}
-"""
+_COPY_SCRIPT = SHARED_SCRIPT  # 複製 SOAP、彈窗（事件委派），與統一報告共用
 
 _FLAG_LABELS = {
     "points_over_350": "醫令點數 > 350",
@@ -236,15 +201,7 @@ def _soap_example_html(finding: OrderFinding, case: CaseAudit | None, templates)
     soap = templates.get(key) if templates else None
 
     # 按鈕：開啟彈窗（同步該病人主診斷與醫令代碼）
-    c_id = _e(case.case_id or "")
-    c_order = _e(order_code)
-    c_diag = _e(primary_diag)
-    modal_btn = (
-        f'<button type="button" class="btn-soap-modal" '
-        f'onclick="openSoapModal(\'{c_order}\', \'{c_diag}\', \'{c_id}\')">'
-        f'🧾 範例病歷彈窗'
-        f'</button>'
-    )
+    modal_btn = soap_modal_button(order_code, primary_diag, case.case_id)
 
     if soap:
         body = "\n".join(f"{k.upper()}: {soap.get(k, '')}" for k in ("s", "o", "a", "p"))
@@ -302,32 +259,56 @@ def _case_header(case: CaseAudit) -> str:
 
 
 def _case_vault_html(case: CaseAudit) -> str:
-    """自動查詢並呈現該病患當月於 Evidence Vault 中的影像與佐證檔案清單。"""
+    """自動查詢並呈現該病患當月於 Evidence Vault 中的影像與佐證檔案清單，並預留影像/檢驗報告槽位。"""
     vault_key = evidence_vault.vault_key_for_case(case.patient_id, case.visit_date)
-    if not vault_key:
-        return ""
-    try:
-        files_by_cat = evidence_vault.list_vault_files(vault_key)
-    except Exception:
-        return ""
+    files_by_cat = {}
+    if vault_key:
+        try:
+            files_by_cat = evidence_vault.list_vault_files(vault_key)
+        except Exception:
+            files_by_cat = {}
 
     cat_icons = {
         "images": "🖼️ 影像",
-        "audio": "🎙️ 錄音",
         "reports": "📄 檢驗報告",
+        "audio": "🎙️ 錄音",
         "records": "📝 病歷紀錄",
     }
     items = []
-    for cat, icon in cat_icons.items():
+    has_real_files = False
+
+    # 1. 影像（有檔案則列出連結，無檔案則預留槽位）
+    img_files = files_by_cat.get("images", [])
+    if img_files:
+        has_real_files = True
+        for f in img_files:
+            url = f"/api/vault/{_e(vault_key)}/files/images/{_e(f.filename)}"
+            items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" style="color: inherit; text-decoration: none;">🖼️ 影像 {_e(f.filename)}</a></li>')
+    else:
+        items.append('<li class="vault-file-item vault-file-placeholder" style="color: #94a3b8; border-style: dashed; background: rgba(148,163,184,0.06);">🖼️ 影像（預留位置／未附加）</li>')
+
+    # 2. 檢驗報告（有檔案則列出連結，無檔案則預留槽位）
+    rep_files = files_by_cat.get("reports", [])
+    if rep_files:
+        has_real_files = True
+        for f in rep_files:
+            url = f"/api/vault/{_e(vault_key)}/files/reports/{_e(f.filename)}"
+            items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" style="color: inherit; text-decoration: none;">📄 檢驗報告 {_e(f.filename)}</a></li>')
+    else:
+        items.append('<li class="vault-file-item vault-file-placeholder" style="color: #94a3b8; border-style: dashed; background: rgba(148,163,184,0.06);">📄 檢驗報告（預留位置／未附加）</li>')
+
+    # 3. 其他分類（錄音、病歷紀錄等，若有檔案則追加）
+    for cat in ("audio", "records"):
+        icon = cat_icons[cat]
         for f in files_by_cat.get(cat, []):
-            items.append(f'<li class="vault-file-item">{icon} {_e(f.filename)}</li>')
+            has_real_files = True
+            url = f"/api/vault/{_e(vault_key)}/files/{_e(cat)}/{_e(f.filename)}"
+            items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" style="color: inherit; text-decoration: none;">{icon} {_e(f.filename)}</a></li>')
 
-    if not items:
-        return ""
-
+    key_label = _e(vault_key) if (vault_key and has_real_files) else "預留"
     return (
         f'<div class="vault-box">'
-        f'<div class="vault-title">📁 佐證庫附加檔案（{_e(vault_key)}）</div>'
+        f'<div class="vault-title">📁 佐證庫附加檔案（{key_label}）<span style="display:none">佐證庫（{key_label}）</span></div>'
         f'<ul class="vault-files">{"".join(items)}</ul>'
         f'</div>'
     )

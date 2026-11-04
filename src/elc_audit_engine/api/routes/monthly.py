@@ -15,15 +15,6 @@ from flask import Blueprint, Response, current_app, jsonify, request
 
 from config import settings
 from elc_audit_engine.case_store.monthly import ingest_monthly_declaration
-from elc_audit_engine.mailer import (
-    DEFAULT_FROM,
-    MailError,
-    build_report_email,
-    is_valid_email,
-    send_message,
-    smtp_config_from_env,
-    write_eml,
-)
 from elc_audit_engine.monthly_audit import audit_batch, report_view
 from elc_audit_engine.monthly_pregen import (
     STATUS_QUALITY_FAILED,

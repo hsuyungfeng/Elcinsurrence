@@ -12,7 +12,6 @@ from datetime import date
 import pytest
 
 from elc_audit_engine.record_aggregator import (
-    AggregationResult,
     LocalFileProvider,
     PatientRecordsNotFound,
     RecordProvider,

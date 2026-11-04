@@ -12,7 +12,6 @@ if _PROJECT_ROOT not in sys.path:
 
 from elc_audit_engine.safe_paths import safe_filename
 from elc_audit_engine.generators.evidence_packet import write_evidence_packet
-from config import settings
 
 def main(argv: list[str] | None = None) -> int:
     if argv is None:

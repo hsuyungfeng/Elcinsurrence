@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import BinaryIO
 
 from config import settings
+from elc_audit_engine.services.date_utils import ROC_OFFSET
 
 VAULT_KEY_RE = re.compile(r"[A-Z][0-9]{9}-[0-9]{4}")
 
@@ -82,7 +83,7 @@ def vault_key_for_case(record_no: object, visit_date: object) -> str | None:
     if iso:
         year, month = int(iso.group(1)), int(iso.group(2))
     elif roc:
-        year, month = int(roc.group(1)) + 1911, int(roc.group(2))
+        year, month = int(roc.group(1)) + ROC_OFFSET, int(roc.group(2))
     else:
         return None
     if not 1 <= month <= 12:

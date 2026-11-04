@@ -19,6 +19,9 @@ __pycache__/
 .venv/
 .env
 *.egg-info/
+.coverage
+htmlcov/
+graphify-out/
 
 # 執行期資料（可重新產生）
 data/db/*

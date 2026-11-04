@@ -34,8 +34,12 @@ AUDIT_EXEMPT_ENDPOINTS = frozenset({"misc.index", "misc.health", "static", "misc
 AUTH_EXEMPT_ENDPOINTS = AUDIT_EXEMPT_ENDPOINTS | frozenset({
     "sampling.audit_sampling_case",
     "sampling.import_sampling_cases",
+    "sampling.import_sampling_from_monthly",
+    "sampling.add_sampling_by_patient",
     "appeal.generate_appeal_draft",
     "appeal.import_appeal_cases",
+    "appeal.import_appeal_from_monthly",
+    "appeal.add_appeal_by_patient",
     "attachments.upload_appeal_attachment",
     "printing.generate_deduction_print",
     "printing.generate_evidence_packet_print",
@@ -117,6 +121,19 @@ def register_security(app: Flask) -> None:
             return jsonify({"status": "error", "message": "不允許的 Host"}), 400
         keys = current_app.config["ELC_API_KEYS"]
         presented_key = request.headers.get(API_KEY_HEADER)
+
+        # 測試階段免驗證政策（User Requirement: 目前測試階段先不須驗證）
+        if os.environ.get("DISABLE_AUTH") == "1" or current_app.config.get("DISABLE_AUTH"):
+            if presented_key:
+                try:
+                    g.caller_id = resolve_caller(presented_key, keys)
+                except Exception:
+                    g.caller_id = "tester"
+            else:
+                from elc_audit_engine.auth import get_facility_code
+                fac_code = get_facility_code()
+                g.caller_id = f"clinic_{fac_code}" if fac_code else "tester"
+            return None
         if request.endpoint in AUTH_EXEMPT_ENDPOINTS:
             # 免強制認證，但呼叫方帶了合法 key 時解析 caller_id，讓審計日誌不必然
             # 落成 anonymous（key 錯誤或缺失靜默忽略——這裡不強制擋）。

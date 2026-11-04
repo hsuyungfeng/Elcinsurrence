@@ -1,8 +1,6 @@
 import os
-import io
 from docx import Document
-from docx.shared import Cm, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Cm, RGBColor
 
 from elc_audit_engine.generators.evidence_packet.image_processor import process_and_scale_image
 
@@ -40,7 +38,7 @@ def build_evidence_packet_docx(
 
     # Section 1: Cover Page
     doc.add_heading("申復佐證包", level=0)
-    
+
     doc.add_heading("Section 1: Cover Page", level=1)
     # A-IN-03：封面實際呈現院所與統計欄位（原本已計算卻未使用）；缺值顯示「—」
     facility = facility or {}
@@ -101,7 +99,7 @@ def build_evidence_packet_docx(
     if attachment_records:
         doc.add_page_break()
         doc.add_heading("Appendix: Attachments", level=1)
-        
+
         for record in attachment_records:
             file_path = record.get("file_path")
             filename = record.get("filename") or (

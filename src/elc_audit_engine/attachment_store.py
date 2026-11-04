@@ -11,7 +11,6 @@ AttachmentIndexCorruptError（不當成「沒有附件」，A-CR-10）。
 
 import contextlib
 import json
-import mimetypes
 import os
 import sqlite3
 import uuid

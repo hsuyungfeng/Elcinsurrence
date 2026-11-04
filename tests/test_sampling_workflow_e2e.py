@@ -13,7 +13,7 @@ import pytest
 from PIL import Image
 
 from elc_audit_engine import attachment_store
-from elc_audit_engine.api.routes import sampling as sampling_routes
+from elc_audit_engine.services import sampling_service
 
 KEY = {"X-API-Key": "valid-key-123"}
 BATCH = "MONTHLY-202307"
@@ -168,7 +168,7 @@ def test_audit_llm_receives_evidence_context(client, api, monkeypatch):
         captured.update(kwargs)
         return {"status": "error"}
 
-    monkeypatch.setattr(sampling_routes, "generate_soap_advice", _fake_advice)
+    monkeypatch.setattr(sampling_service, "generate_soap_advice", _fake_advice)
 
     res = client.post(
         "/api/sampling/sample-batch",

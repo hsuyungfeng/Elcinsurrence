@@ -119,6 +119,14 @@ class PatientTimeline:
     source_provider: str = ""
     excluded_counts: dict[str, int] = field(default_factory=dict)
 
+    def history_lines(self, limit: int = 5) -> str:
+        """供 LLM 比對的病史摘要：就診紀錄依日期升冪，取前 limit 筆，每筆一行。"""
+        lines = []
+        for visit in sorted(self.visits, key=lambda r: r.date)[:limit]:
+            dx = "、".join(visit.diagnoses) or "診斷未填"
+            lines.append(f"- [{visit.date.isoformat()}] 就診（{visit.clinic or '科別未填'}）：{dx}")
+        return "\n".join(lines)
+
 
 @dataclass(frozen=True)
 class AggregationResult:

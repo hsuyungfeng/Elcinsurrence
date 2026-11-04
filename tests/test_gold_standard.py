@@ -13,9 +13,7 @@ import os
 import pytest
 
 from elc_audit_engine.comparator.models import (
-    VERDICT_PARTIAL,
     VERDICT_SUPPORTED,
-    VERDICT_UNSUPPORTED,
     Judgment,
 )
 from elc_audit_engine.eval import (

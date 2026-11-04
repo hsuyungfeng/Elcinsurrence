@@ -39,19 +39,19 @@ def test_deduction_print_mapping():
         "appeal_item_desc": "Not needed"
     }]
     facility = {"facility_name": "Test Clinic"}
-    
+
     header = build_deduction_header(records, facility)
     assert header["醫療院所名稱"] == "Test Clinic"
     assert header["費用年月"] == "112年10月"
     assert header["申請申報日期"] == "112年11月5日"
     assert header["核減件數"] == "1"
     assert header["總核減點數"] == "50"
-    
+
     rows, warnings = build_deduction_rows(records)
     assert len(rows) == 1
     assert "缺病患姓名" in warnings[0]
     assert "缺醫令名稱" in warnings[1]
-    
+
     row = rows[0]
     assert "****" in row["身分證號/出生日期"]
     assert "A12345****" in row["身分證號/出生日期"]
@@ -60,30 +60,28 @@ def test_deduction_print_mapping():
 
 def create_mock_odt(path: str):
     import zipfile
-    import hashlib
     content_xml = '<?xml version="1.0" encoding="UTF-8"?><office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:text><table:table><table:table-row><table:table-cell><text:p>{機構代碼}</text:p></table:table-cell></table:table-row><table:table-row><table:table-cell><text:p>{序號}</text:p></table:table-cell><table:table-cell><text:p>{姓名}</text:p></table:table-cell></table:table-row></table:table></office:text></office:body></office:document-content>'
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zout:
         zout.writestr("mimetype", "application/vnd.oasis.opendocument.text", compress_type=zipfile.ZIP_STORED)
         zout.writestr("content.xml", content_xml.encode("utf-8"))
 
 def test_deduction_print_odt(tmp_path):
-    import xml.etree.ElementTree as ET
     from elc_audit_engine.generators.deduction_print.odt_fill import fill_template
-    
+
     base_odt = str(tmp_path / "base.odt")
     create_mock_odt(base_odt)
-        
+
     out_odt = str(tmp_path / "out.odt")
     header = {"機構代碼": "123", "醫療院所名稱": "Test", "核減件數": "2"}
     rows = [{"序號": "1", "姓名": "A"}, {"序號": "2", "姓名": "B"}]
-    
+
     fill_template(base_odt, header, rows, out_odt)
-    
+
     assert os.path.exists(out_odt)
     import zipfile
     with zipfile.ZipFile(out_odt, "r") as zin:
         content = zin.read("content.xml").decode("utf-8")
-        
+
     assert "123" in content
     assert ">A<" in content
     assert ">B<" in content
@@ -97,23 +95,23 @@ requires_soffice = pytest.mark.skipif(
 @requires_soffice
 def test_deduction_print_e2e(tmp_path):
     from elc_audit_engine.generators.deduction_print import write_deduction_print
-    
+
     real_odt = os.path.join(
         os.path.dirname(__file__),
         "../officialdocument/電子申復文件格式/30396_1_1050105-1門診診療費用申復清單_print_base.odt",
     )
     if not os.path.isfile(real_odt):
         pytest.skip("Real template missing")
-        
+
     base_odt = str(tmp_path / "base_e2e.odt")
     import zipfile
     with zipfile.ZipFile(real_odt, "r") as zin:
         infos = zin.infolist()
         content = zin.read("content.xml").decode("utf-8")
-    
+
     # 替換原模板中的文字成為 placeholders，使用短字眼避免被 tag 切斷
     content = content.replace("數量", "{案件分類/病歷號}").replace("金額", "{序號}").replace("代號字碼", "{機構代碼}").replace("醫療院所名稱", "{醫療院所名稱}")
-    
+
     with zipfile.ZipFile(real_odt, "r") as zin:
         with zipfile.ZipFile(base_odt, "w", zipfile.ZIP_DEFLATED) as zout:
             zout.writestr("mimetype", "application/vnd.oasis.opendocument.text", compress_type=zipfile.ZIP_STORED)
@@ -123,7 +121,7 @@ def test_deduction_print_e2e(tmp_path):
                     zout.writestr("content.xml", content.encode("utf-8"))
                 else:
                     zout.writestr(info.filename, zin.read(info.filename))
-    
+
     # We also need a sidecar sha256 for base_e2e.odt so template verification passes
     import hashlib
     digest = hashlib.sha256()
@@ -132,14 +130,14 @@ def test_deduction_print_e2e(tmp_path):
             digest.update(chunk)
     with open(str(tmp_path / "base_e2e.sha256"), "w", encoding="utf-8") as f:
         f.write(digest.hexdigest())
-    
+
     records = [{
         "case_class": "01",
         "chart_no": "A001",
         "patient_name": "TestE2E"
     }]
     facility = {"facility_name": "ClinicE2E"}
-    
+
     out_dir = tmp_path / "out"
     pdf_path, warnings = write_deduction_print(
         output_dir=out_dir,
@@ -149,10 +147,10 @@ def test_deduction_print_e2e(tmp_path):
         template_odt_path=base_odt,
         soffice_timeout=30
     )
-    
+
     assert os.path.exists(pdf_path)
     assert pdf_path.endswith("核減明細_test1.pdf")
-    
+
     import pypdf
     reader = pypdf.PdfReader(pdf_path)
     assert len(reader.pages) >= 1
@@ -162,33 +160,33 @@ def test_deduction_print_e2e(tmp_path):
 
 def test_deduction_print_security(tmp_path):
     from elc_audit_engine.generators.deduction_print.odt_fill import fill_template
-    
+
     base_odt = str(tmp_path / "base_sec.odt")
     create_mock_odt(base_odt)
-        
+
     out_odt = str(tmp_path / "out_sec.odt")
     header = {"機構代碼": "123"}
     rows = [{"序號": "1", "姓名": "<script>alert(1)</script>&\"'"}]
-    
+
     fill_template(base_odt, header, rows, out_odt)
-    
+
     import zipfile
     with zipfile.ZipFile(out_odt, "r") as zin:
         content = zin.read("content.xml").decode("utf-8")
-        
+
     # The literal characters should be escaped in XML
     assert "<script>" not in content
     assert "&lt;script&gt;" in content
 
 def test_api_deduction_print(monkeypatch, make_api_app):
     client = make_api_app().test_client()
-    
+
     def mock_write(*args, **kwargs):
         return "/tmp/mocked.pdf", ["Mock warning"]
-        
+
     import elc_audit_engine.generators.deduction_print as dp
     monkeypatch.setattr(dp, "write_deduction_print", mock_write)
-    
+
     response = client.post(
         "/api/deduction/print",
         json={"records": [{"order_code": "1234"}]}

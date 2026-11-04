@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import copy
-import os
 import re
 import xml.etree.ElementTree as ET
 
@@ -74,7 +73,7 @@ def fill_template(
     tables = body.findall(_TABLE)
     if len(tables) < 1:
         raise DeductionPrintFillError("找不到表格", stage="locate_table")
-        
+
     # Replace header placeholders globally
     for table in tables:
         for row in table.findall(_TABLE_ROW):
@@ -86,30 +85,28 @@ def fill_template(
                         new_val = text.replace(placeholder, header_fields.get(key, ""))
                         set_cell_text(cell, new_val)
                         text = new_val
-    
+
     # 尋找包含 {序號} 的資料列作為 prototype
-    data_row_idx = -1
     prototype_row = None
     target_table = None
-    
+
     for table in tables:
         all_rows = table.findall(_TABLE_ROW)
-        for idx, row in enumerate(all_rows):
+        for row in all_rows:
             text = "".join(row.itertext())
             if "{序號}" in text:
-                data_row_idx = idx
                 prototype_row = row
                 target_table = table
                 break
         if prototype_row is not None:
             break
-            
+
     if prototype_row is None:
         raise DeductionPrintFillError("找不到包含 {序號} 的 prototype row", stage="locate_prototype")
-        
+
     main_table = target_table
     all_rows = main_table.findall(_TABLE_ROW)
-    
+
     # Identify which cell index maps to which ROW_KEY
     cell_mapping = {}
     proto_cells = prototype_row.findall(_TABLE_CELL)
@@ -118,11 +115,11 @@ def fill_template(
         for key in ROW_KEYS:
             if f"{{{key}}}" in text:
                 cell_mapping[key] = c_idx
-                
+
     # Now generate new rows
     insert_idx = list(main_table).index(prototype_row)
     main_table.remove(prototype_row)
-    
+
     for row_data in rows:
         new_row = copy.deepcopy(prototype_row)
         new_cells = new_row.findall(_TABLE_CELL)
@@ -133,7 +130,7 @@ def fill_template(
             set_cell_text(new_cells[c_idx], str(val))
         main_table.insert(insert_idx, new_row)
         insert_idx += 1
-        
+
     try:
         serialized = ET.tostring(tree, encoding="UTF-8", xml_declaration=True)
     except (ValueError, TypeError) as exc:

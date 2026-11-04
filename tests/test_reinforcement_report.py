@@ -12,7 +12,6 @@ from datetime import date
 from elc_audit_engine.comparator.models import (
     SUPPORT_NONE,
     SUPPORT_SUFFICIENT,
-    SUPPORT_WEAK,
     VERDICT_MANUAL,
     VERDICT_SUPPORTED,
     VERDICT_UNSUPPORTED,

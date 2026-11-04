@@ -1,0 +1,30 @@
+# Phase 22-03（P1-14）：程式碼品質與測試的持續整合流程。
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/*"]
+  pull_request:
+    branches: [main, "feat/*"]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    env:
+      # 與 pyproject.toml 的 requires-python 對齊，避免使用 runner 預設 Python。
+      UV_PYTHON: "3.12"
+    steps:
+      - name: 取得原始碼
+        uses: actions/checkout@v4
+
+      - name: 安裝 uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: 依 uv.lock 安裝相依套件（鎖定版本，不得自動更新 lock）
+        run: uv sync --locked
+
+      - name: 程式碼品質檢查（ruff）
+        run: uv run ruff check .
+
+      - name: 執行測試（pytest，含覆蓋率）
+        run: uv run pytest tests/

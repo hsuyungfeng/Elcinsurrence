@@ -278,7 +278,7 @@ def fill_template(
         base = copy_idx * _TABLES_PER_COPY
         head_table = tables[base]
         main_table = tables[base + 1]
-        note_table = tables[base + 2]
+        _note_table = tables[base + 2]  # 保留索引檢查（不足三張表即拋 IndexError）
 
         # 定位「標題 p」（頭表前一個兄弟）與「空 p」（頭表後一個兄弟）。
         children = list(body)
@@ -347,7 +347,7 @@ def fill_template(
                         zout.writestr(info.filename, zin.read(info.filename))
     except OSError as exc:
         raise AppealPrintFillError(
-            f"重打包 ODT 失敗（階段：repack）", stage="repack"
+            "重打包 ODT 失敗（階段：repack）", stage="repack"
         ) from exc
 
     return output_odt_path

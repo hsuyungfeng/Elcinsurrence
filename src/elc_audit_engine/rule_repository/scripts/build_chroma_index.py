@@ -20,7 +20,7 @@ from elc_audit_engine.rule_repository.embeddings import chroma_store
 
 def main() -> None:
     docx_trees_path = os.path.join(settings.DB_DIR, "docx_trees.json")
-    
+
     # Attempt to calculate source_version if data files exist (P1-4)
     # 來源 CSV 路徑沿用 build_sqlite 的 glob 解析（settings 並無 *_RULES_CSV 常數，
     # 原寫法一執行即 AttributeError）。任一來源缺檔時不計版本，維持 non-blocking。

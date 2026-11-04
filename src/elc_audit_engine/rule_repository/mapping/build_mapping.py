@@ -415,7 +415,7 @@ def build_rule_mapping(
 if __name__ == "__main__":
     import sys
 
-    from config.settings import DB_DIR, RULE_SOURCE_DIR
+    from config.settings import DB_DIR
     from elc_audit_engine.rule_repository.scripts.build_sqlite import (
         _resolve_drug_csv_path,
         _resolve_payment_csv_path,

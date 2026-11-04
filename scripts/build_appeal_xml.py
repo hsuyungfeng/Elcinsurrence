@@ -49,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if not isinstance(appeal_json, dict):
-        print(f"錯誤：JSON 內容需為物件 (appeal_{{流水號}}.json 格式)", file=sys.stderr)
+        print("錯誤：JSON 內容需為物件 (appeal_{流水號}.json 格式)", file=sys.stderr)
         return 1
 
     try:

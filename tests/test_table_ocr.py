@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from elc_audit_engine.ingest.table_ocr import (
     parse_image_tables,

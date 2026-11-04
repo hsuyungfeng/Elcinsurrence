@@ -9,7 +9,6 @@ import io
 import smtplib
 import zipfile
 from email.message import EmailMessage
-from pathlib import Path
 from typing import ClassVar
 
 import pytest

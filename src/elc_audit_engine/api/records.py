@@ -10,15 +10,11 @@ from elc_audit_engine.case_store import CaseNotFoundError, CaseStore
 from elc_audit_engine.record_aggregator import LocalFileProvider, PatientTimeline, build_timeline
 from elc_audit_engine.rule_repository.loaders.dates import parse_flexible_date
 from elc_audit_engine.safe_paths import UnsafeIdentifierError
+from elc_audit_engine.services.record_policy import RECORDS_DEGRADED_REASONS, degraded_reason  # noqa: F401
 
 # records_degraded 原因文案（固定中文模板，不含 RECORDS_DIR 路徑／病歷號，
 # T-1112-01）。records_source 四態：ok（實查成功）／absent（已查詢、病患缺席，
 # C5 降級）／unconfigured（病歷來源未設定）／no_record_no（請求未帶病歷號）。
-RECORDS_DEGRADED_REASONS = {
-    "unconfigured": "病歷來源未設定（病歷目錄不存在）",
-    "no_record_no": "請求未提供病歷號",
-    "absent": "查無此病患病歷檔案",
-}
 
 
 def records_provider() -> LocalFileProvider | None:
@@ -70,5 +66,3 @@ def resolve_records_source(
     return None, "unconfigured"
 
 
-def degraded_reason(records_source: str, degraded: bool) -> str | None:
-    return RECORDS_DEGRADED_REASONS.get(records_source) if degraded else None

@@ -22,7 +22,7 @@ def render_deduction_print(
     """將核減資料注入 ODT 並回傳位元組內容與警告。"""
     header = build_deduction_header(records, facility)
     rows, warnings = build_deduction_rows(records, submission=submission)
-    
+
     with tempfile.TemporaryDirectory(prefix="elc_deduction_print_") as tmp:
         filled_path = os.path.join(tmp, "filled.odt")
         fill_template(template_odt_path, header, rows, filled_path)

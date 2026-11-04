@@ -1,7 +1,5 @@
 import pytest
 import io
-import os
-from unittest.mock import patch, MagicMock
 
 # The module imports will be used for testing
 try:
@@ -51,11 +49,10 @@ def attachment_records():
 
 def test_image_processing_valid(tmp_path):
     from PIL import Image
-    import io
     img_path = tmp_path / "valid.jpg"
     img = Image.new('RGB', (100, 100), color = 'red')
     img.save(img_path)
-    
+
     buf, w, h = process_and_scale_image(str(img_path))
     assert isinstance(buf, io.BytesIO)
     assert w > 0
@@ -64,7 +61,7 @@ def test_image_processing_valid(tmp_path):
 def test_image_processing_corrupt(tmp_path):
     img_path = tmp_path / "corrupt.jpg"
     img_path.write_bytes(b"not an image")
-    
+
     with pytest.raises(Exception):
         process_and_scale_image(str(img_path))
 

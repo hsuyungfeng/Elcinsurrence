@@ -13,7 +13,6 @@ import zipfile
 from typing import BinaryIO, Literal
 
 from elc_audit_engine.ingest.media import MediaExtractError
-from elc_audit_engine.parsers.submission_xml import SubmissionXmlError
 
 
 class ZipExtractError(MediaExtractError):

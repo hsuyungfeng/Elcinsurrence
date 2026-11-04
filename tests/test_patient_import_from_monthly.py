@@ -1,7 +1,6 @@
 """測試當月申報跨模組載入、依病患資訊鍵入加入案件、以及院所設定必填驗證。"""
 
 import json
-from pathlib import Path
 import pytest
 
 from config import settings

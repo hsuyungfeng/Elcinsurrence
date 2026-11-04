@@ -313,12 +313,12 @@ def test_sampling_import_ocr_no_result(api, monkeypatch):
     """OCR 無可識別醫令代碼 → 400 + 誠實訊息，不覆蓋清單。"""
     client, _ = api
     # 路由模組以 from-import 直接引用 extract_text，需替身路由命名空間的符號。
-    from elc_audit_engine.api.routes import sampling as sampling_routes
+    from elc_audit_engine.services import sampling_service
 
     def fake_extract(path, *, media_type=None):
         return "純文字，沒有醫令代碼", "tesseract"
 
-    monkeypatch.setattr(sampling_routes, "extract_text", fake_extract)
+    monkeypatch.setattr(sampling_service, "extract_text", fake_extract)
     r = client.post(
         "/api/sampling/import",
         data={"file": (io.BytesIO(b"\xff\xd8\xff\xe0"), "scan.jpg")},

@@ -32,6 +32,8 @@
 
 from __future__ import annotations
 
+from elc_audit_engine.services.date_utils import roc_date_text, roc_year_month
+
 from typing import Any
 
 # 主表資料列 14 個鍵（順序＝官方欄位順序）。
@@ -75,24 +77,10 @@ def _str_or_empty(value: Any) -> str:
 
 
 def _fmt_roc_date_iso(iso: str) -> str:
-    """ISO `YYYY-MM-DD` → 民國 `YYY年M月D日`（模板「年月日」空欄語意）。"""
-    parts = iso.split("-")
-    if len(parts) != 3:
-        return iso  # 非 ISO 原樣照印（誠實降級，不猜測）
-    year, month, day = parts
-    if not (year.isdigit() and month.isdigit() and day.isdigit()):
-        return iso
-    return f"{int(year) - _ROC_OFFSET}年{int(month)}月{int(day)}日"
-
+    return roc_date_text(iso)
 
 def _fmt_roc_year_month(yyyymm: str) -> str:
-    """`YYYYMM` → 民國 `YYY年M月`（原申報日期備援，無日）。"""
-    if len(yyyymm) != 6 or not yyyymm.isdigit():
-        return yyyymm
-    year = int(yyyymm[:4])
-    month = int(yyyymm[4:6])
-    return f"{year - _ROC_OFFSET}年{month}月"
-
+    return roc_year_month(yyyymm)
 
 def _find_order_by_seq(submission: dict | None, order_seq: str | None) -> dict | None:
     """在 submission.orders 中依 `seq`（醫令序）找對應醫令；找不到回 None。"""

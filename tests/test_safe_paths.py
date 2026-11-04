@@ -8,7 +8,6 @@ import os
 import pytest
 
 from elc_audit_engine.comparator.models import CaseComparisonResult
-from elc_audit_engine.generators.appeal import write_appeal
 from elc_audit_engine.generators.reinforcement_report import write_report
 from elc_audit_engine.record_aggregator.providers import LocalFileProvider
 from elc_audit_engine.safe_paths import UnsafeIdentifierError, safe_filename

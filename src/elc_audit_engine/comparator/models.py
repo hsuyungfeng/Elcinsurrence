@@ -5,7 +5,7 @@ Phase 5 把「醫令↔規則↔病歷」三方比對成逐檢核項判定（C1�
 （病歷補強報告）的唯一輸入。
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # 判定結果（C1）：支持／部分支持／無記載／待人工（LLM 失敗降級，C5）。
 VERDICT_SUPPORTED = "支持"

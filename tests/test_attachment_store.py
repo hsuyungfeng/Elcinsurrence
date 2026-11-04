@@ -9,7 +9,6 @@ from elc_audit_engine.safe_paths import UnsafeIdentifierError
 def test_save_attachment_valid_png_jpeg_pdf_heic(tmp_path, monkeypatch):
     """Test saving valid attachments across supported formats."""
     monkeypatch.setattr(settings, "ATTACHMENTS_DIR", str(tmp_path))
-    from elc_audit_engine import attachment_store
     from elc_audit_engine.attachment_store import save_attachment, list_attachments, has_attachment
     import io
     from PIL import Image

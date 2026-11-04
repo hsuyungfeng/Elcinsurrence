@@ -34,7 +34,7 @@ def verify_template_hash(template_path: str, expected_sha256: str | None) -> Non
         raise FileNotFoundError(f"Template not found: {template_path}")
     if expected_sha256 is None:
         return
-    
+
     actual_hash = _sha256_file(template_path)
     if actual_hash.lower() != expected_sha256.strip().lower():
         raise ValueError("核減明細模板 sha256 不符，可能已被竄改（階段：verify_template_hash）")

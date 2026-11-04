@@ -27,7 +27,6 @@ from elc_audit_engine.generators import STATUS_ADOPT, STATUS_ADOPT_EDITED
 from elc_audit_engine.parsers.models import DeductionRecord, OrderRecord, SOAPDocument, SubmissionCase
 from elc_audit_engine.pipeline import run_case_pipeline, run_presubmission_check
 from elc_audit_engine.record_aggregator.models import (
-    ImagingRecord,
     LabRecord,
     PatientTimeline,
     VisitRecord,

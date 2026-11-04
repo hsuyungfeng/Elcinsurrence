@@ -210,11 +210,11 @@ def test_correct_key_get_sampling_cases_returns_200(app_client):
 
 def test_no_header_post_sampling_audit_calls_engine(app_client, monkeypatch):
     """免強制認證後，無 header 的請求仍應正常呼叫引擎（不再被攔在 401）。"""
-    from elc_audit_engine.api.routes import sampling as sampling_routes
+    from elc_audit_engine.services import sampling_service
 
     calls = []
     monkeypatch.setattr(
-        sampling_routes, "run_presubmission_check", lambda *a, **k: calls.append((a, k)) or None
+        sampling_service, "run_presubmission_check", lambda *a, **k: calls.append((a, k)) or None
     )
     r = app_client.post("/api/sampling/audit", json={"order_code": "14050B"})
     assert r.status_code != 401
@@ -272,7 +272,7 @@ def test_audit_log_records_correct_caller_id(app_client, tmp_path, monkeypatch):
 
 def test_audit_log_entry_excludes_soap_content(app_client, tmp_path, monkeypatch):
     from elc_audit_engine import audit_log
-    from elc_audit_engine.api.routes import sampling as sampling_routes
+    from elc_audit_engine.services import sampling_service
 
     log_path = str(tmp_path / "access.log")
     real_record_access = audit_log.record_access
@@ -284,7 +284,7 @@ def test_audit_log_entry_excludes_soap_content(app_client, tmp_path, monkeypatch
 
     monkeypatch.setattr(audit_log, "record_access", fake_record_access)
     monkeypatch.setattr(
-        sampling_routes,
+        sampling_service,
         "run_presubmission_check",
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("engine not needed for this test")),
     )

@@ -12,10 +12,9 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
-from typing import Any
 
+from elc_audit_engine.services.date_utils import ROC_OFFSET
 from elc_audit_engine.case_store.store import CaseStore
 from elc_audit_engine.ingest.sampling import SamplingCaseRecord
 from elc_audit_engine.rule_repository import get_rule
@@ -54,7 +53,7 @@ def normalize_date_variants(raw_date: str) -> set[str]:
     if len(clean) == 8 and clean[:4].isdigit():
         try:
             year = int(clean[:4])
-            roc_year = year - 1911
+            roc_year = year - ROC_OFFSET
             m_d = clean[4:]
             variants.add(f"{roc_year:03d}{m_d}")
             variants.add(f"{roc_year}{m_d}")
@@ -64,7 +63,7 @@ def normalize_date_variants(raw_date: str) -> set[str]:
     elif len(clean) in (6, 7) and clean.isdigit():
         try:
             roc_year = int(clean[:-4])
-            ce_year = roc_year + 1911
+            ce_year = roc_year + ROC_OFFSET
             m_d = clean[-4:]
             variants.add(f"{ce_year:04d}{m_d}")
             variants.add(f"{roc_year:03d}{m_d}")

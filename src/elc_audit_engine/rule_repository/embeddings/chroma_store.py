@@ -145,7 +145,7 @@ def build_chroma_collection(
                 client.delete_collection(staging_name)
             except Exception:  # noqa: BLE001 - staging 可能尚未建立
                 pass
-        warnings.warn(f"ChromaDB ingestion skipped (non-blocking, D-09): {e}")
+        warnings.warn(f"ChromaDB ingestion skipped (non-blocking, D-09): {e}", stacklevel=2)
         return {"status": "skipped", "chunks_ingested": 0, "reason": str(e)}
 
     return {"status": "ok", "chunks_ingested": len(all_chunks), "reason": None}

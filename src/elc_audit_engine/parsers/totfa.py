@@ -28,6 +28,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import PurePosixPath
 from typing import BinaryIO
 
+from elc_audit_engine.services.date_utils import ROC_OFFSET
 from elc_audit_engine.parsers.models import (
     OrderRecord,
     SubmissionCase,
@@ -114,7 +115,7 @@ def batch_name_from_header(header: dict[str, str]) -> str:
     match = _ROC_YEAR_MONTH_RE.match(t3)
     if match is None:
         raise SubmissionXmlError(f"tdata.t3（費用年月）無法解析：{t3!r}")
-    year = int(match.group(1)) + 1911
+    year = int(match.group(1)) + ROC_OFFSET
     month = int(match.group(2))
     if not 1 <= month <= 12:
         raise SubmissionXmlError(f"tdata.t3（費用年月）月份超出範圍：{t3!r}")

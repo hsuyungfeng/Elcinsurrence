@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 from flask import Blueprint, Response, current_app, jsonify, request
 
@@ -48,6 +49,7 @@ from elc_audit_engine.unified_review_report import (
 from ..cases import persist_cases, to_appeal_case
 from ..context import caller_id, case_store
 from ..demo_data import DEMO_APPEAL_CASES
+from ..batch_limits import read_batch, refuse_if_truncated
 from ..errors import ApiError
 from ..records import degraded_reason, records_provider, resolve_records_source, resolve_visit_date
 from ..uploads import import_error_message, save_upload
@@ -107,6 +109,8 @@ def generate_appeal_draft():
     record_no = clean_str(data, "record_no")
     # 透傳 order_seq（欄 10 醫令序號）→ render_appeal_json p1_order_seq。
     order_seq = clean_str(data, "order_seq")
+    # 醫令名稱（選填）：供 LLM 比對提示；缺省時以醫令代碼代替。
+    order_name = clean_str(data, "order_name")
 
     is_appealing = data.get("is_appealing", True)
     if not isinstance(is_appealing, bool):
@@ -164,25 +168,20 @@ def generate_appeal_draft():
     state_transition = _advance_to_appealed(case_id, draft)
 
     # 整合 Qwen3.8-27B 智慧比對：比對原始 SOAP 與雲端病歷/多源證據，產出 SOAP 補強與申復理由建議
-    soap_advice = None
-    try:
-        history_desc = ""
-        if timeline and timeline.events:
-            history_desc = "\n".join(
-                f"- [{e.date}] {e.category}: {e.summary}" for e in timeline.events[:5]
-            )
-        if evidence:
-            ev_desc = "\n".join(f"- [證據] {e}" for e in evidence)
-            history_desc = f"{history_desc}\n{ev_desc}".strip()
-        soap_advice = generate_soap_advice(
-            order_code=order_code,
-            order_name=order_name or order_code,
-            soap_text=deduction_reason or "",
-            patient_history=history_desc,
-            rule_text=rule_text or "",
-        )
-    except Exception as exc:
-        current_app.logger.warning("LLM SOAP appeal advice generation failed: %s", exc)
+    # generate_soap_advice 內部已吸收 LLM 連線／逾時錯誤（回傳 status=error）。
+    # 此處不再以 except Exception 包住：先前 order_name 未定義的 NameError 即被此處靜默吞掉，
+    # 導致 soap_advice 恆為 None（P0-7／P1-11）。
+    history_desc = timeline.history_lines() if timeline else ""
+    if evidence:
+        ev_desc = "\n".join(f"- [證據] {e}" for e in evidence)
+        history_desc = f"{history_desc}\n{ev_desc}".strip()
+    soap_advice = generate_soap_advice(
+        order_code=order_code,
+        order_name=order_name or order_code,
+        soap_text=deduction_reason or "",
+        patient_history=history_desc,
+        rule_text=rule_text or "",
+    )
 
     # W4 契約橋（D-03）：回應主體為 render_appeal_json 標準契約（單一契約）。
     payload = json.loads(render_appeal_json(draft))
@@ -229,7 +228,7 @@ def sample_appeal_from_stage2():
         raise ApiError(f"count 須介於 1 至 {MAX_COUNT}")
 
     store = case_store()
-    sources = store.list_all(kind="sampling", limit=1000)
+    sources, source_meta = read_batch(store, "sampling")
     if not sources:
         raise ApiError("尚無第 2 階抽樣案件可供連動", status=404)
     try:
@@ -237,7 +236,8 @@ def sample_appeal_from_stage2():
     except RuleRepositoryError as exc:
         current_app.logger.error("rule repository failure during stage2 linkage: %s", exc)
         raise ApiError("規則庫暫時無法查詢，請稍後再試或聯繫系統管理員", status=503)
-    return jsonify({"status": "success", **result})
+    # source_window 揭露連動來源是否因 1000 筆上限而被截斷（P1-10）。
+    return jsonify({"status": "success", **result, "source_window": source_meta})
 
 
 @bp.route("/api/appeal/import-from-monthly", methods=["POST"])
@@ -287,7 +287,21 @@ def _stage3_view(store, record, *, with_thumbnails: bool):
     case_id = record.case_id
     payload = dict(record.payload or {})
 
-    vault_key = evidence_vault.vault_key_for_case(payload.get("record_no"), payload.get("visit_date"))
+    id_no = (
+        payload.get("record_no")
+        or payload.get("id_number")
+        or payload.get("id_card")
+        or payload.get("patient_id")
+        or (payload.get("monthly_source") or {}).get("id_card")
+        or (payload.get("monthly_source") or {}).get("record_no")
+        or (payload.get("monthly_source") or {}).get("d3")
+    )
+    visit_date = (
+        payload.get("visit_date")
+        or (payload.get("monthly_source") or {}).get("visit_date")
+        or (payload.get("monthly_source") or {}).get("d9")
+    )
+    vault_key = evidence_vault.vault_key_for_case(id_no, visit_date)
     vault_listing = None
     thumbnails: dict[str, str] = {}
     if vault_key is not None:
@@ -317,8 +331,9 @@ def _stage3_view(store, record, *, with_thumbnails: bool):
                     rules_list.append(RuleBlock(label="給付規定（payment_text）", text=r.payment_text, is_payment_text=True))
                 if r.article_full_text:
                     rules_list.append(RuleBlock(label="條文全文（article_full_text）", text=r.article_full_text))
-        except Exception:
-            pass
+        except RuleRepositoryError as exc:
+            # 規則庫故障僅降級為無規則文字並留下警告；其他例外照常拋出（P1-11）。
+            current_app.logger.warning("stage3 view: rule lookup degraded: %s", exc)
 
     return build_review_case_view(
         3,
@@ -350,9 +365,10 @@ def appeal_case_preview_html(case_id: str):
 def appeal_batch_report():
     """全部第 3 階申復案件的聚合預審報告。"""
     store = case_store()
-    records = list(store.list_all(kind="appeal", limit=1000))
+    records, meta = read_batch(store, "appeal")
     if not records:
         raise ApiError("尚無申復案件可產生報告", status=404)
+    refuse_if_truncated(meta, what="第 3 階申復案件")
     views = [_stage3_view(store, record, with_thumbnails=False) for record in records]
     batches = sorted({str((r.payload or {}).get("batch") or "") for r in records} - {""})
     html = render_aggregated_review_html(
@@ -408,8 +424,9 @@ def export_single_appeal_json(case_id: str):
         try:
             data = json.loads(appeal_json_str)
             return jsonify(data)
-        except Exception:
-            pass
+        except json.JSONDecodeError:
+            # 快取的 appeal.json 損毀時，退回案件 payload。
+            current_app.logger.warning("cached appeal.json for %s is not valid JSON", case_id)
 
     return jsonify(dict(record.payload or {}))
 
@@ -420,9 +437,10 @@ def export_appeal_batch_xml():
 
     無申復案件 404；欄位缺漏、字數超限或 Big5 無法編碼 422（整批拒絕，不產生殘缺檔）。
     """
-    records = list(case_store().list_all(kind="appeal", limit=1000))
+    records, meta = read_batch(case_store(), "appeal")
     if not records:
         raise ApiError("尚無申復案件可導出", status=404)
+    refuse_if_truncated(meta, what="第 3 階申復案件")
     try:
         root = build_batch_appeal_xml([appeal_xml_case(r.payload or {}) for r in records])
         xml_bytes = appeal_root_to_big5_bytes(root)
@@ -460,18 +478,18 @@ def import_appeal_cases():
                     tp = 0
                     try:
                         tp = int(c.raw.get("d39") or 0)
-                    except:
+                    except (ValueError, TypeError):  # 非數字者以 0 計，不中斷匯入
                         pass
                     for o in c.orders:
                         pts = 0
                         try:
                             pts = int(o.points or 0)
-                        except:
+                        except (ValueError, TypeError):  # 非數字者以 0 計
                             pass
                         price = 0.0
                         try:
                             price = float(o.unit_price or 0.0)
-                        except:
+                        except (ValueError, TypeError):  # 非數字者以 0 計
                             pass
                         if (tp > 1000 and (pts >= 350 or price >= 5.0)) or len(records) < 50:
                             if c.case_seq not in seen_cases and len(records) < 50:

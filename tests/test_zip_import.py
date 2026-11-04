@@ -2,7 +2,6 @@ import io
 import zipfile
 import pytest
 from elc_audit_engine.api.app import create_app
-from elc_audit_engine.case_store import CaseStore
 
 @pytest.fixture
 def app_client(tmp_path):

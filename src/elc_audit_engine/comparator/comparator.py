@@ -21,7 +21,6 @@ from elc_audit_engine.parsers.models import SOAPDocument, SubmissionCase
 from elc_audit_engine.record_aggregator.models import PatientTimeline
 from elc_audit_engine.rule_repository import get_rule, is_effective_on
 from elc_audit_engine.rule_repository.loaders.dates import parse_flexible_date
-from elc_audit_engine.rule_repository.errors import RuleRepositoryError
 from elc_audit_engine.rule_repository.models import RuleResult
 
 from .evidence import build_evidence_blocks

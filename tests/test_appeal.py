@@ -413,7 +413,7 @@ def test_json_fields_and_attachment():
 
 def test_per_order_independent():
     draft1 = _draft()
-    draft2 = _draft(
+    _draft(
         evidence=[{"text": "另一筆敘述", "rule_location": None}],
         claimed_points=150,
     )
@@ -438,7 +438,7 @@ def test_per_order_independent():
 def test_write_appeal_default_naming(tmp_path):
     draft = _draft()
     md_path, json_path = write_appeal(str(tmp_path), "18", draft)
-    assert md_path.endswith(f"申復草稿_18.md")
+    assert md_path.endswith("申復草稿_18.md")
     assert json_path.endswith("appeal_18.json")
     assert md_path == str(tmp_path / "申復草稿_18.md")
     assert json_path == str(tmp_path / "appeal_18.json")

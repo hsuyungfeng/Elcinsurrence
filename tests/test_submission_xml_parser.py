@@ -6,7 +6,6 @@ D-08 高出現率欄位警告、D-09 不查規則庫、真實檔回放（選用 
 """
 
 import os
-import re
 
 import pytest
 
