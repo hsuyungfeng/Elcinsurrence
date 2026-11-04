@@ -46,6 +46,8 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
   - 22-02: 批次讀取 1000 筆截斷揭露、規則查詢例外不吞與邊界安全（P1-10, P1-11, P1-12）
   - 22-03: 工具鏈與 CI 流程健全化（pyproject 依賴補全、ruff、pytest-cov 與 GitHub Actions CI）（P1-13, P1-14）
   - 22-04: 模組拆分與專屬 Service 層重構（拆分 unified_review_report / routes/sampling，抽取日期代碼共用函式）（P2-1, P2-2）
+- [x] Phase 23: 工作台視覺佈局極大化與沉浸式操作優化（1/1 plans）— completed 2026-11-04
+  - [x] 23-01: 工作台極大化佈局、F11 全螢幕沉浸模式與側欄組件浮動最小化（側欄寬度縮半、浮動字幕 Tooltip、1.2.3. 階規格一致）
 
 </details>
 
