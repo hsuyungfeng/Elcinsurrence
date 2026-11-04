@@ -277,3 +277,180 @@ def approve_callback(case_id: str):
         logger.warning("HIS webhook 轉送失敗 case_id=%s error=%s", case_id, delivery.get("error"))
         return jsonify({"status": "delivery_failed", "case_id": case_id, "record": record}), 502
     return jsonify({"status": "success", "case_id": case_id, "record": record})
+
+
+@bp.route("/api/his/soapvoice-ingest", methods=["POST"])
+def ingest_soapvoice_session():
+    """接收 SoapVoice 診間上傳之音訊、截圖與結構化 SOAP（Phase 24-01）。
+    
+    支援 multipart/form-data 或 application/json：
+    - multipart/form-data:
+        - session_id: str
+        - patient_name: str
+        - id_card: str (身分證字號，如 A123456789)
+        - visit_date: str (ROC 7碼如 1120718 或 YYYY-MM-DD)
+        - soap_json: str (包含 subjective, objective, assessment, plan)
+        - icd10_code: str (選填)
+        - order_code: str (選填，如 39004C)
+        - audio_file: UploadFile (WAV, MP3, Opus 等)
+        - screenshot_file: UploadFile (JPG, PNG 等)
+    """
+    import base64
+    from elc_audit_engine.evidence_vault import (
+        vault_key_for_case,
+        store_single_file,
+        validate_vault_key,
+        InvalidVaultKeyError,
+    )
+
+    content_type = request.content_type or ""
+    audio_bytes: bytes | None = None
+    audio_filename = "consultation.opus"
+    image_bytes: bytes | None = None
+    image_filename = "screenshot.png"
+    
+    if "multipart/form-data" in content_type:
+        form = request.form
+        session_id = form.get("session_id", "").strip()
+        patient_name = form.get("patient_name", "").strip()
+        id_card = form.get("id_card", "").strip().upper()
+        visit_date = form.get("visit_date", "").strip()
+        icd10_code = form.get("icd10_code", "").strip()
+        order_code = form.get("order_code", "").strip()
+        raw_soap = form.get("soap_json", "{}")
+        try:
+            soap_dict = json.loads(raw_soap) if isinstance(raw_soap, str) else raw_soap
+        except Exception:
+            soap_dict = {}
+
+        if "audio_file" in request.files:
+            f = request.files["audio_file"]
+            audio_bytes = f.read()
+            if f.filename:
+                audio_filename = os.path.basename(f.filename)
+
+        if "screenshot_file" in request.files:
+            f = request.files["screenshot_file"]
+            image_bytes = f.read()
+            if f.filename:
+                image_filename = os.path.basename(f.filename)
+    else:
+        data = json_body(request)
+        session_id = clean_str(data, "session_id")
+        patient_name = clean_str(data, "patient_name")
+        id_card = clean_str(data, "id_card", required=True).upper()
+        visit_date = clean_str(data, "visit_date")
+        icd10_code = clean_str(data, "icd10_code")
+        order_code = clean_str(data, "order_code")
+        soap_dict = data.get("soap", {})
+        if "audio_base64" in data:
+            try:
+                audio_bytes = base64.b64decode(data["audio_base64"])
+                audio_filename = data.get("audio_filename", "consultation.opus")
+            except Exception:
+                pass
+        if "screenshot_base64" in data:
+            try:
+                image_bytes = base64.b64decode(data["screenshot_base64"])
+                image_filename = data.get("screenshot_filename", "screenshot.png")
+            except Exception:
+                pass
+
+    if not id_card:
+        raise ApiError("缺少必要欄位 id_card", status=400)
+    
+    # 計算/校驗 vault_key
+    computed_vault_key = vault_key_for_case(id_card, visit_date)
+    if not computed_vault_key:
+        # Fallback to current year-month if visit_date is absent
+        now = datetime.now()
+        computed_vault_key = f"{id_card}-{now.year % 100:02d}{now.month:02d}"
+
+    try:
+        validate_vault_key(computed_vault_key)
+    except InvalidVaultKeyError as exc:
+        raise ApiError(f"計算所得之 vault_key 不合法: {exc}", status=400)
+
+    vault_files_stored = []
+    if audio_bytes:
+        try:
+            vf = store_single_file(computed_vault_key, audio_filename, audio_bytes)
+            vault_files_stored.append({"category": vf.category, "filename": vf.filename, "size": vf.size})
+        except Exception as exc:
+            logger.warning("SoapVoice 音訊歸檔失敗: %s", exc)
+
+    if image_bytes:
+        try:
+            vf = store_single_file(computed_vault_key, image_filename, image_bytes)
+            vault_files_stored.append({"category": vf.category, "filename": vf.filename, "size": vf.size})
+        except Exception as exc:
+            logger.warning("SoapVoice 截圖歸檔失敗: %s", exc)
+
+    # 建立 HIS 看診個案記錄入 case_store
+    soap_text_repr = json.dumps(soap_dict, ensure_ascii=False) if isinstance(soap_dict, dict) else str(soap_dict)
+    case_id = _encounter_case_id(id_card, visit_date or "", order_code or "", session_id or "")
+
+    store = case_store()
+    payload = {
+        "session_id": session_id,
+        "patient_name": patient_name,
+        "id_card": id_card,
+        "visit_date": visit_date,
+        "icd10_code": icd10_code,
+        "order_code": order_code,
+        "soap": soap_dict,
+        "vault_key": computed_vault_key,
+        "vault_files": vault_files_stored,
+        "source": "soapvoice_lan",
+    }
+    
+    try:
+        record = store.create(
+            case_id=case_id,
+            kind="his",
+            payload=payload,
+            actor=caller_id(),
+        )
+    except DuplicateCaseError:
+        record = store.get(case_id)
+
+    # 雙軌審核與比對（健保合規審核 + 自費品項推薦）
+    compliance_evaluation = {"status": "ok", "warnings": []}
+    if order_code:
+        try:
+            rule = get_rule(order_code)
+            if rule and getattr(rule, "found", False):
+                compliance_evaluation["rule_name"] = getattr(rule, "name", "")
+                compliance_evaluation["payment_criteria"] = getattr(rule, "payment_text", "") or getattr(rule, "article_full_text", "")
+        except RuleRepositoryError:
+            pass
+
+    # 自費品項智慧推薦 (基於診斷與主訴)
+    self_pay_suggestions = []
+    assessment_text = soap_dict.get("assessment", "") if isinstance(soap_dict, dict) else ""
+    subjective_text = soap_dict.get("subjective", "") if isinstance(soap_dict, dict) else ""
+    combined_diag = (assessment_text + " " + subjective_text + " " + icd10_code).lower()
+    
+    if any(k in combined_diag for k in ("膝", "關節", "m17", "osteoarthritis", "膝痛")):
+        self_pay_suggestions.append({
+            "item_code": "SP-ORTHO-PRP",
+            "name": "高濃度自體血小板 (PRP) 關節修復注射",
+            "price_ntd": 15000,
+            "indication": "退化性關節炎軟骨磨損，保守治療輔助自費修復",
+        })
+        self_pay_suggestions.append({
+            "item_code": "SP-ORTHO-HA",
+            "name": "長效型玻尿酸關節腔內注射劑 (自費微創)",
+            "price_ntd": 6000,
+            "indication": "免除健保同一院所連續6個月保守治療限制",
+        })
+
+    return jsonify({
+        "status": "success",
+        "case_id": case_id,
+        "vault_key": computed_vault_key,
+        "vault_files": vault_files_stored,
+        "compliance_evaluation": compliance_evaluation,
+        "self_pay_suggestions": self_pay_suggestions,
+        "created_at": datetime.now(UTC).isoformat(),
+    }), 201

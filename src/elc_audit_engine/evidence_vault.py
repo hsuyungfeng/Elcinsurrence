@@ -26,8 +26,8 @@ from elc_audit_engine.services.date_utils import ROC_OFFSET
 VAULT_KEY_RE = re.compile(r"[A-Z][0-9]{9}-[0-9]{4}")
 
 CATEGORY_EXTENSIONS: dict[str, frozenset[str]] = {
-    "images": frozenset({".jpg", ".jpeg", ".png", ".dicom", ".heic"}),
-    "audio": frozenset({".mp3", ".m4a", ".wav", ".aac"}),
+    "images": frozenset({".jpg", ".jpeg", ".png", ".dicom", ".heic", ".webp"}),
+    "audio": frozenset({".mp3", ".m4a", ".wav", ".aac", ".opus", ".flac"}),
     "reports": frozenset({".pdf", ".txt", ".csv"}),
     "records": frozenset({".txt", ".json"}),
 }
