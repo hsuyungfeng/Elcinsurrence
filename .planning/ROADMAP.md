@@ -41,7 +41,7 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
   - 21-01: 健保標準檔案打包器（Evidence Packager）與單案送審匯出端點
   - 21-02: 批次電子申復 XML 生成（t38/t39 彙總、P6 強制為 0 與全形防護）
   - 21-03: 雲端與地端 Local Agent 橋接 API（Bridge API for NHI_EIIAPI）
-- [ ] Phase 22: 核心可靠性、邊界修復與架構服務層重構（0/4 plans）
+- [x] Phase 22: 核心可靠性、邊界修復與架構服務層重構（4/4 plans）— completed 2026-11-04
   - 22-01: 地端 Agent 橋接佇列 SQL 分頁過濾、逾時回收機制與 CAS 條件更新（P1-1, P1-2）
   - 22-02: 批次讀取 1000 筆截斷揭露、規則查詢例外不吞與邊界安全（P1-10, P1-11, P1-12）
   - 22-03: 工具鏈與 CI 流程健全化（pyproject 依賴補全、ruff、pytest-cov 與 GitHub Actions CI）（P1-13, P1-14）
