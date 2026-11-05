@@ -4,18 +4,22 @@ Welcome, LLM Agent. This document outlines the core architecture, non-negotiable
 
 ---
 
-## 1. Project Overview & Dual Workflows
+## 1. Project Overview & Three-Track Workflows
 
-`Elcinsurrence` is an automated NHI (Taiwan National Health Insurance / 健保) outpatient audit and appeal assistance engine.
+`Elcinsurrence` is an automated NHI (Taiwan National Health Insurance / 健保) outpatient audit, pre-submission checking, and appeal assistance engine.
 
-### Dual-Workflow Architecture
-1. **Sampling Pre-audit Workflow (抽樣事前預審)**
+### Three-Track Automation Architecture
+1. **Stage 1: Monthly Pre-Audit Workflow (當月申報檔預審)**
+   - **Purpose**: Full-volume audit of all outpatient cases in `TOTFA.zip` before official submission (days 1~5 of each month).
+   - **Outcome**: Flag high-cost orders, rule non-compliances, and C-category payment standards; generate interactive HTML/JSON review cards.
+   - **Entrypoint**: `POST /api/monthly/upload`, `src/elc_audit_engine/monthly_audit.py`.
+2. **Stage 2: Sampling Pre-Audit & Packager Workflow (抽樣事前預審)**
    - **Purpose**: Evaluate medical record compliance before submitting抽審 to NHI.
-   - **Outcome**: Read-only support assessment (`✅ 充分` / `⚠️ 薄弱` / `❌ 裸奔`) + gap identification & reinforcement suggestions.
+   - **Outcome**: Read-only support assessment (`✅ 充分` / `⚠️ 薄弱` / `❌ 裸奔`) + 6-month historical timeline matching + EvidenceVault auto-mounting (`{id_card}-{fee_ym}`).
    - **Entrypoint**: `run_presubmission_check` in `src/elc_audit_engine/pipeline.py`.
    - **Constraint**: **Read-only, no side-effects, does NOT produce appeal drafts.**
-2. **Appeal Post-processing Workflow (核減事後申復)**
-   - **Purpose**: Process NHI deduction notices and generate formal appeal materials.
+3. **Stage 3: Appeal Post-processing Workflow (核減事後申復)**
+   - **Purpose**: Process NHI deduction notices and generate formal 4-section appeal materials.
    - **Outcome**: 4-section appeal arguments (D10 standard) + export to Big5 XML (p1~p9) / ODT / PDF evidence packets.
    - **Entrypoint**: `run_case_pipeline` in `src/elc_audit_engine/pipeline.py`.
 
@@ -66,7 +70,11 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
     - `security`: Authentication, host whitelisting, and authorization hooks.
   - **`case_store/`**: SQLite-backed case repository with ACID transitions and collision detection (supports `kind='monthly'|'sampling'|'appeal'`).
   - **`attachment_store.py`**: SQLite-indexed attachment manager keyed by `case_id`.
-  - **`evidence_vault.py`**: Local evidence vault keyed by `record_no-YYMM` storing images, audio, lab reports, and medical records.
+  - **`evidence_vault.py`**: Local evidence vault keyed by `{id_card}-{fee_ym}` storing audio (`.opus`, `.flac`, `.wav`), images, and reports with regex boundary validation.
+  - **`webbrain_bridge.py`**: Local WebBrain bridge (`ws://127.0.0.1:17374/extension`) for NHI Cloud 2.0 history extraction (`mode="ask"`), SOAP O-section lab injection, cross-hospital duplicate drug detection, and Stage 2/3 semantic button driving.
+  - **`agent_desktop_bridge.py`**: Windows UIA automation interface executing Observe–Act–Verify loop, 3-tier fallback (ValuePattern -> Clipboard -> Copy Card), STALE_REF recovery, and HIS vendor profiles (Vision, Yaosheng, Minger, Chihshi).
+  - **`bridge_queue.py`**: SQLite CAS atomic task queue managing jobs for `15`, `00`, `07`, `09`, `HIS_PUSH`, `WB_EXTRACT_MED`, `WB_UI_VERIFY`.
+  - **`installer/build_clinic_installer.py`**: Single-click clinic workstation client installer script generator (`clinic_installer.iss`, `start_clinic_client.bat`).
   - **`unified_review_report.py`**: Unified review report generator aligning Stage 2 and Stage 3 batch views with the MONTHLY-YYYYMM report format.
   - **`pipeline.py`**: Pipeline coordinators (`run_presubmission_check` and `run_case_pipeline`).
   - **`rule_repository/`**: SQLite rule store, docx tree indices, and LLM mapping scripts.

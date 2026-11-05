@@ -1,22 +1,51 @@
-# Elcinsurrence 健保電子抽審與申復自動化輔助系統
+# Elcinsurrence 健保三軌自動化審核與申復工作台 (v5.0)
 
-`Elcinsurrence` 是一套專為健保門診抽樣與核減申復設計的自動化審核與申復輔助引擎（`elc-audit-engine`），提供雙軌處理介面（事前預審補強 ＋ 事後申復理由生成）與完整的 HIS 介面對接機制。
+`Elcinsurrence` 是一套專為健保門診申報總檔、抽樣預審與核減申復設計的自動化審核與申復輔助引擎（`elc-audit-engine`），提供完整的三軌處理架構（當月預審 ＋ 抽樣預審 ＋ 核減申復）、原生 HIS 系統無頭回填對接（`agent-desktop`）、以及健保 VPN 雲端藥歷 2.0 自動化預讀橋接（`webbrain`）。
 
 ---
 
-## 🌟 核心架構與雙軌工作流 (Dual-Workflow Architecture)
+## 🌟 核心架構與三軌工作流 (Three-Track Automation Architecture)
 
-本系統支援兩大獨立運作介面與流程：
+本系統支援三大獨立運作介面與流程：
 
-### 1. 📋 抽樣事前預審工作流 (Sampling Pre-audit Workflow)
-- **目的**：於抽審清單送出健保署前，審核門診病歷並評估「醫令支持度」（✅ **充分** / ⚠️ **薄弱** / ❌ **裸奔**）。
-- **流程**：導入抽樣 CSV 清單 ➔ 病歷 SOAP 解析 ➔ 三方邏輯比對 ➔ 自動提示病歷缺口與補強建議 ➔ 醫師完備病歷後送出抽審。
-- **入口**：[`run_presubmission_check`](src/elc_audit_engine/pipeline.py) — **唯讀**，不產申復草稿、不寫檔（預審時尚無核減資料）。
+### 1. 📊 當月申報檔預審工作流 (Stage 1: Monthly Pre-Audit)
+- **目的**：在每月 1~5 號正式申報送出前，針對全院門診 `TOTFA.zip` 總檔進行高單價醫令、特殊藥品與給付規定全量掃描。
+- **流程**：導入 `TOTFA.zip` ➔ 串流解析門診清冊 ➔ 健保 C 類與藥品規定即時核對 ➔ 產出視覺化審核卡片與紅黃綠燈統計。
+- **入口**：`POST /api/monthly/upload`、[`totfa.py`](src/elc_audit_engine/parsers/totfa.py)。
 
-### 2. ⚖️ 核減事後申復工作流 (Appeal Post-processing Workflow)
-- **目的**：針對健保署核減不予核銷之刪減醫令，啟動多源證據自動彙整並生成申復檔案。
-- **流程**：導入核減明細 ➔ 多源證據提取（門診 SOAP ＋ 檢驗 Lab ＋ 影像 Radiology ＋ 健保雲端病歷 EHR） ➔ 4 段式申復理由自動組裝 ➔ 導出申復 XML (p1~p9) / JSON 契約。
-- **入口**：[`run_case_pipeline`](src/elc_audit_engine/pipeline.py) — 比對 ➔ 補強報告 ➔ 逐筆申復草稿，並寫出檔案。
+### 2. 📋 抽樣事前預審工作流 (Stage 2: Sampling Pre-Audit & Packager)
+- **目的**：於抽審清單送出健保署前，審核門診病歷並評估「醫令支持度」（✅ **充分** / ⚠️ **薄弱** / ❌ **裸奔**），並掛載歷史錄音影像佐證。
+- **流程**：導入抽樣 CSV 清單 ➔ 病歷 SOAP 解析 ➔ 六個月時間軸匹配 ➔ EvidenceVault 佐證庫自動掛載 ➔ 導出標準 `NHI_EIIAPI` 電子抽審封包。
+- **入口**：[`run_presubmission_check`](src/elc_audit_engine/pipeline.py)、`GET /api/sampling/export-batch-xml`。
+
+### 3. ⚖️ 核減事後申復工作流 (Stage 3: Post-Deduction Appeal)
+- **目的**：針對健保署核減不予核銷之刪減醫令，啟動多源證據自動彙整並生成四段式申復理由書。
+- **流程**：導入核減明細 ➔ 連動 Stage 1/2 原始 SOAP 與 Evidence Vault 佐證檔案 ➔ 4 段式申復理由自動組裝 ➔ 導出 Big5 申復 XML (p1~p9) / ODT / 爭議審議 PDF 佐證包。
+- **入口**：[`run_case_pipeline`](src/elc_audit_engine/pipeline.py)、[`generators/appeal.py`](src/elc_audit_engine/generators/appeal.py)。
+
+---
+
+## 🚀 Phase 24–26 跨系統整合與自動化引擎
+
+### 1. SoapVoice × Elcinsurrence 診間即時語音注入 (Phase 24)
+- **端點**：`POST /api/his/soapvoice-ingest`
+- **特性**：直接接收 SoapVoice 語音轉錄結構化 SOAP，自動歸檔語音（`.opus` / `.flac`）與病歷截圖至 `data/vault/{id_card}-{fee_ym}/` 佐證庫，即時執行自費品項（PRP / 玻尿酸）智慧推薦與 C 類支付規定初審。
+
+### 2. WebBrain 健保 VPN 雲端藥歷 2.0 預讀與三軌自動化 (Phase 25)
+- **模組**：[`src/elc_audit_engine/webbrain_bridge.py`](src/elc_audit_engine/webbrain_bridge.py)
+- **端點**：`POST /api/his/webbrain/nhi-extract`、`POST /api/his/webbrain/action`
+- **特性**：利用 `@webbrain/mcp-server` (`ws://127.0.0.1:17374/extension`) 於醫師真實瀏覽器以 `mode="ask"` 唯讀預讀雲端藥歷。自動將近 6 個月檢驗值（HbA1c、LDL-C、eGFR）帶入 SOAP Objective（`[健保雲端檢驗]`），並對比跨院處方進行即時重複用藥警示；支援 24 顆二階與三階工作台按鈕語意化自動化執行。
+
+### 3. Agent-Desktop Windows UIA 原生 HIS 回填與安裝包 (Phase 26)
+- **模組**：[`src/elc_audit_engine/agent_desktop_bridge.py`](src/elc_audit_engine/agent_desktop_bridge.py)
+- **安裝包生成**：[`installer/build_clinic_installer.py`](installer/build_clinic_installer.py)
+- **特性**：
+  - **Observe–Act–Verify** 閉環：透過 Accessibility Tree 辨識控制項，預設採用 UIA `ValuePattern`（Tier 1）背景寫入，不搶奪醫師滑鼠焦點。
+  - **3-Tier Fallback**：Tier 1 ValuePattern ➔ Tier 2 剪貼簿貼上還原 ➔ Tier 3 懸浮卡片點擊複製。
+  - **STALE_REF 世代重繪保護**：控制項重繪時自動刷新快照並重試。
+  - **各大 HIS 設定檔支援**：內建展望（Vision）、耀聖（Yaosheng）、佲格（Minger）、志氏（Chihshi）。
+  - **BridgeQueue 派工 CAS 鎖**：支援 `HIS_PUSH` 任務狀態機原子更新（`PENDING` ➔ `SENDING` ➔ `SUCCESS`）。
+  - **一體化安裝包**：自動生成 Inno Setup 腳本（`clinic_installer.iss`）與啟動器（`start_clinic_client.bat`），一鍵打包小B、`agent-desktop` 與 `WebBrain`。
 
 > 兩條路徑共用 Phase 5 `compare_case`，故判定語意一致；分開的原因是**產出與副作用不同**（預審誤用整案管線會意外寫出申復草稿），對應目標架構圖 Cloud HIS 的 Review Service ／ Appeal Service 分離。
 
@@ -522,6 +551,9 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 | `POST` | `/api/appeal/cases/clear` | 清空所有第 3 階申復案件 | 選填 |
 | `GET` | `/api/appeal/export-batch-xml` | 全批次導出申復 XML（Big5 TOTFA.zip） | **必填** |
 | `GET` | `/api/sampling/cases` | 抽審名冊案件列表 | **必填** |
+| `POST` | `/api/his/soapvoice-ingest` | 接收診間 SoapVoice 錄音與截圖並自動歸檔至 EvidenceVault (Phase 24) | 選填 |
+| `POST` | `/api/his/webbrain/nhi-extract` | 預讀健保雲端藥歷與檢驗報告並自動注入 SOAP O 段 (Phase 25) | 選填 |
+| `POST` | `/api/his/webbrain/action` | 解析工作台二階／三階語意化操作計劃 (Phase 25) | 選填 |
 | `POST` | `/api/sampling/audit` | 事前預審支持度評估 | 選填 |
 | `POST` | `/api/sampling/import` | 匯入抽審名冊（CSV/PDF/影像） | 選填 |
 | `GET` | `/api/appeal/cases` | 申復草稿案件列表 | **必填** |
@@ -553,5 +585,6 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 測試以 `create_app(..., case_store=CaseStore(tmp), migrate_legacy=False)` 建立隔離實例（見 `tests/conftest.py` 的 `make_api_app`），不再 monkeypatch 模組全域變數。
 
 ## 📂 專案架構文件參考
+- **全景架構升級計畫**：[`plan-v5.md`](plan-v5.md)（深度整合 SoapVoice、Agent-Desktop 與 WebBrain）
 - **開發進度與里程碑**：[`progress.md`](progress.md)
 - **改進意見與架構分析**：[`deepflash4improve.md`](deepflash4improve.md)
