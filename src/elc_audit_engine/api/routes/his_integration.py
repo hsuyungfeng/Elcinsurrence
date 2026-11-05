@@ -454,3 +454,74 @@ def ingest_soapvoice_session():
         "self_pay_suggestions": self_pay_suggestions,
         "created_at": datetime.now(UTC).isoformat(),
     }), 201
+
+
+@bp.route("/api/his/webbrain/nhi-extract", methods=["POST"])
+def webbrain_nhi_extract():
+    """健保醫療資訊雲端查詢系統 2.0 (VPN) 藥歷與檢驗預讀。
+
+    可直接帶入 raw_payload（離線/擴充套件直傳）或透過 WebBrainClient (mode='ask') 擷取。
+    若指定 case_id，將自動更新該病案之 SOAP O 段與重複用藥警告。
+    """
+    from elc_audit_engine.webbrain_bridge import (
+        WebBrainClient,
+        extract_nhi_cloud_history,
+        inject_nhi_history_into_case,
+        parse_nhi_cloud_json,
+    )
+
+    data = request.get_json(silent=True) or {}
+    patient_id = (data.get("patient_id") or "").strip().upper()
+    if not patient_id:
+        return jsonify({"error": "缺少必要欄位 patient_id"}), 400
+
+    raw_payload = data.get("raw_payload")
+    if raw_payload and isinstance(raw_payload, dict):
+        nhi_record = parse_nhi_cloud_json(patient_id, raw_payload)
+    else:
+        client = WebBrainClient()
+        nhi_record = extract_nhi_cloud_history(client, patient_id)
+
+    case_id = data.get("case_id")
+    enhanced_payload = None
+    if case_id:
+        store = case_store()
+        try:
+            record = store.get(case_id)
+            enhanced_payload = inject_nhi_history_into_case(record.payload, nhi_record)
+            store.update(
+                case_id=case_id,
+                payload=enhanced_payload,
+                expected_seq=record.sequence,
+                actor=caller_id(),
+            )
+        except Exception as exc:
+            logger.warning("更新個案 %s 失敗: %s", case_id, exc)
+
+    return jsonify({
+        "status": "success",
+        "patient_id": patient_id,
+        "nhi_record": nhi_record.to_dict(),
+        "case_updated": bool(enhanced_payload),
+        "enhanced_case": enhanced_payload,
+    }), 200
+
+
+@bp.route("/api/his/webbrain/action", methods=["POST"])
+def webbrain_workbench_action():
+    """解析 Elcinsurrence 二階與三階語意化按鈕操作計劃。"""
+    from elc_audit_engine.webbrain_bridge import build_automation_action
+
+    data = request.get_json(silent=True) or {}
+    stage = data.get("stage")
+    action = data.get("action")
+
+    if not stage or not action:
+        return jsonify({"error": "缺少 stage 或 action"}), 400
+
+    try:
+        plan = build_automation_action(int(stage), str(action))
+        return jsonify({"status": "success", "action_plan": plan}), 200
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
