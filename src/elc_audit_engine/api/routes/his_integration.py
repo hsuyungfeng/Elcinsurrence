@@ -532,6 +532,299 @@ def webbrain_workbench_action():
 # Phase 27: 診間即時 SOAP 工作台、護理錄製監控與司法病歷金庫
 # ==============================================================================
 
+# 診間門診示範資料庫 (供側邊欄病患清單、多日期時間軸與司法金庫調閱)
+PATIENT_DB = {
+    "F229871234": {
+        "patient_name": "陳美玲",
+        "id_card": "F229871234",
+        "birth_date": "0681120",
+        "gender": "女",
+        "age": 45,
+        "is_live_now": True,
+        "encounters": [
+            {
+                "case_id": "ENC-F229871234-1120815",
+                "patient_name": "陳美玲",
+                "id_card": "F229871234",
+                "birth_date": "0681120",
+                "visit_date": "1120815",
+                "icd10": "J02.9",
+                "icd10_title": "急性咽炎，未特定 (Acute pharyngitis, unspecified)",
+                "soap": {
+                    "s": "主訴：近兩天喉嚨乾癢劇痛，吞嚥困難，伴隨輕微畏寒發燒 (37.8°C)，偶有乾咳，無呼吸急促或胸痛。",
+                    "o": "耳溫 37.8°C, BP 122/78 mmHg, HR 82 bpm。\n喉部視診：咽喉黏膜明顯充血發紅 (Pharynx hyperemic)，扁桃腺第一級紅腫 (Tonsils Grade I, non-exudative)，頸部淋巴結輕微觸痛。\n[健保雲端檢驗] 最近一次血球檢查 WBC 6,800/uL, CRP 0.4 mg/dL (1120701)。",
+                    "a": "1. J02.9 急性咽喉炎 (Acute pharyngitis)\n2. R50.9 發燒，未特定 (Fever, unspecified)",
+                    "p": "1. 開立 Acetaminophen 500mg tid + Ibuprofen 400mg prn 開立 3 日。\n2. Dextromethorphan 鎮咳與喉舒含錠。\n3. 醫囑衛教：多溫開水漱口休息，若高燒逾 38.5°C 或出現呼吸不暢速回診。\n4. [自費推薦] 建議補充自費免疫維他命高單位發泡錠及護喉消炎噴霧。",
+                },
+                "vault_key": "F229871234-2608",
+                "vault_files": [
+                    {"category": "audio", "filename": "consultation_recording_1120815.opus", "size": 328400, "mime": "audio/ogg"},
+                    {"category": "images", "filename": "pharynx_inspection_1120815.webp", "size": 184500, "mime": "image/webp"},
+                    {"category": "reports", "filename": "lab_cbc_report_1120815.pdf", "size": 94200, "mime": "application/pdf"},
+                ],
+                "files_count": 3,
+                "files": [
+                    {"category": "audio", "filename": "consultation_recording_1120815.opus", "size": 328400, "mime": "audio/ogg"},
+                    {"category": "images", "filename": "pharynx_inspection_1120815.webp", "size": 184500, "mime": "image/webp"},
+                    {"category": "reports", "filename": "lab_cbc_report_1120815.pdf", "size": 94200, "mime": "application/pdf"},
+                ],
+            },
+            {
+                "case_id": "ENC-F229871234-1120718",
+                "patient_name": "陳美玲",
+                "id_card": "F229871234",
+                "birth_date": "0681120",
+                "visit_date": "1120718",
+                "icd10": "M17.0",
+                "icd10_title": "雙側原發性膝骨關節炎 (Bilateral primary osteoarthritis of knee)",
+                "soap": {
+                    "s": "主訴：右膝關節上下樓梯與蹲下時痠痛無力逾三個月，早晨起床膝部僵硬約15分鐘，活動後稍改善。",
+                    "o": "雙膝無明顯發熱紅腫，右膝髕骨研磨試驗陽性 (Patellar grind test positive)，活動範圍 ROM: 0-120度。\nX-Ray 影像 (1120718)：雙膝外側關節腔略微狹窄，輕微骨刺生成，符 Kellgren-Lawrence Grade II。\n[健保雲端檢驗] HbA1c 5.8% (1120610), eGFR 88 mL/min (1120610)。",
+                    "a": "1. M17.0 雙側原發性退化性膝關節炎 (Primary osteoarthritis of both knees)",
+                    "p": "1. Celecoxib 200mg qd 開立 7 日。\n2. 安排物理治療（短波熱療與股四頭肌等長肌力訓練）。\n3. [自費項目推薦] 建議高濃度自體血小板 (PRP) 軟骨修復關節腔注射，或長效型玻尿酸 (HA) 潤滑保護。",
+                },
+                "vault_key": "F229871234-2607",
+                "vault_files": [
+                    {"category": "audio", "filename": "knee_exam_recording_1120718.opus", "size": 412000, "mime": "audio/ogg"},
+                    {"category": "images", "filename": "knee_xray_bilateral_1120718.webp", "size": 524000, "mime": "image/webp"},
+                ],
+                "files_count": 2,
+                "files": [
+                    {"category": "audio", "filename": "knee_exam_recording_1120718.opus", "size": 412000, "mime": "audio/ogg"},
+                    {"category": "images", "filename": "knee_xray_bilateral_1120718.webp", "size": 524000, "mime": "image/webp"},
+                ],
+            },
+            {
+                "case_id": "ENC-F229871234-1120610",
+                "patient_name": "陳美玲",
+                "id_card": "F229871234",
+                "birth_date": "0681120",
+                "visit_date": "1120610",
+                "icd10": "K21.9",
+                "icd10_title": "胃食道逆流疾病 (Gastro-esophageal reflux disease without esophagitis)",
+                "soap": {
+                    "s": "主訴：飯後經常火燒心、胃部灼熱感向上竄，夜間平躺時有酸水逆流乾咳。",
+                    "o": "腹部柔軟無壓痛，無反跳痛或腹肌防衛。心音正常，胸部聽診無囉音。",
+                    "a": "1. K21.9 胃食道逆流疾病 2. K30 功能性消化不良",
+                    "p": "1. Esomeprazole (Nexium) 40mg qd ac 處方 14 日。\n2. 衛教避免睡前三小時進食，少辛辣油膩及甜食。\n3. [自費推薦] 建議安排無痛胃鏡微創篩檢或自費益生菌調理。",
+                },
+                "vault_key": "F229871234-2606",
+                "vault_files": [
+                    {"category": "audio", "filename": "gerd_consultation_1120610.opus", "size": 310000, "mime": "audio/ogg"},
+                ],
+                "files_count": 1,
+                "files": [
+                    {"category": "audio", "filename": "gerd_consultation_1120610.opus", "size": 310000, "mime": "audio/ogg"},
+                ],
+            },
+        ],
+    },
+    "A123456789": {
+        "patient_name": "王大明",
+        "id_card": "A123456789",
+        "birth_date": "0540812",
+        "gender": "男",
+        "age": 58,
+        "is_live_now": False,
+        "encounters": [
+            {
+                "case_id": "ENC-A123456789-1120920",
+                "patient_name": "王大明",
+                "id_card": "A123456789",
+                "birth_date": "0540812",
+                "visit_date": "1120920",
+                "icd10": "E11.9",
+                "icd10_title": "第二型糖尿病，未伴有併發症 (Type 2 diabetes mellitus)",
+                "soap": {
+                    "s": "主訴：糖尿病慢箋回診追蹤，自述近一週口渴多尿稍減緩，飲食配合減醣，偶有輕微頭暈。",
+                    "o": "BP 130/82 mmHg, 飯前血糖 138 mg/dL, HbA1c 7.2% (1120915)。眼底鏡無明顯增殖性視網膜病變，足部單絲觸覺測試正常。",
+                    "a": "1. E11.9 第二型糖尿病血糖控制待改善 2. E78.5 混合型高脂血症",
+                    "p": "1. Metformin 500mg bid + Empagliflozin 10mg qd。\n2. 開立連續處方箋 28 日。\n3. [自費推薦] 建議配戴連續葡萄糖監測器 (CGM) 兩週進行精準血糖波動分析。",
+                },
+                "vault_key": "A123456789-2609",
+                "vault_files": [
+                    {"category": "audio", "filename": "dm_consultation_1120920.opus", "size": 350000, "mime": "audio/ogg"},
+                    {"category": "reports", "filename": "hba1c_lab_1120920.pdf", "size": 89000, "mime": "application/pdf"},
+                ],
+                "files_count": 2,
+                "files": [
+                    {"category": "audio", "filename": "dm_consultation_1120920.opus", "size": 350000, "mime": "audio/ogg"},
+                    {"category": "reports", "filename": "hba1c_lab_1120920.pdf", "size": 89000, "mime": "application/pdf"},
+                ],
+            },
+            {
+                "case_id": "ENC-A123456789-1120805",
+                "patient_name": "王大明",
+                "id_card": "A123456789",
+                "birth_date": "0540812",
+                "visit_date": "1120805",
+                "icd10": "I10",
+                "icd10_title": "本態性高血壓 (Essential hypertension)",
+                "soap": {
+                    "s": "主訴：近幾天因公事繁忙睡眠品質差，早晨頭脹後腦勺緊繃感明顯。",
+                    "o": "門診 BP 154/96 mmHg, HR 78 bpm。頸動脈雜音無，心音純整。",
+                    "a": "1. I10 高血壓急性波動 2. G47.00 失眠症",
+                    "p": "1. 加開 Amlodipine 5mg qd，Zolpidem 10mg hs prn。\n2. 衛教早晚定時量血壓並做紀錄。",
+                },
+                "vault_key": "A123456789-2608",
+                "vault_files": [
+                    {"category": "audio", "filename": "htn_consultation_1120805.opus", "size": 312000, "mime": "audio/ogg"},
+                ],
+                "files_count": 1,
+                "files": [
+                    {"category": "audio", "filename": "htn_consultation_1120805.opus", "size": 312000, "mime": "audio/ogg"},
+                ],
+            },
+            {
+                "case_id": "ENC-A123456789-1120701",
+                "patient_name": "王大明",
+                "id_card": "A123456789",
+                "birth_date": "0540812",
+                "visit_date": "1120701",
+                "icd10": "M79.1",
+                "icd10_title": "肌痛與肩頸肌筋膜疼痛症 (Myalgia)",
+                "soap": {
+                    "s": "主訴：右側肩頸部肌肉緊繃痠痛，轉頭活動受限，工作打電腦後加劇。",
+                    "o": "右斜方肌與提肩胛肌可觸及激痛點 (Trigger point)，壓痛明顯伴隨局部抽搐反應。",
+                    "a": "1. M79.1 肩頸肌筋膜疼痛症候群",
+                    "p": "1. 安排物理治療深層熱療與電療。\n2. [自費推薦] 建議體外震波 (ESWT) 筋膜放鬆或自費高濃度葡萄糖激痛點注射。",
+                },
+                "vault_key": "A123456789-2607",
+                "vault_files": [
+                    {"category": "audio", "filename": "neck_pain_1120701.opus", "size": 280000, "mime": "audio/ogg"},
+                    {"category": "images", "filename": "trigger_point_sono_1120701.webp", "size": 390000, "mime": "image/webp"},
+                ],
+                "files_count": 2,
+                "files": [
+                    {"category": "audio", "filename": "neck_pain_1120701.opus", "size": 280000, "mime": "audio/ogg"},
+                    {"category": "images", "filename": "trigger_point_sono_1120701.webp", "size": 390000, "mime": "image/webp"},
+                ],
+            },
+        ],
+    },
+    "H120987654": {
+        "patient_name": "李阿土",
+        "id_card": "H120987654",
+        "birth_date": "0410508",
+        "gender": "男",
+        "age": 72,
+        "is_live_now": False,
+        "encounters": [
+            {
+                "case_id": "ENC-H120987654-1120912",
+                "patient_name": "李阿土",
+                "id_card": "H120987654",
+                "birth_date": "0410508",
+                "visit_date": "1120912",
+                "icd10": "M17.0",
+                "icd10_title": "雙側原發性退化性膝關節炎 (Bilateral primary osteoarthritis of knee)",
+                "soap": {
+                    "s": "主訴：雙膝關節疼痛半年餘，近期因梅雨季氣候潮濕疼痛加劇，下床起立與走路極為吃力，蹲下無法自行站起，關節活動常有骨頭喀喀摩擦音。",
+                    "o": "雙膝關節局部微熱，雙側膝眼與關節間隙壓痛明顯，屈伸活動受限 ROM: 10-100度。X-Ray (1120912) 顯示雙膝外側與內側關節腔嚴重狹窄，顯著骨贅生成，符合 Kellgren-Lawrence Grade III。\n[健保雲端藥歷] eGFR 68 mL/min (1120801)。",
+                    "a": "1. M17.0 雙側原發性膝關節退化 (重度)\n2. M25.561 右膝關節痛",
+                    "p": "1. 關節腔抽取微量關節積液，開立 Celebrex 200mg qd + Ultracet prn 開立 7 日。\n2. 安排復健科深層熱療與股四頭肌運動。\n3. [自費項目推薦] 建議安排次世代高濃度血小板 (PRP) 軟骨增生修復注射，或長效型自費關節潤滑玻尿酸。",
+                },
+                "vault_key": "H120987654-2609",
+                "vault_files": [
+                    {"category": "audio", "filename": "knee_arthrosis_consult_1120912.opus", "size": 482000, "mime": "audio/ogg"},
+                    {"category": "images", "filename": "knee_bilateral_ap_lat_1120912.webp", "size": 612000, "mime": "image/webp"},
+                    {"category": "reports", "filename": "joint_fluid_analysis_1120912.pdf", "size": 124000, "mime": "application/pdf"},
+                ],
+                "files_count": 3,
+                "files": [
+                    {"category": "audio", "filename": "knee_arthrosis_consult_1120912.opus", "size": 482000, "mime": "audio/ogg"},
+                    {"category": "images", "filename": "knee_bilateral_ap_lat_1120912.webp", "size": 612000, "mime": "image/webp"},
+                    {"category": "reports", "filename": "joint_fluid_analysis_1120912.pdf", "size": 124000, "mime": "application/pdf"},
+                ],
+            },
+            {
+                "case_id": "ENC-H120987654-1120801",
+                "patient_name": "李阿土",
+                "id_card": "H120987654",
+                "birth_date": "0410508",
+                "visit_date": "1120801",
+                "icd10": "M54.5",
+                "icd10_title": "下背痛與腰椎退化 (Low back pain)",
+                "soap": {
+                    "s": "主訴：下背部痠痛牽引至右臀部已兩週，彎腰或搬拿重物時劇烈痠痛，夜間側臥翻身時常抽痛驚醒。",
+                    "o": "腰椎活動度受限，右側直抬腿試驗 (SLR test) 70度陽性引起腰臀放射痛，腰椎前彎疼痛，L4-L5 棘突間顯著觸痛。",
+                    "a": "1. M54.5 下背痛 2. M51.26 腰椎椎間盤移位疑義",
+                    "p": "1. 安排門診腰椎牽引與中頻干擾電療。\n2. 處方肌肉鬆弛劑 Solaxin 200mg tid + NSAID 7 日。\n3. [自費推薦] 建議醫療級護腰固定帶支撐，並評估自費震波腰肌深層減壓療程。",
+                },
+                "vault_key": "H120987654-2608",
+                "vault_files": [
+                    {"category": "audio", "filename": "back_pain_consult_1120801.opus", "size": 395000, "mime": "audio/ogg"},
+                    {"category": "images", "filename": "lumbar_spine_xray_1120801.webp", "size": 542000, "mime": "image/webp"},
+                ],
+                "files_count": 2,
+                "files": [
+                    {"category": "audio", "filename": "back_pain_consult_1120801.opus", "size": 395000, "mime": "audio/ogg"},
+                    {"category": "images", "filename": "lumbar_spine_xray_1120801.webp", "size": 542000, "mime": "image/webp"},
+                ],
+            },
+            {
+                "case_id": "ENC-H120987654-1120615",
+                "patient_name": "李阿土",
+                "id_card": "H120987654",
+                "birth_date": "0410508",
+                "visit_date": "1120615",
+                "icd10": "I10",
+                "icd10_title": "本態性高血壓 (Essential hypertension)",
+                "soap": {
+                    "s": "主訴：定期慢箋回診拿藥，近期早晨起床後枕部緊繃脹痛，無胸悶心悸或肢體無力麻木。",
+                    "o": "門診 BP 148/92 mmHg, HR 74 bpm，BMI 26.2。心音純律整，雙下肢無水腫。健保雲端檢驗：eGFR 72 mL/min, 總膽固醇 210 mg/dL。",
+                    "a": "1. I10 本態性高血壓 2. E78.5 高脂血症",
+                    "p": "1. 續開降壓藥 Amlodipine 5mg qd + Losartan 50mg qd，開立慢箋 28 日。\n2. 衛教低鹽飲食，指導家屬每日早晚量測並記錄血壓。",
+                },
+                "vault_key": "H120987654-2606",
+                "vault_files": [
+                    {"category": "audio", "filename": "hypertension_regular_1120615.opus", "size": 298000, "mime": "audio/ogg"},
+                    {"category": "reports", "filename": "biochemistry_lipid_panel_1120615.pdf", "size": 88000, "mime": "application/pdf"},
+                ],
+                "files_count": 2,
+                "files": [
+                    {"category": "audio", "filename": "hypertension_regular_1120615.opus", "size": 298000, "mime": "audio/ogg"},
+                    {"category": "reports", "filename": "biochemistry_lipid_panel_1120615.pdf", "size": 88000, "mime": "application/pdf"},
+                ],
+            },
+        ],
+    },
+}
+
+
+@bp.route("/api/soap/patients", methods=["GET"])
+def soap_patients_list():
+    """取得診間門診病患清單供左側側邊欄展示。"""
+    patients = []
+    for pid, pdata in PATIENT_DB.items():
+        patients.append({
+            "id_card": pdata["id_card"],
+            "patient_name": pdata["patient_name"],
+            "birth_date": pdata["birth_date"],
+            "gender": pdata["gender"],
+            "age": pdata["age"],
+            "is_live_now": pdata.get("is_live_now", False),
+            "encounters_count": len(pdata["encounters"]),
+            "latest_visit": pdata["encounters"][0]["visit_date"] if pdata["encounters"] else "",
+            "latest_icd": pdata["encounters"][0]["icd10"] if pdata["encounters"] else "",
+            "encounters": [
+                {
+                    "case_id": enc["case_id"],
+                    "visit_date": enc["visit_date"],
+                    "icd10": enc["icd10"],
+                    "icd10_title": enc.get("icd10_title", ""),
+                    "files_count": enc.get("files_count", 0),
+                }
+                for enc in pdata["encounters"]
+            ]
+        })
+    return jsonify({
+        "status": "success",
+        "count": len(patients),
+        "patients": patients,
+    }), 200
+
+
 @bp.route("/api/soap/live-session", methods=["GET"])
 def soap_live_session():
     """取得診間護理專員即時錄音監控會話狀態與逐字稿串流。"""
@@ -554,6 +847,13 @@ def soap_live_session():
         "transcript_ticker": "醫師您好，我這兩天喉嚨非常乾癢微痛，吞口水都覺得卡卡的，昨天晚上開始有點畏寒發燒，大概量到37.8度，頭也有點昏沉脹痛，沒有明顯鼻涕但覺得全身有點疲倦無力...",
         "waveform_bars": [25, 45, 60, 85, 95, 70, 55, 40, 65, 80, 50, 30],
         "created_at": now.isoformat(),
+        # 內定即時進行中的自動生成 SOAP
+        "live_soap": {
+            "s": "主訴：近兩天喉嚨乾癢劇痛，吞嚥困難，伴隨輕微畏寒發燒 (37.8°C)，偶有乾咳，無呼吸急促或胸痛。",
+            "o": "耳溫 37.8°C, BP 122/78 mmHg, HR 82 bpm。\n喉部視診：咽喉黏膜明顯充血發紅 (Pharynx hyperemic)，扁桃腺第一級紅腫 (Tonsils Grade I)，頸部淋巴結輕微觸痛。\n[健保雲端檢驗] 最近一次血球檢查 WBC 6,800/uL, CRP 0.4 mg/dL (1120701)。",
+            "a": "1. J02.9 急性咽喉炎 (Acute pharyngitis)\n2. R50.9 發燒，未特定 (Fever, unspecified)",
+            "p": "1. 開立 Acetaminophen 500mg tid + Ibuprofen 400mg prn 開立 3 日。\n2. Dextromethorphan 鎮咳與喉舒含錠。\n3. [自費推薦] 建議補充自費免疫維他命高單位發泡錠及護喉消炎噴霧。",
+        }
     }), 200
 
 
@@ -566,50 +866,89 @@ def soap_search_patient():
         return jsonify({"error": "請輸入身分證字號或出生年月日"}), 400
 
     results = []
-    store = case_store()
+    patient_info = None
 
-    # 1. 查詢 CaseStore
-    try:
-        all_cases = store.list_cases(limit=500)
-        for c in all_cases:
-            payload = c.payload or {}
-            c_id = str(payload.get("id_card") or "").upper()
-            c_birth = str(payload.get("birth_date") or "").replace("/", "").replace("-", "")
-            c_name = str(payload.get("patient_name") or "")
-            if query == c_id or query == c_birth or query in c_name or query in c.case_id:
-                soap_data = payload.get("soap") or {}
-                if not isinstance(soap_data, dict):
-                    soap_data = {}
-                v_key = payload.get("vault_key") or ""
-                results.append({
-                    "case_id": c.case_id,
-                    "patient_name": c_name or "門診病患",
-                    "id_card": c_id,
-                    "birth_date": c_birth,
-                    "visit_date": str(payload.get("visit_date") or "1120815"),
-                    "icd10": str(payload.get("icd10_code") or "J02.9"),
-                    "icd10_title": "急性咽喉炎",
-                    "soap": {
-                        "s": soap_data.get("subjective") or payload.get("soap_s") or "喉嚨疼痛發燒",
-                        "o": soap_data.get("objective") or payload.get("soap_o") or "Pharynx injected, tonsils Grade I",
-                        "a": soap_data.get("assessment") or payload.get("soap_a") or "急性上呼吸道感染",
-                        "p": soap_data.get("plan") or payload.get("soap_p") or "開立抗發炎與解熱鎮痛藥物三天",
-                    },
-                    "vault_key": v_key,
-                    "vault_files": payload.get("vault_files") or [],
-                    "files_count": len(payload.get("vault_files") or []),
-                })
-    except Exception as exc:
-        logger.warning("查詢 CaseStore 失敗: %s", exc)
+    # 1. 優先比對 PATIENT_DB 內建病患庫 (包含陳美玲、王大明、李阿土)
+    for pid, pdata in PATIENT_DB.items():
+        if (
+            query == pid
+            or query == pdata["birth_date"]
+            or query in pdata["patient_name"]
+            or query in pid
+        ):
+            results = pdata["encounters"]
+            patient_info = {
+                "id_card": pdata["id_card"],
+                "patient_name": pdata["patient_name"],
+                "birth_date": pdata["birth_date"],
+                "gender": pdata["gender"],
+                "age": pdata["age"],
+                "encounters_count": len(results),
+            }
+            break
 
-    # 2. 若無歷史案件，提供示範門診時間軸（確保診間立即有歷史紀錄可點擊展示）
+    # 2. 次查 CaseStore
+    if not results:
+        store = case_store()
+        try:
+            all_cases = store.list_cases(limit=500)
+            for c in all_cases:
+                payload = c.payload or {}
+                c_id = str(payload.get("id_card") or "").upper()
+                c_birth = str(payload.get("birth_date") or "").replace("/", "").replace("-", "")
+                c_name = str(payload.get("patient_name") or "")
+                if query == c_id or query == c_birth or query in c_name or query in c.case_id:
+                    soap_data = payload.get("soap") or {}
+                    if not isinstance(soap_data, dict):
+                        soap_data = {}
+                    v_key = payload.get("vault_key") or ""
+                    results.append({
+                        "case_id": c.case_id,
+                        "patient_name": c_name or "門診病患",
+                        "id_card": c_id,
+                        "birth_date": c_birth,
+                        "visit_date": str(payload.get("visit_date") or "1120815"),
+                        "icd10": str(payload.get("icd10_code") or "J02.9"),
+                        "icd10_title": "急性咽喉炎",
+                        "soap": {
+                            "s": soap_data.get("subjective") or payload.get("soap_s") or "喉嚨疼痛發燒",
+                            "o": soap_data.get("objective") or payload.get("soap_o") or "Pharynx injected, tonsils Grade I",
+                            "a": soap_data.get("assessment") or payload.get("soap_a") or "急性上呼吸道感染",
+                            "p": soap_data.get("plan") or payload.get("soap_p") or "開立抗發炎與解熱鎮痛藥物三天",
+                        },
+                        "vault_key": v_key,
+                        "vault_files": payload.get("vault_files") or [],
+                        "files_count": len(payload.get("vault_files") or []),
+                    })
+                    if not patient_info:
+                        patient_info = {
+                            "id_card": c_id,
+                            "patient_name": c_name or "門診病患",
+                            "birth_date": c_birth,
+                            "gender": "未註記",
+                            "age": 50,
+                            "encounters_count": len(results),
+                        }
+        except Exception as exc:
+            logger.warning("查詢 CaseStore 失敗: %s", exc)
+
+    # 3. 若為新身分證或生日，動態產生 2 筆以上歷史就診時間軸，方便加入左側病患清單
     if not results:
         demo_id = query if re.match(r"^[A-Z][0-9]{9}$", query) else "F229871234"
         demo_birth = query if query.isdigit() and len(query) in (6, 7, 8) else "0681120"
+        patient_name = "自訂病患" if demo_id != "F229871234" else "陳美玲"
+        patient_info = {
+            "id_card": demo_id,
+            "patient_name": patient_name,
+            "birth_date": demo_birth,
+            "gender": "男" if len(demo_id) > 1 and demo_id[1] == "1" else "女",
+            "age": 48,
+            "encounters_count": 2,
+        }
         results = [
             {
                 "case_id": f"ENC-{demo_id}-1120815",
-                "patient_name": "陳美玲",
+                "patient_name": patient_name,
                 "id_card": demo_id,
                 "birth_date": demo_birth,
                 "visit_date": "1120815",
@@ -621,22 +960,22 @@ def soap_search_patient():
                     "a": "1. J02.9 急性咽喉炎 (Acute pharyngitis)\n2. R50.9 發燒，未特定 (Fever, unspecified)",
                     "p": "1. 開立 Acetaminophen 500mg tid + Ibuprofen 400mg prn 開立 3 日。\n2. Dextromethorphan 鎮咳與喉舒含錠。\n3. 醫囑衛教：多溫開水漱口休息，若高燒逾 38.5°C 或出現呼吸不暢速回診。\n4. [自費推薦] 建議補充自費免疫維他命高單位發泡錠及護喉消炎噴霧。",
                 },
-                "vault_key": f"{demo_id}-11208",
+                "vault_key": f"{demo_id}-2608",
                 "vault_files": [
-                    {"category": "audio", "filename": "consultation_recording_1120815.opus", "size": 328400, "mime": "audio/ogg"},
-                    {"category": "images", "filename": "pharynx_inspection_1120815.webp", "size": 184500, "mime": "image/webp"},
-                    {"category": "reports", "filename": "lab_cbc_report_1120815.pdf", "size": 94200, "mime": "application/pdf"},
+                    {"category": "audio", "filename": f"consultation_recording_1120815.opus", "size": 328400, "mime": "audio/ogg"},
+                    {"category": "images", "filename": f"pharynx_inspection_1120815.webp", "size": 184500, "mime": "image/webp"},
+                    {"category": "reports", "filename": f"lab_cbc_report_1120815.pdf", "size": 94200, "mime": "application/pdf"},
                 ],
                 "files_count": 3,
                 "files": [
-                    {"category": "audio", "filename": "consultation_recording_1120815.opus", "size": 328400, "mime": "audio/ogg"},
-                    {"category": "images", "filename": "pharynx_inspection_1120815.webp", "size": 184500, "mime": "image/webp"},
-                    {"category": "reports", "filename": "lab_cbc_report_1120815.pdf", "size": 94200, "mime": "application/pdf"},
+                    {"category": "audio", "filename": f"consultation_recording_1120815.opus", "size": 328400, "mime": "audio/ogg"},
+                    {"category": "images", "filename": f"pharynx_inspection_1120815.webp", "size": 184500, "mime": "image/webp"},
+                    {"category": "reports", "filename": f"lab_cbc_report_1120815.pdf", "size": 94200, "mime": "application/pdf"},
                 ],
             },
             {
                 "case_id": f"ENC-{demo_id}-1120718",
-                "patient_name": "陳美玲",
+                "patient_name": patient_name,
                 "id_card": demo_id,
                 "birth_date": demo_birth,
                 "visit_date": "1120718",
@@ -648,15 +987,15 @@ def soap_search_patient():
                     "a": "1. M17.0 雙側原發性退化性膝關節炎 (Primary osteoarthritis of both knees)",
                     "p": "1. Celecoxib 200mg qd 開立 7 日。\n2. 安排物理治療（短波熱療與股四頭肌等長肌力訓練）。\n3. [自費項目推薦] 建議高濃度自體血小板 (PRP) 軟骨修復關節腔注射，或長效型玻尿酸 (HA) 潤滑保護。",
                 },
-                "vault_key": f"{demo_id}-11207",
+                "vault_key": f"{demo_id}-2607",
                 "vault_files": [
-                    {"category": "audio", "filename": "knee_exam_recording_1120718.opus", "size": 412000, "mime": "audio/ogg"},
-                    {"category": "images", "filename": "knee_xray_bilateral_1120718.webp", "size": 524000, "mime": "image/webp"},
+                    {"category": "audio", "filename": f"knee_exam_recording_1120718.opus", "size": 412000, "mime": "audio/ogg"},
+                    {"category": "images", "filename": f"knee_xray_bilateral_1120718.webp", "size": 524000, "mime": "image/webp"},
                 ],
                 "files_count": 2,
                 "files": [
-                    {"category": "audio", "filename": "knee_exam_recording_1120718.opus", "size": 412000, "mime": "audio/ogg"},
-                    {"category": "images", "filename": "knee_xray_bilateral_1120718.webp", "size": 524000, "mime": "image/webp"},
+                    {"category": "audio", "filename": f"knee_exam_recording_1120718.opus", "size": 412000, "mime": "audio/ogg"},
+                    {"category": "images", "filename": f"knee_xray_bilateral_1120718.webp", "size": 524000, "mime": "image/webp"},
                 ],
             },
         ]
@@ -665,6 +1004,7 @@ def soap_search_patient():
         "status": "success",
         "query": query,
         "count": len(results),
+        "patient": patient_info,
         "encounters": results,
     }), 200
 

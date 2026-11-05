@@ -29,6 +29,20 @@ def client(app):
         yield c
 
 
+def test_soap_patients_list_api(client):
+    resp = client.get("/api/soap/patients", headers=KEY)
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["status"] == "success"
+    assert data["count"] >= 3
+    patients = data["patients"]
+    # Check 3rd patient is 李阿土
+    assert any(p["patient_name"] == "李阿土" and p["id_card"] == "H120987654" for p in patients)
+    # Check 3rd patient has multiple encounters
+    lat = next(p for p in patients if p["id_card"] == "H120987654")
+    assert len(lat["encounters"]) >= 3
+
+
 def test_soap_live_session_api(client):
     resp = client.get("/api/soap/live-session", headers=KEY)
     assert resp.status_code == 200
