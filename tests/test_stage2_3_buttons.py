@@ -21,32 +21,25 @@ def test_stage2_and_3_buttons_dom_integrity_for_webbrain():
     使 WebBrain（瀏覽器 AI Agent）在 Act 模式下能 100% 精確定位與點擊。"""
     html = Path("static/index.html").read_text(encoding="utf-8")
 
-    # 預期的第 2 階按鈕 ID
+    # 預期的第 2 階按鈕 ID（已依需求移除載入預審、重新抽樣、單案卡片、隨機抽5案連動）
     stage2_btn_ids = [
         "btn-s-batch-report-top",
         "btn-s-run-audit",
-        "btn-s-import-monthly",
         "btn-s-patient-entry",
-        "btn-s-sample-batch",
         "btnBatchAudit",
         "btn-s-clear",
-        "btn-s-preview-single",
         "btn-s-batch-report",
         "btn-s-export-xml",
-        "btn-s-link-appeal",
         "btn-s-apply-soap",
         "btn-s-save-evidence",
     ]
 
-    # 預期的第 3 階按鈕 ID
+    # 預期的第 3 階按鈕 ID（已依需求移除載入預審、重新抽5案、單案申復卡片）
     stage3_btn_ids = [
         "btn-a-batch-report-top",
         "btn-a-generate-draft",
-        "btn-a-import-monthly",
         "btn-a-patient-entry",
-        "btn-a-link-appeal",
         "btn-a-clear",
-        "btn-a-preview-single",
         "btn-a-batch-report",
         "btn-a-export-xml",
         "btn-a-download-json",
@@ -61,6 +54,19 @@ def test_stage2_and_3_buttons_dom_integrity_for_webbrain():
     for bid in stage3_btn_ids:
         assert f'id="{bid}"' in html, f"第 3 階按鈕缺少 ID: {bid}"
         assert f'data-test-id="{bid}"' in html, f"第 3 階按鈕缺少 data-test-id: {bid}"
+
+    # 確認已刪除之按鈕確已自 DOM 中完全移除
+    deleted_btn_ids = [
+        "btn-s-import-monthly",
+        "btn-s-sample-batch",
+        "btn-s-preview-single",
+        "btn-s-link-appeal",
+        "btn-a-import-monthly",
+        "btn-a-link-appeal",
+        "btn-a-preview-single",
+    ]
+    for dbid in deleted_btn_ids:
+        assert f'id="{dbid}"' not in html, f"已刪除按鈕仍存在於 DOM: {dbid}"
 
 
 def test_stage2_button_api_endpoints(test_client):
