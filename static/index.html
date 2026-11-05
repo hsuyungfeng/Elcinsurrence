@@ -1143,8 +1143,8 @@
                 <span style="font-size: 11px; color: var(--text-muted);">健保/身分證/生日</span>
               </div>
               <div class="soap-input-row">
-                <input type="text" id="soapPatientQueryInput" class="soap-input" placeholder="身分證號 (A123456789) 或 生日 (0681120)" value="F229871234" onkeydown="if(event.key==='Enter') searchSoapPatient()">
-                <button class="btn-action" style="padding: 6px 12px; font-size: 12px;" onclick="searchSoapPatient()">查詢</button>
+                <input type="text" id="soapPatientQueryInput" class="soap-input" placeholder="身分證號 (A123456789) 或 生日 (0681120)" value="F229871234" onkeydown="if(event.key==='Enter') searchSoapPatient(true, true)">
+                <button class="btn-action" style="padding: 6px 12px; font-size: 12px;" onclick="searchSoapPatient(true, true)">查詢</button>
               </div>
 
               <div style="font-size: 11px; color: var(--text-muted); display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid rgba(148,163,184,0.15); padding-bottom: 4px;">
@@ -2218,11 +2218,17 @@
       searchSoapPatient(false);
     }
 
-    async function searchSoapPatient(autoSelectFirst = true) {
+    async function searchSoapPatient(autoSelectFirst = true, isManualSearch = false) {
       const qInput = document.getElementById('soapPatientQueryInput');
-      const query = qInput ? qInput.value.trim() : 'F229871234';
+      const query = qInput ? qInput.value.trim() : '';
       const listEl = document.getElementById('soapEncountersList');
       if (!listEl) return;
+
+      if (!query && isManualSearch) {
+        alert('請先輸入欲查詢的身分證字號 (例如 A123456789) 或出生年月日！');
+        return;
+      }
+      const actualQuery = query || 'F229871234';
 
       listEl.innerHTML = '';
       const loadingEl = document.createElement('div');
@@ -2236,7 +2242,7 @@
         const resp = await authFetch('/api/soap/search-patient', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: query })
+          body: JSON.stringify({ query: actualQuery })
         });
         const data = await resp.json();
         listEl.innerHTML = '';
@@ -2318,7 +2324,8 @@
           listEl.appendChild(card);
         });
 
-        if (autoSelectFirst && encounters.length > 0 && !isSoapLiveMode) {
+        // 若是主動手動搜尋，或是非即時模式下的自動選取，直接切換載入第一筆！
+        if ((isManualSearch || (autoSelectFirst && !isSoapLiveMode)) && encounters.length > 0) {
           const pObj = soapPatients.find(p => p.id_card === encounters[0].id_card) || {
             patient_name: encounters[0].patient_name || '門診病患',
             id_card: encounters[0].id_card
