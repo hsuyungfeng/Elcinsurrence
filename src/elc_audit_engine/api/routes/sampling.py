@@ -128,6 +128,34 @@ def update_sampling_evidence(case_id: str):
     })
 
 
+@bp.route("/api/sampling/cases/<case_id>/soap", methods=["PUT", "POST"])
+def update_sampling_soap(case_id: str):
+    """更新抽樣案件的 SOAP 病歷文字（持久化儲存至資料庫）。"""
+    data = json_body(request)
+    soap_text = clean_str(data, "soap", max_len=MAX_SOAP_CHARS)
+    if soap_text is None:
+        soap_text = clean_str(data, "soap_text", max_len=MAX_SOAP_CHARS) or ""
+    store = case_store()
+    try:
+        record = _sampling_case_or_404(case_id)
+        payload = dict(record.payload or {})
+        payload["soap"] = soap_text
+        payload["soap_text"] = soap_text
+        store.update_payload(case_id, payload)
+    except Exception:
+        # demo 案件或記憶體案件容錯
+        for demo in DEMO_SAMPLING_CASES:
+            if demo["id"] == case_id:
+                demo["soap"] = soap_text
+                break
+    return jsonify({
+        "status": "success",
+        "case_id": case_id,
+        "soap": soap_text,
+        "message": "SOAP 病歷已成功寫入資料庫",
+    })
+
+
 @bp.route("/api/sampling/batch-audit", methods=["POST"])
 def batch_audit_sampling():
     """全自動批次審查（Plan 20-03）：對全部第 2 階抽樣案件執行閉環，寫回各案 payload["review"]。

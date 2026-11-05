@@ -791,249 +791,217 @@
       <!-- WORKFLOW 1: 抽樣事前預審工作介面 -->
       <!-- ==================================================================== -->
       <div class="view-container active" id="workflow1View">
-        <!-- Top Bar -->
-        <div class="workflow-topbar">
-          <div>
-            <span style="font-size: 11px; color: var(--text-muted); display: block;">目前抽樣案例 (事前預審)</span>
-            <strong style="font-size: 15px;" id="sOrderName">14050B - 糖化血色素檢驗 HbA1c</strong>
+        <!-- Top Bar: 緊湊單列整合控制台 (包含案例資訊、操作按鈕、報告交付與佐證庫上傳) -->
+        <div class="workflow-topbar" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 14px; background: rgba(15,23,42,0.85); border-bottom: 1px solid var(--panel-border);">
+          <!-- 案例資訊與支持度評估 -->
+          <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+            <div>
+              <span style="font-size: 11px; color: var(--text-muted); display: block;">目前抽樣案例 (事前預審)</span>
+              <strong style="font-size: 14px; color: #f8fafc;" id="sOrderName">14050B - 糖化血色素檢驗 HbA1c</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px; padding-left: 8px; border-left: 1px solid rgba(148,163,184,0.2);">
+              <span style="font-size: 11px; color: var(--text-muted);">預審支持度評估：</span>
+              <span class="badge badge-weak" id="sSupportBadge">❓ 查無規則</span>
+            </div>
           </div>
-          <div>
-            <span style="font-size: 11px; color: var(--text-muted); margin-right: 8px;">預審支持度評估：</span>
-            <span class="badge badge-weak" id="sSupportBadge">⚠️ 薄弱</span>
-          </div>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <button id="btn-s-batch-report-top" data-test-id="btn-s-batch-report-top" class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669); padding: 7px 14px; font-size: 13px;" onclick="openSamplingBatchReport()">🔍 開啟視覺化審核卡片 (HTML)</button>
-            <button id="btn-s-run-audit" data-test-id="btn-s-run-audit" class="btn-action" style="padding: 7px 14px; font-size: 13px;" onclick="runSamplingAudit()">⚡ 審核病歷並評估支持度</button>
+
+          <!-- 緊湊操作按鈕與佐證庫：1列整合 -->
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
+            <button id="btn-s-batch-report-top" data-test-id="btn-s-batch-report-top" class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669); padding: 5px 10px; font-size: 12px;" onclick="openSamplingBatchReport()">🔍 開啟視覺化審核卡片 (HTML)</button>
+            <button id="btn-s-run-audit" data-test-id="btn-s-run-audit" class="btn-action" style="padding: 5px 10px; font-size: 12px;" onclick="runSamplingAudit()">⚡ 審核病歷並評估支持度</button>
+
+            <div style="width: 1px; height: 16px; background: rgba(148,163,184,0.2); margin: 0 2px;"></div>
+            <span style="font-size: 11px; font-weight: 700; color: #38bdf8;">🎯 抽樣審查</span>
+            <button id="btn-s-patient-entry" data-test-id="btn-s-patient-entry" class="btn-action" style="background: linear-gradient(135deg, #059669, #047857); padding: 5px 10px; font-size: 12px;" onclick="togglePatientEntryModal(true)">➕ 依病患鍵入加入</button>
+            <button id="btnBatchAudit" data-test-id="btn-s-batch-audit" class="btn-action" style="background: linear-gradient(135deg, #0d9488, #0f766e); padding: 5px 10px; font-size: 12px;" onclick="runSamplingBatchAudit()">⚡ 一鍵全自動批次審查 (30案)</button>
+            <button id="btn-s-clear" data-test-id="btn-s-clear" class="btn-action" style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; color: #fca5a5; padding: 5px 8px; font-size: 12px;" onclick="clearSamplingCases()">🗑️ 清空抽樣清單</button>
+
+            <div style="width: 1px; height: 16px; background: rgba(148,163,184,0.2); margin: 0 2px;"></div>
+            <span style="font-size: 11px; font-weight: 700; color: #94a3b8;">📑 報告交付</span>
+            <button id="btn-s-batch-report" data-test-id="btn-s-batch-report" class="btn-action" style="background: rgba(16,185,129,0.15); border: 1px solid #10b981; color: #34d399; padding: 5px 10px; font-size: 12px;" onclick="openSamplingBatchReport()">🗂️ 批次預審報告 (HTML)</button>
+            <button id="btn-s-export-xml" data-test-id="btn-s-export-xml" class="btn-action" style="background: rgba(99,102,241,0.15); border: 1px solid #6366f1; color: #a5b4fc; padding: 5px 10px; font-size: 12px;" onclick="exportSamplingBatchXml()">📦 全批次導出抽審 XML (Big5)</button>
+
+            <div style="width: 1px; height: 16px; background: rgba(148,163,184,0.2); margin: 0 2px;"></div>
+            <span style="font-size: 11px; font-weight: 700; color: #fbbf24;">📁 佐證庫：<span id="vaultKeyLabel" style="font-weight:normal; color:#cbd5e1;">無法自動掛載</span></span>
+            <button type="button" class="btn-action" id="vaultBtnFile" style="padding: 5px 10px; font-size: 12px; background: rgba(56,189,248,0.2); border: 1px solid #38bdf8;" disabled onclick="document.getElementById('vaultFileInput').click()">📤 上傳檔案</button>
+            <button type="button" class="btn-action" id="vaultBtnZip" style="padding: 5px 10px; font-size: 12px; background: rgba(168,85,247,0.2); border: 1px solid #a855f7;" disabled onclick="document.getElementById('vaultZipInput').click()">🗜️ 上傳 ZIP</button>
+            <input type="file" id="vaultFileInput" multiple hidden accept=".jpg,.jpeg,.png,.dicom,.heic,.mp3,.m4a,.wav,.aac,.pdf,.txt,.csv,.json" onchange="uploadVaultFiles(this.files)">
+            <input type="file" id="vaultZipInput" accept=".zip" hidden onchange="uploadVaultFiles(this.files)">
           </div>
         </div>
 
         <div class="view-scroll-content">
-          <!-- 抽樣與審查整合動作列 -->
-          <div style="background: rgba(15,23,42,0.6); border: 1px solid var(--panel-border); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
-            <!-- 批次審查進度條 (Progress Bar) -->
-            <div id="batchAuditProgress" style="display: none; background: rgba(15,23,42,0.85); border: 1px solid var(--accent-cyan); border-radius: 8px; padding: 12px 16px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <span id="batchProgressText" style="font-size: 13px; font-weight: 600; color: #38bdf8; display: flex; align-items: center; gap: 8px;">
-                  <span class="spinner" style="display:inline-block; width:12px; height:12px; border:2px solid #38bdf8; border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite;"></span>
-                  <span>正在執行全自動批次審查（調用 LLM 評估病歷支持度）...</span>
-                </span>
-                <div style="text-align: right;">
-                  <span id="batchProgressPercent" style="font-size: 13px; font-weight: 700; font-family: monospace; color: #34d399;">0%</span>
-                  <span id="batchProgressEta" style="font-size: 11px; color: #94a3b8; margin-left: 8px;">預估剩餘時間：計算中...</span>
+          <!-- 批次審查進度條 (Progress Bar) -->
+          <div id="batchAuditProgress" style="display: none; background: rgba(15,23,42,0.85); border: 1px solid var(--accent-cyan); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span id="batchProgressText" style="font-size: 13px; font-weight: 600; color: #38bdf8; display: flex; align-items: center; gap: 8px;">
+                <span class="spinner" style="display:inline-block; width:12px; height:12px; border:2px solid #38bdf8; border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite;"></span>
+                <span>正在執行全自動批次審查（調用 LLM 評估病歷支持度）...</span>
+              </span>
+              <div style="text-align: right;">
+                <span id="batchProgressPercent" style="font-size: 13px; font-weight: 700; font-family: monospace; color: #34d399;">0%</span>
+                <span id="batchProgressEta" style="font-size: 11px; color: #94a3b8; margin-left: 8px;">預估剩餘時間：計算中...</span>
+              </div>
+            </div>
+            <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden; position: relative;">
+              <div id="batchProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #06b6d4, #10b981); border-radius: 5px; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+
+          <!-- 佐證庫背景相容槽（錄音／報告／病歷）與燈箱 -->
+          <div style="display: none;">
+            <div id="vaultAudio"></div>
+            <div id="vaultReports"></div>
+            <div id="vaultRecords"></div>
+            <div id="vaultDropzone"></div>
+          </div>
+          <div id="vaultLightbox" class="vault-lightbox" hidden onclick="closeVaultLightbox()">
+            <img id="vaultLightboxImg" alt="">
+            <div id="vaultLightboxCaption" class="vault-lightbox-caption"></div>
+          </div>
+
+          <!-- 2 Panels -->
+          <div class="card-grid">
+            <div class="panel">
+              <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <div class="panel-title" style="display:flex; align-items:center; gap:6px;">
+                  <span>📝 抽樣案件門診 SOAP 病歷</span>
                 </div>
+                <button type="button" class="btn-action" style="padding:3px 8px; font-size:11px; background:linear-gradient(135deg, #0ea5e9, #0284c7);" onclick="pushStage2SoapToHis()">📤 寫回 HIS</button>
               </div>
-              <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden; position: relative;">
-                <div id="batchProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #06b6d4, #10b981); border-radius: 5px; transition: width 0.3s ease;"></div>
-              </div>
-            </div>
+              <div class="panel-body">
+                <div id="sHisSyncAlert" style="display:none; margin-bottom:8px; padding:6px 10px; background:rgba(245,158,11,0.15); border:1px solid #f59e0b; border-radius:6px; font-size:11px; color:#fcd34d; justify-content:space-between; align-items:center;">
+                  <span>⚠️ 檢測到 SOAP 病歷已修改，請務必將修訂內容寫回 HIS 與資料庫！</span>
+                  <button type="button" class="btn-action" style="padding:2px 6px; font-size:10px; background:#0284c7;" onclick="confirmAndPushStage2Both()">立即寫回</button>
+                </div>
 
-            <!-- 核心流程操作條 -->
-            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;">
-              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
-                <span style="font-size: 12px; font-weight: 600; color: #38bdf8; margin-right: 4px;">🎯 抽樣審查</span>
-                <button id="btn-s-patient-entry" data-test-id="btn-s-patient-entry" class="btn-action" style="background: linear-gradient(135deg, #059669, #047857);" onclick="togglePatientEntryModal(true)" title="依病患身分證／生日／姓名自當月預審資料檢索加入">➕ 依病患鍵入加入</button>
-                <button id="btnBatchAudit" data-test-id="btn-s-batch-audit" class="btn-action" style="background: linear-gradient(135deg, #0d9488, #0f766e);" onclick="runSamplingBatchAudit()">⚡ 一鍵全自動批次審查 (30案)</button>
-              </div>
-              <div>
-                <button id="btn-s-clear" data-test-id="btn-s-clear" class="btn-action" style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; color: #fca5a5; font-size: 12px;" onclick="clearSamplingCases()">🗑️ 清空抽樣清單</button>
-              </div>
-            </div>
-            <!-- 報表與導出交付條 -->
-            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px dashed rgba(148,163,184,0.2); padding-top: 8px;">
-              <span style="font-size: 12px; font-weight: 600; color: #94a3b8; margin-right: 4px;">📑 報告交付</span>
-              <button id="btn-s-batch-report" data-test-id="btn-s-batch-report" class="btn-action" style="background: rgba(16,185,129,0.15); border: 1px solid #10b981; color: #34d399; font-size: 12px;" onclick="openSamplingBatchReport()">🗂️ 批次預審報告 (HTML)</button>
-              <button id="btn-s-export-xml" data-test-id="btn-s-export-xml" class="btn-action" style="background: rgba(99,102,241,0.15); border: 1px solid #6366f1; color: #a5b4fc; font-size: 12px;" onclick="exportSamplingBatchXml()">📦 全批次導出抽審 XML (Big5)</button>
-            </div>
-          </div>
-
-        <!-- 佐證庫（Phase 17-02）：依案件病歷號（身分證）＋就醫年月自動掛載 vault_key -->
-        <div class="panel vault-panel" id="vaultPanel" style="margin-top: 12px;">
-          <div class="panel-header">
-            <div class="panel-title">📁 佐證庫：<span id="vaultKeyLabel">尚未選取案件</span></div>
-            <div style="display: flex; gap: 8px;">
-              <button type="button" class="btn-action" id="vaultBtnFile" style="padding: 6px 12px; font-size: 12px;" disabled
-                onclick="document.getElementById('vaultFileInput').click()">📤 上傳檔案</button>
-              <button type="button" class="btn-action" id="vaultBtnZip" style="padding: 6px 12px; font-size: 12px;" disabled
-                onclick="document.getElementById('vaultZipInput').click()">🗜️ 上傳 ZIP</button>
-              <input type="file" id="vaultFileInput" multiple hidden
-                accept=".jpg,.jpeg,.png,.dicom,.heic,.mp3,.m4a,.wav,.aac,.pdf,.txt,.csv,.json"
-                onchange="uploadVaultFiles(this.files)">
-              <input type="file" id="vaultZipInput" accept=".zip" hidden onchange="uploadVaultFiles(this.files)">
-            </div>
-          </div>
-          <div class="panel-body">
-            <div id="vaultMessage" class="vault-message"></div>
-            <div id="vaultDropzone" class="vault-dropzone"
-              ondragover="handleVaultDragOver(event)" ondragleave="handleVaultDragLeave(event)" ondrop="handleVaultDrop(event)">
-              拖曳檔案或 ZIP 至此上傳（支援影像、錄音、報告與病歷檔；ZIP 會自動解壓分類）
-            </div>
-            <div class="vault-grid">
-              <div class="vault-card">
-                <div class="vault-card-title">🎙️ 錄音檔</div>
-                <div id="vaultAudio"><div class="vault-empty">請先選取案件</div></div>
-              </div>
-              <div class="vault-card">
-                <div class="vault-card-title">🖼️ 影像畫廊（點擊放大）</div>
-                <div id="vaultImages" class="vault-gallery"><div class="vault-empty">請先選取案件</div></div>
-              </div>
-              <div class="vault-card">
-                <div class="vault-card-title">📄 檢驗檢查報告</div>
-                <div id="vaultReports"><div class="vault-empty">請先選取案件</div></div>
-              </div>
-              <div class="vault-card">
-                <div class="vault-card-title">📝 病歷紀錄</div>
-                <div id="vaultRecords"><div class="vault-empty">請先選取案件</div></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 燈箱（影像放大檢視） -->
-        <div id="vaultLightbox" class="vault-lightbox" hidden onclick="closeVaultLightbox()">
-          <img id="vaultLightboxImg" alt="">
-          <div id="vaultLightboxCaption" class="vault-lightbox-caption"></div>
-        </div>
-
-        <!-- 2 Panels -->
-        <div class="card-grid">
-          <div class="panel">
-            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
-              <div class="panel-title">📝 抽樣案件門診 SOAP 病歷</div>
-              <button type="button" class="btn-action" style="padding:3px 8px; font-size:11px; background:linear-gradient(135deg, #0ea5e9, #0284c7);" onclick="pushStage2SoapToHis()">📤 寫回 HIS</button>
-            </div>
-            <div class="panel-body">
-              <div id="sHisSyncAlert" style="display:none; margin-bottom:8px; padding:6px 10px; background:rgba(245,158,11,0.15); border:1px solid #f59e0b; border-radius:6px; font-size:11px; color:#fcd34d; justify-content:space-between; align-items:center;">
-                <span>⚠️ 檢測到 SOAP 病歷已修改，請務必將修訂內容寫回 HIS！</span>
-                <button type="button" class="btn-action" style="padding:2px 6px; font-size:10px; background:#0284c7;" onclick="pushStage2SoapToHis()">立即寫回</button>
-              </div>
-              <!-- 相容隱藏 input -->
-              <textarea class="code-editor" id="sSoapInput" style="display:none;" oninput="onSoapContentChanged('sampling')"></textarea>
-              <!-- 結構化 4 段 SOAP 編輯表單 -->
-              <div class="soap-form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <!-- S: 主訴 -->
-                <div class="soap-section-box">
-                  <div class="soap-section-title">
-                    <span>🗣️ [S] 主訴 (Subjective)</span>
-                    <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">病患自述症狀與病程時程</span>
+                <!-- 🖼️ 佐證庫影像照片畫廊（點擊放大檢視） -->
+                <div style="background: rgba(15,23,42,0.5); border: 1px solid rgba(148,163,184,0.18); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 12px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 6px;">
+                      <span>🖼️ 佐證庫影像照片（點擊放大檢視）</span>
+                    </span>
+                    <div id="vaultMessage" style="font-size: 11px; color: var(--text-muted);">尚未選取案件</div>
                   </div>
-                  <textarea id="sSoapInputS" class="soap-textarea-custom" rows="4" placeholder="請輸入主訴 (Subjective)..." oninput="onStage2SoapInputChanged()"></textarea>
-                </div>
-                <!-- O: 客觀檢查 -->
-                <div class="soap-section-box">
-                  <div class="soap-section-title">
-                    <span>🩺 [O] 客觀檢查 (Objective)</span>
-                    <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">理學檢查、自費超音波、雲端檢驗值</span>
+                  <div id="vaultImages" class="vault-gallery" style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; min-height: 48px;">
+                    <div class="vault-empty" style="font-size: 11px; color: var(--text-muted); padding: 6px;">尚無影像</div>
                   </div>
-                  <textarea id="sSoapInputO" class="soap-textarea-custom" rows="4" placeholder="請輸入客觀檢查 (Objective)..." oninput="onStage2SoapInputChanged()"></textarea>
                 </div>
-                <!-- A: 診斷評估 -->
-                <div class="soap-section-box">
-                  <div class="soap-section-title">
-                    <span>🔬 [A] 診斷評估 (Assessment)</span>
-                    <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">國際疾病診斷代碼 (ICD-10)</span>
+
+                <!-- 相容隱藏 input -->
+                <textarea class="code-editor" id="sSoapInput" style="display:none;" oninput="onSoapContentChanged('sampling')"></textarea>
+
+                <!-- 結構化 4 段 SOAP 編輯表單（S/O/A/P 獨立文字顏色區隔） -->
+                <div class="soap-form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <!-- S: 主訴 (Cyan blue) -->
+                  <div class="soap-section-box" style="border: 1px solid rgba(56,189,248,0.4); background: rgba(15,23,42,0.7); border-radius: 8px; padding: 10px;">
+                    <div class="soap-section-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                      <span style="color: #38bdf8; font-weight: 700; font-size: 12px;">🗣️ [S] 主訴 (Subjective)</span>
+                      <span style="font-size: 10px; color: #94a3b8;">病患自述症狀與病程</span>
+                    </div>
+                    <textarea id="sSoapInputS" class="soap-textarea-custom" rows="4" placeholder="請輸入主訴 (Subjective)..." style="color: #7dd3fc; background: rgba(15,23,42,0.85); border: 1px solid rgba(56,189,248,0.25);" oninput="onStage2SoapInputChanged()"></textarea>
                   </div>
-                  <textarea id="sSoapInputA" class="soap-textarea-custom" rows="4" placeholder="請輸入診斷評估 (Assessment)..." oninput="onStage2SoapInputChanged()"></textarea>
+                  <!-- O: 客觀檢查 (Emerald green) -->
+                  <div class="soap-section-box" style="border: 1px solid rgba(52,211,153,0.4); background: rgba(15,23,42,0.7); border-radius: 8px; padding: 10px;">
+                    <div class="soap-section-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                      <span style="color: #34d399; font-weight: 700; font-size: 12px;">🩺 [O] 客觀檢查 (Objective)</span>
+                      <span style="font-size: 10px; color: #94a3b8;">理學檢查、超音波、檢驗</span>
+                    </div>
+                    <textarea id="sSoapInputO" class="soap-textarea-custom" rows="4" placeholder="請輸入客觀檢查 (Objective)..." style="color: #a7f3d0; background: rgba(15,23,42,0.85); border: 1px solid rgba(52,211,153,0.25);" oninput="onStage2SoapInputChanged()"></textarea>
+                  </div>
+                  <!-- A: 診斷評估 (Purple) -->
+                  <div class="soap-section-box" style="border: 1px solid rgba(167,139,250,0.4); background: rgba(15,23,42,0.7); border-radius: 8px; padding: 10px;">
+                    <div class="soap-section-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                      <span style="color: #a78bfa; font-weight: 700; font-size: 12px;">🔬 [A] 診斷評估 (Assessment)</span>
+                      <span style="font-size: 10px; color: #94a3b8;">國際疾病診斷代碼 ICD-10</span>
+                    </div>
+                    <textarea id="sSoapInputA" class="soap-textarea-custom" rows="4" placeholder="請輸入診斷評估 (Assessment)..." style="color: #ddd6fe; background: rgba(15,23,42,0.85); border: 1px solid rgba(167,139,250,0.25);" oninput="onStage2SoapInputChanged()"></textarea>
+                  </div>
+                  <!-- P: 處置治療 (Amber yellow) -->
+                  <div class="soap-section-box" style="border: 1px solid rgba(251,191,36,0.4); background: rgba(15,23,42,0.7); border-radius: 8px; padding: 10px;">
+                    <div class="soap-section-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                      <span style="color: #fbbf24; font-weight: 700; font-size: 12px;">💊 [P] 處置治療 (Plan)</span>
+                      <span style="font-size: 10px; color: #94a3b8;">健保醫令、自費項目、衛教</span>
+                    </div>
+                    <textarea id="sSoapInputP" class="soap-textarea-custom" rows="4" placeholder="請輸入處置治療 (Plan)..." style="color: #fde68a; background: rgba(15,23,42,0.85); border: 1px solid rgba(251,191,36,0.25);" oninput="onStage2SoapInputChanged()"></textarea>
+                  </div>
                 </div>
-                <!-- P: 處置治療 -->
-                <div class="soap-section-box">
-                  <div class="soap-section-title">
-                    <span>💊 [P] 處置治療 (Plan)</span>
-                    <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">健保醫令、自費項目 (PRP/HA)、醫囑衛教</span>
+
+                <!-- 改完文字 同意後寫回 his and database -->
+                <div style="margin-top: 12px;">
+                  <button type="button" class="btn-action his-sync-btn-pulse" style="width: 100%; padding: 10px 16px; font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #059669, #047857); border: 1px solid #10b981; color: #fff; box-shadow: 0 0 10px rgba(16,185,129,0.35);" onclick="confirmAndPushStage2Both()">
+                    ✅ 同意修訂並寫回 HIS 與資料庫 (Database)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <div class="panel-title">🛠️ 醫令支持度預先補強建議（Qwen3.8-27B 智慧分析）</div>
+                <button type="button" class="btn-action" style="padding:3px 8px; font-size:11px; background:linear-gradient(135deg, #10b981, #059669);" onclick="pushStage2SoapToHis()">📤 寫回 HIS</button>
+              </div>
+              <div class="panel-body">
+                <!-- 紅字建立清單：缺口分析與警示 -->
+                <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 13px; font-weight: 700; color: #ef4444; display: flex; align-items: center; gap: 6px;">
+                      <span>⚠️ 缺口分析與警示清單</span>
+                      <span style="font-size: 10px; padding: 1px 6px; background: rgba(239,68,68,0.25); border-radius: 4px; color: #fca5a5; font-weight: 600;">紅字建立清單</span>
+                    </span>
                   </div>
-                  <textarea id="sSoapInputP" class="soap-textarea-custom" rows="4" placeholder="請輸入處置治療 (Plan)..." oninput="onStage2SoapInputChanged()"></textarea>
+                  <div style="font-size: 12px; color: #f87171; line-height: 1.6; font-weight: 500;" id="sMissingReason">
+                    建立清單：病歷 SOAP A 欄僅記載簡寫 DM，未附上近三次血糖趨勢與檢驗必要性說明。
+                  </div>
+                </div>
+
+                <!-- 綠色字體確認件：醫令支持度補強建議 -->
+                <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 13px; font-weight: 700; color: #10b981; display: flex; align-items: center; gap: 6px;">
+                      <span>💡 醫令支持度預先補強建議</span>
+                      <span style="font-size: 10px; padding: 1px 6px; background: rgba(16,185,129,0.25); border-radius: 4px; color: #6ee7b7; font-weight: 600;">使用綠色字體</span>
+                    </span>
+                  </div>
+                  <div style="color: #10b981; font-size: 12px; line-height: 1.6; font-weight: 500;" id="sAdviceBox">
+                    建議補強：請醫師於 P 欄補充『病患上次 HbA1c 8.2%，本次為3個月例行評估』以達強支持。
+                  </div>
+                  <div style="margin-top: 10px; padding: 8px 10px; background: rgba(16, 185, 129, 0.15); border: 1px dashed #10b981; border-radius: 6px; font-size: 12px; color: #34d399; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
+                    <span>✅ <strong>需要確認件並回寫 HIS 系統。</strong></span>
+                    <button type="button" class="btn-action" style="padding: 3px 8px; font-size: 11px; background: #059669; border: 1px solid #10b981; color: #fff;" onclick="pushStage2SoapToHis()">📤 確認件並回寫 HIS</button>
+                  </div>
+                </div>
+
+                <!-- Qwen3.8-27B SOAP 比對建議與醫師審批面板 -->
+                <div id="sLlmSoapPanel" style="margin-top: 12px; background: rgba(15,23,42,0.6); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 12px; display: none;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-weight: 700; color: #38bdf8; font-size: 13px;">🤖 LLM 智慧 SOAP 補強建議 (Qwen3.8-27B)</span>
+                    <button id="btn-s-apply-soap" data-test-id="btn-s-apply-soap" type="button" class="btn-action" style="background: linear-gradient(135deg, #0284c7, #0369a1); border: 1px solid #38bdf8; color: #fff; padding: 4px 10px; font-size: 12px; font-weight: 700;" onclick="applyRecommendedSoap()">🔄 按下換 SOAP（套用 LLM 建議至病歷）</button>
+                  </div>
+                  <div id="sLlmComparison" style="font-size: 12px; color: #cbd5e1; margin-bottom: 8px; line-height: 1.5; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;"></div>
+                  <div id="sLlmSoapPreview" style="font-size: 12px; color: #a7f3d0; line-height: 1.5; white-space: pre-wrap; background: rgba(6,78,59,0.2); padding: 8px; border-radius: 6px; border: 1px solid rgba(16,185,129,0.2);"></div>
+                  <div id="sLlmApprovalAdvice" style="font-size: 12px; color: #fbbf24; margin-top: 8px; line-height: 1.5;"></div>
+                </div>
+
+                <div style="margin-top: 14px;">
+                  <button class="btn-action his-sync-btn-pulse" style="width: 100%; padding: 10px 16px; font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #059669, #047857); border: 1px solid #10b981; color: #fff; box-shadow: 0 0 10px rgba(16,185,129,0.35);" onclick="confirmAndPushStage2Both()">
+                    ✅ 同意修訂並寫回 HIS 與資料庫 (Database)
+                  </button>
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="panel">
-            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
-              <div class="panel-title">🛠️ 醫令支持度預先補強建議（Qwen3.8-27B 智慧分析）</div>
-              <button type="button" class="btn-action" style="padding:3px 8px; font-size:11px; background:linear-gradient(135deg, #10b981, #059669);" onclick="pushStage2SoapToHis()">📤 寫回 HIS</button>
-            </div>
-            <div class="panel-body">
-              <!-- 紅字建立清單：缺口分析與警示 -->
-              <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                  <span style="font-size: 13px; font-weight: 700; color: #ef4444; display: flex; align-items: center; gap: 6px;">
-                    <span>⚠️ 缺口分析與警示清單</span>
-                    <span style="font-size: 10px; padding: 1px 6px; background: rgba(239,68,68,0.25); border-radius: 4px; color: #fca5a5; font-weight: 600;">紅字建立清單</span>
-                  </span>
-                </div>
-                <div style="font-size: 12px; color: #f87171; line-height: 1.6; font-weight: 500;" id="sMissingReason">
-                  建立清單：病歷 SOAP A 欄僅記載簡寫 DM，未附上近三次血糖趨勢與檢驗必要性說明。
-                </div>
-              </div>
-
-              <!-- 綠色字體確認件：醫令支持度補強建議 -->
-              <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                  <span style="font-size: 13px; font-weight: 700; color: #10b981; display: flex; align-items: center; gap: 6px;">
-                    <span>💡 醫令支持度預先補強建議</span>
-                    <span style="font-size: 10px; padding: 1px 6px; background: rgba(16,185,129,0.25); border-radius: 4px; color: #6ee7b7; font-weight: 600;">使用綠色字體</span>
-                  </span>
-                </div>
-                <div style="color: #10b981; font-size: 12px; line-height: 1.6; font-weight: 500;" id="sAdviceBox">
-                  建議補強：請醫師於 P 欄補充『病患上次 HbA1c 8.2%，本次為3個月例行評估』以達強支持。
-                </div>
-                <div style="margin-top: 10px; padding: 8px 10px; background: rgba(16, 185, 129, 0.15); border: 1px dashed #10b981; border-radius: 6px; font-size: 12px; color: #34d399; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
-                  <span>✅ <strong>需要確認件並回寫 HIS 系統。</strong></span>
-                  <button type="button" class="btn-action" style="padding: 3px 8px; font-size: 11px; background: #059669; border: 1px solid #10b981; color: #fff;" onclick="pushStage2SoapToHis()">📤 確認件並回寫 HIS</button>
-                </div>
-              </div>
-
-              <!-- Qwen3.8-27B SOAP 比對建議與醫師審批面板 -->
-              <div id="sLlmSoapPanel" style="margin-top: 12px; background: rgba(15,23,42,0.6); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 12px; display: none;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                  <span style="font-weight: 700; color: #38bdf8; font-size: 13px;">🤖 LLM 智慧 SOAP 補強建議 (Qwen3.8-27B)｜英文病歷主體（可直接複製至 HIS）＋中文審查意見</span>
-                  <button id="btn-s-apply-soap" data-test-id="btn-s-apply-soap" type="button" class="btn-action" style="padding: 3px 8px; font-size: 11px;" onclick="applyRecommendedSoap()">套用建議至病歷</button>
-                </div>
-                <div id="sLlmComparison" style="font-size: 12px; color: #cbd5e1; margin-bottom: 8px; line-height: 1.5; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;"></div>
-                <div id="sLlmSoapPreview" style="font-size: 12px; color: #a7f3d0; line-height: 1.5; white-space: pre-wrap; background: rgba(6,78,59,0.2); padding: 8px; border-radius: 6px; border: 1px solid rgba(16,185,129,0.2);"></div>
-                <div id="sLlmApprovalAdvice" style="font-size: 12px; color: #fbbf24; margin-top: 8px; line-height: 1.5;"></div>
-              </div>
-
-              <div style="margin-top: 14px;">
-                <button class="btn-action" style="width: 100%; background: linear-gradient(135deg, #059669, #047857);" onclick="confirmAndPushStage2()">✅ 需要確認件並回寫 HIS 系統（送出抽審）</button>
-              </div>
-            </div>
+          <!-- 下面已依需求刪除多源證據獨立冗餘區塊，隱藏保留以相容現有腳本與測試 -->
+          <div style="display: none;">
+            <textarea id="sLabInput"></textarea>
+            <textarea id="sCloudInput"></textarea>
+            <input type="file" id="sAttachInput">
+            <div id="sAttachList"></div>
+            <button id="btn-s-save-evidence" data-test-id="btn-s-save-evidence" onclick="saveSamplingEvidence()"></button>
           </div>
         </div>
-
-        <!-- 多源證據：檢驗數據／雲端病歷／影像佐證（Phase 16-02/16-03） -->
-        <div class="card-grid" style="margin-top: 16px;">
-          <div class="panel">
-            <div class="panel-header">
-              <div class="panel-title">🧪 檢驗數據（Lab Results）</div>
-            </div>
-            <div class="panel-body">
-              <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">每行一筆：<code>項目 | 數值 | 單位 | 日期</code>（單位、日期可省略）</div>
-              <textarea class="code-editor" id="sLabInput" placeholder="HbA1c | 8.5 | % | 2026-07-10"></textarea>
-            </div>
-          </div>
-
-          <div class="panel">
-            <div class="panel-header">
-              <div class="panel-title">☁️ 雲端病歷（健保跨院紀錄）</div>
-            </div>
-            <div class="panel-body">
-              <textarea class="code-editor" id="sCloudInput" placeholder="外院跨院病歷摘要……"></textarea>
-            </div>
-          </div>
-
-          <div class="panel">
-            <div class="panel-header">
-              <div class="panel-title">🖼️ 影像佐證上傳</div>
-            </div>
-            <div class="panel-body">
-              <input type="file" id="sAttachInput" accept=".jpg,.jpeg,.png,.pdf,.heic" onchange="uploadSamplingAttachment(this.files[0])">
-              <div id="sAttachList" style="margin-top: 10px; font-size: 12px; color: var(--text-muted); line-height: 1.6;">請先選擇抽樣案件</div>
-            </div>
-          </div>
-        </div>
-        <div style="margin-top: 12px;">
-          <button id="btn-s-save-evidence" data-test-id="btn-s-save-evidence" class="btn-action" onclick="saveSamplingEvidence()">💾 儲存多源證據並重新審核（LLM 將參考檢驗與雲端病歷）</button>
-        </div>
+      </div>
         </div>
       </div>
 
@@ -1041,57 +1009,126 @@
       <!-- WORKFLOW 2: 核減事後申復工作介面 (多源證據補強) -->
       <!-- ==================================================================== -->
       <div class="view-container" id="workflow2View">
-        <!-- Top Bar -->
-        <div class="workflow-topbar">
-          <div>
-            <span style="font-size: 11px; color: var(--text-muted); display: block;">核減刪減醫令申復處理</span>
-            <strong style="font-size: 15px; color: #ef4444;" id="aOrderName">64140C - 甲床與手指重建術 (核減 3,200 點)</strong>
+        <!-- Top Bar: 緊湊單列整合控制台 (包含案例資訊、操作按鈕、報告交付與佐證庫上傳) -->
+        <div class="workflow-topbar" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 14px; background: rgba(15,23,42,0.85); border-bottom: 1px solid var(--panel-border);">
+          <!-- 案例資訊、核減原因與病歷號 -->
+          <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+            <div>
+              <span style="font-size: 11px; color: var(--text-muted); display: block;">核減刪減醫令申復處理</span>
+              <strong style="font-size: 14px; color: #ef4444;" id="aOrderName">64140C - 甲床與手指重建術 (核減 3,200 點)</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px; padding-left: 8px; border-left: 1px solid rgba(148,163,184,0.2);">
+              <span style="font-size: 11px; color: var(--text-muted);">核減原因：</span>
+              <span style="font-size: 12px; color: #f59e0b;" id="aDeductionReason">病歷未載明肌腱撕裂之影像是項與術前評估</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px; padding-left: 8px; border-left: 1px solid rgba(148,163,184,0.2);">
+              <label for="aRecordNoInput" style="font-size: 11px; color: var(--text-muted); white-space: nowrap;">病歷號（選填，查半年病史）：</label>
+              <input type="text" id="aRecordNoInput" placeholder="M220518024"
+                style="font-size: 12px; padding: 3px 6px; border: 1px solid var(--panel-border); border-radius: 4px; background: var(--panel-bg); color: var(--text-color); width: 105px;"
+                title="病歷號（Phase 3 d3），填入後生成草稿時一併查詢半年病史">
+            </div>
           </div>
-          <div>
-            <span style="font-size: 11px; color: var(--text-muted); margin-right: 6px;">核減原因：</span>
-            <span style="font-size: 12px; color: #f59e0b;" id="aDeductionReason">病歷未載明肌腱撕裂之影像是項與術前評估</span>
-            <br>
-            <!-- 11.1-02（BLOCKER-1，plan-checker BLOCKER 2 使用者裁示）：病歷號
-                 輸入欄（可選填，查半年病史）。CSV 匯入案件 payload.record_no 恆
-                 None，此欄是 generate 端點 timeline 查詢的唯一真實病歷號入口——
-                 有值才查，留空由 server 端誠實標記 no_record_no。 -->
-            <label for="aRecordNoInput" style="font-size: 11px; color: var(--text-muted); margin-right: 6px;">病歷號（選填，查半年病史）：</label>
-            <input type="text" id="aRecordNoInput" placeholder="M220518024"
-              style="font-size: 12px; padding: 4px 8px; border: 1px solid var(--panel-border); border-radius: 6px; background: var(--panel-bg); color: var(--text-color); width: 140px;"
-              title="病歷號（Phase 3 d3），填入後生成草稿時一併查詢半年病史">
-          </div>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <button id="btn-a-batch-report-top" data-test-id="btn-a-batch-report-top" class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669); padding: 7px 14px; font-size: 13px;" onclick="openAppealBatchReport()">🔍 開啟視覺化審核卡片 (HTML)</button>
-            <button id="btn-a-generate-draft" data-test-id="btn-a-generate-draft" class="btn-action" style="padding: 7px 14px; font-size: 13px;" onclick="generateAppealDraft()">⚡ 整合多源證據生成申復草稿</button>
+
+          <!-- 緊湊操作按鈕與佐證庫：1列整合 -->
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
+            <button id="btn-a-batch-report-top" data-test-id="btn-a-batch-report-top" class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669); padding: 5px 10px; font-size: 12px;" onclick="openAppealBatchReport()">🔍 開啟視覺化審核卡片 (HTML)</button>
+            <button id="btn-a-generate-draft" data-test-id="btn-a-generate-draft" class="btn-action" style="padding: 5px 10px; font-size: 12px;" onclick="generateAppealDraft()">⚡ 整合多源證據生成申復草稿</button>
+
+            <div style="width: 1px; height: 16px; background: rgba(148,163,184,0.2); margin: 0 2px;"></div>
+            <span style="font-size: 11px; font-weight: 700; color: #a855f7;">⚖️ 申復處理</span>
+            <button id="btn-a-patient-entry" data-test-id="btn-a-patient-entry" class="btn-action" style="background: linear-gradient(135deg, #059669, #047857); padding: 5px 10px; font-size: 12px;" onclick="togglePatientEntryModal(true)">➕ 依病患鍵入加入</button>
+            <button id="btn-a-clear" data-test-id="btn-a-clear" class="btn-action" style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; color: #fca5a5; padding: 5px 8px; font-size: 12px;" onclick="clearAppealCases()">🗑️ 清空申復清單</button>
+
+            <div style="width: 1px; height: 16px; background: rgba(148,163,184,0.2); margin: 0 2px;"></div>
+            <span style="font-size: 11px; font-weight: 700; color: #94a3b8;">📑 報告交付</span>
+            <button id="btn-a-batch-report" data-test-id="btn-a-batch-report" class="btn-action" style="background: rgba(16,185,129,0.15); border: 1px solid #10b981; color: #34d399; padding: 5px 10px; font-size: 12px;" onclick="openAppealBatchReport()">🗂️ 批次申復報告 (HTML)</button>
+            <button id="btn-a-export-xml" data-test-id="btn-a-export-xml" class="btn-action" style="background: rgba(99,102,241,0.15); border: 1px solid #6366f1; color: #a5b4fc; padding: 5px 10px; font-size: 12px;" onclick="exportAppealBatchXml()">📦 全批次導出申復 XML (TOTFA.zip)</button>
+
+            <div style="width: 1px; height: 16px; background: rgba(148,163,184,0.2); margin: 0 2px;"></div>
+            <span style="font-size: 11px; font-weight: 700; color: #fbbf24;">📁 佐證庫：<span id="aVaultKeyLabel" style="font-weight:normal; color:#cbd5e1;">無法自動掛載</span></span>
+            <button type="button" class="btn-action" id="aVaultBtnFile" style="padding: 5px 10px; font-size: 12px; background: rgba(56,189,248,0.2); border: 1px solid #38bdf8;" disabled onclick="document.getElementById('vaultFileInput').click()">📤 上傳檔案</button>
+            <button type="button" class="btn-action" id="aVaultBtnZip" style="padding: 5px 10px; font-size: 12px; background: rgba(168,85,247,0.2); border: 1px solid #a855f7;" disabled onclick="document.getElementById('vaultZipInput').click()">🗜️ 上傳 ZIP</button>
           </div>
         </div>
 
         <div class="view-scroll-content">
 
-        <!-- 申復作業動作列（比照抽樣工作台） -->
-        <div style="background: rgba(15,23,42,0.6); border: 1px solid var(--panel-border); border-radius: 10px; padding: 12px; margin-top: 12px; display: flex; flex-direction: column; gap: 10px;">
-          <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;">
-            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
-              <span style="font-size: 12px; font-weight: 600; color: #a855f7; margin-right: 4px;">⚖️ 申復處理</span>
-              <button id="btn-a-patient-entry" data-test-id="btn-a-patient-entry" class="btn-action" style="background: linear-gradient(135deg, #059669, #047857);" onclick="togglePatientEntryModal(true)" title="依病患身分證／生日／姓名自當月預審資料檢索加入">➕ 依病患鍵入加入</button>
-            </div>
-            <div>
-              <button id="btn-a-clear" data-test-id="btn-a-clear" class="btn-action" style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; color: #fca5a5; font-size: 12px;" onclick="clearAppealCases()">🗑️ 清空申復清單</button>
-            </div>
-          </div>
-          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px dashed rgba(148,163,184,0.2); padding-top: 8px;">
-            <span style="font-size: 12px; font-weight: 600; color: #94a3b8; margin-right: 4px;">📑 報告交付</span>
-            <button id="btn-a-batch-report" data-test-id="btn-a-batch-report" class="btn-action" style="background: rgba(16,185,129,0.15); border: 1px solid #10b981; color: #34d399; font-size: 12px;" onclick="openAppealBatchReport()">🗂️ 批次申復報告 (HTML)</button>
-            <button id="btn-a-export-xml" data-test-id="btn-a-export-xml" class="btn-action" style="background: rgba(99,102,241,0.15); border: 1px solid #6366f1; color: #a5b4fc; font-size: 12px;" onclick="exportAppealBatchXml()">📦 全批次導出申復 XML (TOTFA.zip)</button>
-          </div>
-        </div>
-
-        <!-- 2 Panels -->
-        <div class="card-grid">
-          <!-- Multi-source Evidence Panel -->
+        <!-- 2 Panels Grid (比照第 2 階：左側編輯器與照片庫，右側缺口清單與 LLM 建議) -->
+        <div class="card-grid" style="margin-top: 12px;">
+          <!-- 4-Section Appeal Draft Editor Panel -->
           <div class="panel">
             <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
-              <div class="panel-title">🔬 多源證據自動補強 (影像 / 檢驗 / 雲端病歷)</div>
+              <div class="panel-title">✍️ 4 段式申復理由線上編輯器 (≤2000字)</div>
+              <button type="button" class="btn-action" style="padding:3px 8px; font-size:11px; background:linear-gradient(135deg, #0ea5e9, #0284c7);" onclick="triggerDirectHisWrite('3階核減事後申復', getAppealFullText())">📤 寫回 HIS</button>
+            </div>
+            <div class="panel-body">
+              <div id="aHisSyncAlert" style="display:none; margin-bottom:8px; padding:6px 10px; background:rgba(245,158,11,0.15); border:1px solid #f59e0b; border-radius:6px; font-size:11px; color:#fcd34d; justify-content:space-between; align-items:center;">
+                <span>⚠️ 檢測到申復病歷佐證已修改，請記得將補充之病歷佐證寫回 HIS！</span>
+                <button type="button" class="btn-action" style="padding:2px 6px; font-size:10px; background:#0284c7;" onclick="triggerDirectHisWrite('3階核減事後申復', getAppealFullText())">立即寫回</button>
+              </div>
+
+              <!-- 佐證庫影像縮圖 (Photo Gallery Strip) -->
+              <div style="margin-bottom: 10px; padding: 8px 10px; background: rgba(15,23,42,0.6); border: 1px solid rgba(56,189,248,0.2); border-radius: 8px;">
+                <div style="font-size: 11px; color: #38bdf8; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                  <span>🖼️ 申復佐證影像相簿庫 (Photos Gallery)</span>
+                  <span style="font-size: 10px; color: var(--text-muted);">點擊縮圖可放大預覽</span>
+                </div>
+                <div id="aVaultImages" class="vault-gallery" style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; min-height: 48px;">
+                  <div class="vault-empty" style="font-size:11px; color:var(--text-muted); padding:10px;">尚未選取案件或尚無影像</div>
+                </div>
+              </div>
+
+              <!-- 4 段式顏色區分編輯區塊（S=青藍, O=翡翠綠, A=粉紫, P=琥珀金） -->
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div>
+                  <label style="font-size: 11px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 4px; margin-bottom: 2px;">
+                    <span>🗣️ ① 案情摘要 (Subjective / Summary)</span>
+                  </label>
+                  <textarea class="appeal-input" id="aSec1" oninput="onSoapContentChanged('appeal')" style="width: 100%; height: 75px; color: #7dd3fc; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; padding: 6px 8px; font-family: monospace, sans-serif; font-size: 12px; line-height: 1.4; resize: vertical;"></textarea>
+                </div>
+
+                <div>
+                  <label style="font-size: 11px; font-weight: 700; color: #34d399; display: flex; align-items: center; gap: 4px; margin-bottom: 2px;">
+                    <span>🩺 ② 醫療必要性 (Objective / Medical Necessity)</span>
+                  </label>
+                  <textarea class="appeal-input" id="aSec2" oninput="onSoapContentChanged('appeal')" style="width: 100%; height: 75px; color: #a7f3d0; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 6px 8px; font-family: monospace, sans-serif; font-size: 12px; line-height: 1.4; resize: vertical;"></textarea>
+                </div>
+
+                <div>
+                  <label style="font-size: 11px; font-weight: 700; color: #a78bfa; display: flex; align-items: center; gap: 4px; margin-bottom: 2px;">
+                    <span>🔬 ③ 規則依據 (Assessment / Regulatory Basis)</span>
+                  </label>
+                  <textarea class="appeal-input" id="aSec3" oninput="onSoapContentChanged('appeal')" style="width: 100%; height: 75px; color: #ddd6fe; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 6px; padding: 6px 8px; font-family: monospace, sans-serif; font-size: 12px; line-height: 1.4; resize: vertical;"></textarea>
+                </div>
+
+                <div>
+                  <label style="font-size: 11px; font-weight: 700; color: #fbbf24; display: flex; align-items: center; gap: 4px; margin-bottom: 2px;">
+                    <span>💊 ④ 病歷佐證 (Plan / Physician Defense)</span>
+                  </label>
+                  <textarea class="appeal-input" id="aSec4" oninput="onSoapContentChanged('appeal')" style="width: 100%; height: 75px; color: #fde68a; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 6px; padding: 6px 8px; font-family: monospace, sans-serif; font-size: 12px; line-height: 1.4; resize: vertical;"></textarea>
+                </div>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                <span style="font-size: 12px; color: var(--text-muted);">字數檢核：<strong style="color:#10b981;" id="aCharCount">0 / 2000 字</strong></span>
+                <div style="display: flex; gap: 8px;">
+                  <button id="btn-a-download-json" data-test-id="btn-a-download-json" class="btn-action" style="padding: 6px 12px; font-size: 12px; background: rgba(56,189,248,0.15); border: 1px solid #38bdf8; color: #38bdf8;" onclick="downloadSingleAppealJson()">📄 下載 appeal.json</button>
+                  <button id="btn-a-download-xml" data-test-id="btn-a-download-xml" class="btn-action" style="padding: 6px 12px; font-size: 12px; background: linear-gradient(135deg, #0ea5e9, #0284c7);" onclick="downloadSingleAppealXml()">📄 導出申復 XML</button>
+                </div>
+              </div>
+
+              <div style="margin-top: 14px;">
+                <button class="btn-action his-sync-btn-pulse" style="width: 100%; padding: 10px 16px; font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #059669, #047857); border: 1px solid #10b981; color: #fff; box-shadow: 0 0 10px rgba(16,185,129,0.35);" onclick="confirmAndPushStage3Both()">
+                  ✅ 同意修訂並寫回 HIS 與資料庫 (Database)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Multi-source Evidence & LLM Advice Panel (Right Side) -->
+          <div class="panel">
+            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+              <div class="panel-title">🔬 核減原因缺口與申復智慧建議 (Qwen3.8-27B 智慧分析)</div>
               <button type="button" class="btn-action" style="padding:3px 8px; font-size:11px; background:linear-gradient(135deg, #10b981, #059669);" onclick="triggerDirectHisWrite('3階核減事後申復', getAppealFullText())">📤 寫回 HIS</button>
             </div>
             <div class="panel-body">
@@ -1139,49 +1176,21 @@
                   <button type="button" class="btn-action" style="padding: 3px 8px; font-size: 11px; background: #059669; border: 1px solid #10b981; color: #fff;" onclick="triggerDirectHisWrite('3階核減事後申復', getAppealFullText())">📤 確認件並回寫 HIS</button>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <!-- 4-Section Appeal Draft Editor Panel -->
-          <div class="panel">
-            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
-              <div class="panel-title">✍️ 4 段式申復理由線上編輯器 (≤2000字)</div>
-              <button type="button" class="btn-action" style="padding:3px 8px; font-size:11px; background:linear-gradient(135deg, #0ea5e9, #0284c7);" onclick="triggerDirectHisWrite('3階核減事後申復', getAppealFullText())">📤 寫回 HIS</button>
-            </div>
-            <div class="panel-body">
-              <div id="aHisSyncAlert" style="display:none; margin-bottom:8px; padding:6px 10px; background:rgba(245,158,11,0.15); border:1px solid #f59e0b; border-radius:6px; font-size:11px; color:#fcd34d; justify-content:space-between; align-items:center;">
-                <span>⚠️ 檢測到申復病歷佐證已修改，請記得將補充之病歷佐證寫回 HIS！</span>
-                <button type="button" class="btn-action" style="padding:2px 6px; font-size:10px; background:#0284c7;" onclick="triggerDirectHisWrite('3階核減事後申復', getAppealFullText())">立即寫回</button>
-              </div>
-              <label style="font-size: 11px; color: #38bdf8; display: block; margin-bottom: 2px;">① 案情摘要</label>
-              <textarea class="appeal-input" id="aSec1" oninput="onSoapContentChanged('appeal')"></textarea>
-
-              <label style="font-size: 11px; color: #38bdf8; display: block; margin-bottom: 2px;">② 醫療必要性 (多源證據)</label>
-              <textarea class="appeal-input" id="aSec2" oninput="onSoapContentChanged('appeal')"></textarea>
-
-              <label style="font-size: 11px; color: #38bdf8; display: block; margin-bottom: 2px;">③ 規則依據</label>
-              <textarea class="appeal-input" id="aSec3" oninput="onSoapContentChanged('appeal')"></textarea>
-
-              <label style="font-size: 11px; color: #38bdf8; display: block; margin-bottom: 2px;">④ 病歷佐證 (醫師申復說明)</label>
-              <textarea class="appeal-input" id="aSec4" oninput="onSoapContentChanged('appeal')"></textarea>
 
               <!-- Qwen3.8-27B 申復比對分析與審批建議 -->
-              <div id="aLlmSoapPanel" style="margin-top: 10px; background: rgba(15,23,42,0.6); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 10px; display: none;">
-                <div style="font-weight: 700; color: #38bdf8; font-size: 12px; margin-bottom: 6px;">🤖 LLM 智慧分析與審批建議 (Qwen3.8-27B)</div>
-                <div id="aLlmComparison" style="font-size: 11px; color: #cbd5e1; margin-bottom: 6px; line-height: 1.4;"></div>
-                <div id="aLlmAdvice" style="font-size: 11px; color: #fbbf24; line-height: 1.4;"></div>
-              </div>
-
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-                <span style="font-size: 12px; color: var(--text-muted);">字數檢核：<strong style="color:#10b981;" id="aCharCount">0 / 2000 字</strong></span>
-                <div style="display: flex; gap: 8px;">
-                  <button id="btn-a-download-json" data-test-id="btn-a-download-json" class="btn-action" style="padding: 6px 12px; font-size: 12px; background: rgba(56,189,248,0.15); border: 1px solid #38bdf8; color: #38bdf8;" onclick="downloadSingleAppealJson()">📄 下載 appeal.json</button>
-                  <button id="btn-a-download-xml" data-test-id="btn-a-download-xml" class="btn-action" style="padding: 6px 12px; font-size: 12px; background: linear-gradient(135deg, #0ea5e9, #0284c7);" onclick="downloadSingleAppealXml()">📄 導出申復 XML</button>
+              <div id="aLlmSoapPanel" style="margin-top: 12px; background: rgba(15,23,42,0.6); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 12px; display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <span style="font-weight: 700; color: #38bdf8; font-size: 13px;">🤖 LLM 智慧分析與申復建議 (Qwen3.8-27B)</span>
+                  <button id="btn-a-apply-soap" data-test-id="btn-a-apply-soap" type="button" class="btn-action" style="background: linear-gradient(135deg, #0284c7, #0369a1); border: 1px solid #38bdf8; color: #fff; padding: 4px 10px; font-size: 12px; font-weight: 700;" onclick="applyAppealRecommendedDraft()">🔄 按下換 SOAP / 申復建議</button>
                 </div>
+                <div id="aLlmComparison" style="font-size: 12px; color: #cbd5e1; margin-bottom: 8px; line-height: 1.5; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;"></div>
+                <div id="aLlmAdvice" style="font-size: 12px; color: #fbbf24; line-height: 1.5; background: rgba(245,158,11,0.1); padding: 8px; border-radius: 6px; border: 1px solid rgba(245,158,11,0.2);"></div>
               </div>
 
               <div style="margin-top: 14px;">
-                <button class="btn-action" style="width: 100%; background: linear-gradient(135deg, #059669, #047857);" onclick="confirmAndPushStage3()">✅ 需要確認件並回寫 HIS 系統（送出申復）</button>
+                <button class="btn-action his-sync-btn-pulse" style="width: 100%; padding: 10px 16px; font-size: 13px; font-weight: 700; background: linear-gradient(135deg, #059669, #047857); border: 1px solid #10b981; color: #fff; box-shadow: 0 0 10px rgba(16,185,129,0.35);" onclick="confirmAndPushStage3Both()">
+                  ✅ 同意修訂並寫回 HIS 與資料庫 (Database)
+                </button>
               </div>
             </div>
           </div>
@@ -3113,19 +3122,56 @@
       onSoapContentChanged('sampling');
     }
 
+    async function saveCaseSoapToDatabase(caseId, soapText, kind) {
+      if (!caseId) return { ok: false, error: 'no_case_id' };
+      try {
+        const res = await authFetch(`/api/${kind}/cases/${encodeURIComponent(caseId)}/soap`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ soap: soapText, soap_text: soapText })
+        });
+        return { ok: res.ok };
+      } catch (err) {
+        console.error('saveCaseSoapToDatabase error:', err);
+        return { ok: false, error: err };
+      }
+    }
+
     function pushStage2SoapToHis() {
       const full = combineStage2Soap() || document.getElementById('sSoapInput')?.value || '';
       triggerDirectHisWrite('2階抽樣事前預審', full);
     }
 
     function confirmAndPushStage2() {
-      pushStage2SoapToHis();
-      alert('已確認補強件並將最新病歷回寫 HIS 系統！抽審案卷已同步完成。');
+      confirmAndPushStage2Both();
     }
 
     function confirmAndPushStage3() {
-      triggerDirectHisWrite('3階核減事後申復', getAppealFullText());
-      alert('已確認申復補強件並將最新病歷佐證回寫 HIS 系統！申復案卷已同步完成。');
+      confirmAndPushStage3Both();
+    }
+
+    async function confirmAndPushStage2Both() {
+      const full = combineStage2Soap() || document.getElementById('sSoapInput')?.value || '';
+      triggerDirectHisWrite('2階抽樣事前預審', full);
+      const caseId = currentSelectedCase?.id || currentSelectedCase?.case_id;
+      if (caseId) {
+        await saveCaseSoapToDatabase(caseId, full, 'sampling');
+      }
+      const alertEl = document.getElementById('sHisSyncAlert');
+      if (alertEl) alertEl.style.display = 'none';
+      alert('✅ 已同意修訂！\n已將最新 SOAP 病歷成功寫回 HIS 門診病歷，並同步永久儲存至伺服器資料庫 (Database)！');
+    }
+
+    async function confirmAndPushStage3Both() {
+      const full = getAppealFullText();
+      triggerDirectHisWrite('3階核減事後申復', full);
+      const caseId = currentSelectedCase?.id || currentSelectedCase?.case_id;
+      if (caseId) {
+        await saveCaseSoapToDatabase(caseId, full, 'appeal');
+      }
+      const alertEl = document.getElementById('aHisSyncAlert');
+      if (alertEl) alertEl.style.display = 'none';
+      alert('✅ 已同意修訂！\n已將最新申復病歷佐證成功寫回 HIS 系統，並同步永久儲存至伺服器資料庫 (Database)！申復案卷已送出。');
     }
 
     function selectSamplingCase(id) {
@@ -3199,18 +3245,25 @@
 
     // 由抽樣案件推導 vault_key：病歷號須為「1 英文字母＋9 碼數字」（身分證格式），
     // 就醫日期取西元年後兩碼＋月份（YYMM），例如 2026-05-10 → 2605。
-    // 同時接受民國 YYYMMDD（如 1150510）。任一條件不符即回傳說明，不猜測。
+    // 依案件 record_no 與 visit_date 推導 15 碼 vault_key（例：A123456789-2611）。
+    // record_no 若為身分證號須為 1 碼英文字母＋9 碼數字；亦可由病歷號輸入欄選填補全。
+    // visit_date 接受 ISO YYYY-MM-DD、YYYY/MM/DD 或民國 YYYMMDD、YYY/MM/DD。
     function computeVaultKey(record) {
-      const rawNo = String(record.record_no ?? '').trim().toUpperCase();
+      let rawNo = String(record?.id_card ?? record?.id_number ?? record?.record_no ?? '').trim().toUpperCase();
+      const aInput = document.getElementById('aRecordNoInput');
+      if (!/^[A-Z][0-9]{9}$/.test(rawNo) && aInput && aInput.value) {
+        const val = aInput.value.trim().toUpperCase();
+        if (/^[A-Z][0-9]{9}$/.test(val)) rawNo = val;
+      }
       if (!/^[A-Z][0-9]{9}$/.test(rawNo)) {
         return {
           key: null,
           error: `病歷號「${rawNo || '（空白）'}」不是身分證格式（需 1 個英文字母＋9 碼數字，目前 ${rawNo.length} 碼），無法自動掛載佐證庫。`,
         };
       }
-      const visit = String(record.visit_date ?? '').trim();
-      const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(visit);
-      const roc = /^(\d{3})(\d{2})(\d{2})$/.exec(visit);
+      const visit = String(record?.visit_date ?? '').trim();
+      const iso = /^(\d{4})[\/\-.]?(\d{2})[\/\-.]?(\d{2})$/.exec(visit);
+      const roc = /^(\d{3})[\/\-.]?(\d{2})[\/\-.]?(\d{2})$/.exec(visit);
       let year;
       let month;
       if (iso) {
@@ -3238,8 +3291,14 @@
     }
 
     function setVaultButtonsEnabled(enabled) {
-      document.getElementById('vaultBtnFile').disabled = !enabled;
-      document.getElementById('vaultBtnZip').disabled = !enabled;
+      const b1 = document.getElementById('vaultBtnFile');
+      const b2 = document.getElementById('vaultBtnZip');
+      const ab1 = document.getElementById('aVaultBtnFile');
+      const ab2 = document.getElementById('aVaultBtnZip');
+      if (b1) b1.disabled = !enabled;
+      if (b2) b2.disabled = !enabled;
+      if (ab1) ab1.disabled = !enabled;
+      if (ab2) ab2.disabled = !enabled;
     }
 
     function clearVaultObjectUrls() {
@@ -3257,8 +3316,10 @@
     function renderVaultContainersEmpty(text) {
       VAULT_CATEGORIES.forEach(cat => {
         const box = document.getElementById(VAULT_CONTAINERS[cat]);
-        box.replaceChildren(vaultPlaceholder(text));
+        if (box) box.replaceChildren(vaultPlaceholder(text));
       });
+      const aBox = document.getElementById('aVaultImages');
+      if (aBox) aBox.replaceChildren(vaultPlaceholder(text));
     }
 
     // <audio>／<img> 無法附帶 X-API-Key 標頭，故改以 authFetch 取回後轉為同源 blob URL。
@@ -3345,31 +3406,34 @@
 
     function renderVaultImages(files, urls) {
       const box = document.getElementById(VAULT_CONTAINERS.images);
-      if (!files.length) {
-        box.replaceChildren(vaultPlaceholder('尚無影像'));
-        return;
-      }
-      const nodes = files.map((f, i) => {
-        const tile = document.createElement('button');
-        tile.type = 'button';
-        tile.className = 'vault-thumb';
-        const name = document.createElement('span');
-        name.className = 'vault-thumb-name';
-        name.textContent = f.filename;
-        if (urls[i]) {
-          const img = document.createElement('img');
-          img.src = urls[i];
-          img.alt = f.filename;
-          tile.onclick = () => openVaultLightbox(urls[i], f.filename);
-          tile.append(img, name);
-        } else {
-          // DICOM／HEIC 等瀏覽器無法直接顯示：提供開啟（下載）而非縮圖
-          tile.textContent = '📎 ' + f.filename;
-          tile.onclick = () => openVaultFile('images', f.filename);
+      const aBox = document.getElementById('aVaultImages');
+      const makeNodes = () => {
+        if (!files.length) {
+          return [vaultPlaceholder('尚無影像')];
         }
-        return tile;
-      });
-      box.replaceChildren(...nodes);
+        return files.map((f, i) => {
+          const tile = document.createElement('button');
+          tile.type = 'button';
+          tile.className = 'vault-thumb';
+          const name = document.createElement('span');
+          name.className = 'vault-thumb-name';
+          name.textContent = f.filename;
+          if (urls[i]) {
+            const img = document.createElement('img');
+            img.src = urls[i];
+            img.alt = f.filename;
+            tile.onclick = () => openVaultLightbox(urls[i], f.filename);
+            tile.append(img, name);
+          } else {
+            // DICOM／HEIC 等瀏覽器無法直接顯示：提供開啟（下載）而非縮圖
+            tile.textContent = '📎 ' + f.filename;
+            tile.onclick = () => openVaultFile('images', f.filename);
+          }
+          return tile;
+        });
+      };
+      if (box) box.replaceChildren(...makeNodes());
+      if (aBox) aBox.replaceChildren(...makeNodes());
     }
 
     function renderVaultLinkList(boxId, category, files, emptyText) {
@@ -3447,13 +3511,16 @@
       vaultActiveKey = result.key;
       setVaultButtonsEnabled(Boolean(result.key));
       const label = document.getElementById('vaultKeyLabel');
+      const aLabel = document.getElementById('aVaultKeyLabel');
       if (!result.key) {
-        label.textContent = '無法自動掛載';
+        if (label) label.textContent = '無法自動掛載';
+        if (aLabel) aLabel.textContent = '無法自動掛載';
         setVaultMessage(result.error);
         renderVaultContainersEmpty('請修正病歷號或就醫日期後重新選取案件');
         return;
       }
-      label.textContent = result.key;
+      if (label) label.textContent = result.key;
+      if (aLabel) aLabel.textContent = result.key;
       setVaultMessage('載入佐證庫中…');
       await loadVault(result.key, seq);
     }
@@ -4014,6 +4081,24 @@
       }
     }
 
+    let latestAppealDraftSections = null;
+
+    function applyAppealRecommendedDraft() {
+      if (latestAppealDraftSections && latestAppealDraftSections.length >= 4) {
+        const boxes = ['aSec1', 'aSec2', 'aSec3', 'aSec4'];
+        boxes.forEach((id, i) => {
+          const sec = latestAppealDraftSections[i];
+          if (sec && sec.text) {
+            document.getElementById(id).value = sec.text;
+          }
+        });
+        onSoapContentChanged('appeal');
+        alert('已成功將 LLM 建議申復理由套用至 4 段式編輯器！\n⚠️ 請注意：需要確認件並回寫 HIS 系統，請點擊「同意修訂並寫回 HIS 與資料庫」！');
+      } else {
+        generateAppealDraft();
+      }
+    }
+
     function selectAppealCase(id) {
       currentSelectedCase = appealCases.find(c => c.id === id);
       renderCaseList(appealCases);
@@ -4031,6 +4116,7 @@
       document.getElementById('evLab').innerText = (ev.labs && ev.labs.length > 0) ? `${ev.labs[0].name}: ${ev.labs[0].result}` : '無相關檢驗數據';
       document.getElementById('evCloud').innerText = (ev.cloud_sync && ev.cloud_sync.length > 0) ? `${ev.cloud_sync[0].source}: ${ev.cloud_sync[0].note}` : '無相關雲端紀錄';
 
+      refreshVault(currentSelectedCase);
       generateAppealDraft();
     }
 
@@ -4067,6 +4153,7 @@
 
       // sections 為 render_appeal_json 標準契約 [{key,title,text,trimmed}]，
       // 依 D10 四段順序回傳；僅取 text，sec 可能為 undefined 時維持防呆。
+      latestAppealDraftSections = data.sections;
       const boxes = ['aSec1', 'aSec2', 'aSec3', 'aSec4'];
       boxes.forEach((id, i) => {
         const sec = data.sections[i];

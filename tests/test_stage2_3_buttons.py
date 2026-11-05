@@ -34,7 +34,7 @@ def test_stage2_and_3_buttons_dom_integrity_for_webbrain():
         "btn-s-save-evidence",
     ]
 
-    # 預期的第 3 階按鈕 ID（已依需求移除載入預審、重新抽5案、單案申復卡片）
+    # 預期的第 3 階按鈕 ID（已依需求移除載入預審、重新抽5案、單案申復卡片，加入 LLM 換 SOAP 按鈕）
     stage3_btn_ids = [
         "btn-a-batch-report-top",
         "btn-a-generate-draft",
@@ -44,6 +44,7 @@ def test_stage2_and_3_buttons_dom_integrity_for_webbrain():
         "btn-a-export-xml",
         "btn-a-download-json",
         "btn-a-download-xml",
+        "btn-a-apply-soap",
     ]
 
     for bid in stage2_btn_ids:
@@ -54,6 +55,14 @@ def test_stage2_and_3_buttons_dom_integrity_for_webbrain():
     for bid in stage3_btn_ids:
         assert f'id="{bid}"' in html, f"第 3 階按鈕缺少 ID: {bid}"
         assert f'data-test-id="{bid}"' in html, f"第 3 階按鈕缺少 data-test-id: {bid}"
+
+    # 驗證佐證庫上傳與相簿庫元素存在於第 2 階與第 3 階
+    vault_element_ids = [
+        "vaultKeyLabel", "vaultBtnFile", "vaultBtnZip", "vaultImages",
+        "aVaultKeyLabel", "aVaultBtnFile", "aVaultBtnZip", "aVaultImages",
+    ]
+    for vid in vault_element_ids:
+        assert f'id="{vid}"' in html, f"缺少佐證庫元素 ID: {vid}"
 
     # 確認已刪除之按鈕確已自 DOM 中完全移除
     deleted_btn_ids = [
@@ -87,6 +96,16 @@ def test_stage2_button_api_endpoints(test_client):
     link_res = test_client.post("/api/appeal/sample-from-stage2")
     assert link_res.status_code in (200, 400, 404)
 
+    # 5. 第 2 階 SOAP 寫回資料庫端點
+    soap_res = test_client.post(
+        "/api/sampling/cases/SMP-001/soap",
+        json={"soap": "S: Chief Complaint\nO: Normal\nA: DM\nP: Continue Metformin"}
+    )
+    assert soap_res.status_code in (200, 204)
+    data = soap_res.get_json()
+    assert data["status"] == "success"
+    assert "DM" in data["soap"]
+
 
 def test_stage3_button_api_endpoints(test_client):
     """驗證第 3 階（核減事後申復）所有按鈕關聯的後端 API 端點均能正常響應。"""
@@ -105,3 +124,13 @@ def test_stage3_button_api_endpoints(test_client):
     # 4. 重新自第 2 階抽選 5 案連動
     link_res = test_client.post("/api/appeal/sample-from-stage2")
     assert link_res.status_code in (200, 400, 404)
+
+    # 5. 第 3 階申復 SOAP 佐證寫回資料庫端點
+    soap_res = test_client.post(
+        "/api/appeal/cases/APP-001/soap",
+        json={"soap": "① 案情摘要\n② 醫療必要性\n③ 規則依據\n④ 病歷佐證"}
+    )
+    assert soap_res.status_code in (200, 204)
+    data = soap_res.get_json()
+    assert data["status"] == "success"
+    assert "病歷佐證" in data["soap"]

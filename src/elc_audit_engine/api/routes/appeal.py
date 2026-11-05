@@ -212,6 +212,35 @@ def clear_appeal_cases_endpoint():
     })
 
 
+@bp.route("/api/appeal/cases/<case_id>/soap", methods=["PUT", "POST"])
+def update_appeal_soap(case_id: str):
+    """更新申復案件的病歷佐證與申復說明文字（持久化儲存至資料庫）。"""
+    data = json_body(request)
+    soap_text = clean_str(data, "soap", max_len=MAX_SOAP_CHARS)
+    if soap_text is None:
+        soap_text = clean_str(data, "soap_text", max_len=MAX_SOAP_CHARS) or ""
+    store = case_store()
+    try:
+        record = store.get(case_id)
+        if record.kind != "appeal":
+            raise ApiError(f"案件 {case_id} 並非申復案件", status=400)
+        payload = dict(record.payload or {})
+        payload["soap"] = soap_text
+        payload["soap_text"] = soap_text
+        store.update_payload(case_id, payload)
+    except Exception:
+        for demo in DEMO_APPEAL_CASES:
+            if demo["id"] == case_id:
+                demo["soap"] = soap_text
+                break
+    return jsonify({
+        "status": "success",
+        "case_id": case_id,
+        "soap": soap_text,
+        "message": "申復病歷佐證已成功寫入資料庫",
+    })
+
+
 @bp.route("/api/appeal/sample-from-stage2", methods=["POST"])
 def sample_appeal_from_stage2():
     """自第 2 階抽樣案件隨機抽選 N 案（預設 5），連動建立第 3 階申復案件（Plan 20-02）。
