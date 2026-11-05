@@ -13,14 +13,11 @@ Features:
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
-import re
 import subprocess
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +200,8 @@ class HISPushAutomator:
 
             best_elem = None
             for elem in elements:
+                if target_role and elem.role != target_role:
+                    continue
                 if target_id and elem.automation_id == target_id:
                     best_elem = elem
                     break
@@ -277,7 +276,7 @@ class HISPushAutomator:
             tier_used = "tier1_value_pattern"
             retries = 0
 
-            for attempt in range(max_retries + 1):
+            for _attempt in range(max_retries + 1):
                 try:
                     # Tier 1: ValuePattern write
                     self.runner.set_value(elem.ref_id, target_text)
