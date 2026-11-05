@@ -277,25 +277,21 @@ def _case_vault_html(case: CaseAudit) -> str:
     items = []
     has_real_files = False
 
-    # 1. 影像（有檔案則列出連結，無檔案則預留槽位）
+    # 1. 影像（有真實檔案才列出，1 階不顯示預留佔位）
     img_files = files_by_cat.get("images", [])
     if img_files:
         has_real_files = True
         for f in img_files:
             url = f"/api/vault/{_e(vault_key)}/files/images/{_e(f.filename)}"
             items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" style="color: inherit; text-decoration: none;">🖼️ 影像 {_e(f.filename)}</a></li>')
-    else:
-        items.append('<li class="vault-file-item vault-file-placeholder" style="color: #94a3b8; border-style: dashed; background: rgba(148,163,184,0.06);">🖼️ 影像（預留位置／未附加）</li>')
 
-    # 2. 檢驗報告（有檔案則列出連結，無檔案則預留槽位）
+    # 2. 檢驗報告（有真實檔案才列出，1 階不顯示預留佔位）
     rep_files = files_by_cat.get("reports", [])
     if rep_files:
         has_real_files = True
         for f in rep_files:
             url = f"/api/vault/{_e(vault_key)}/files/reports/{_e(f.filename)}"
             items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" style="color: inherit; text-decoration: none;">📄 檢驗報告 {_e(f.filename)}</a></li>')
-    else:
-        items.append('<li class="vault-file-item vault-file-placeholder" style="color: #94a3b8; border-style: dashed; background: rgba(148,163,184,0.06);">📄 檢驗報告（預留位置／未附加）</li>')
 
     # 3. 其他分類（錄音、病歷紀錄等，若有檔案則追加）
     for cat in ("audio", "records"):
@@ -305,7 +301,11 @@ def _case_vault_html(case: CaseAudit) -> str:
             url = f"/api/vault/{_e(vault_key)}/files/{_e(cat)}/{_e(f.filename)}"
             items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" style="color: inherit; text-decoration: none;">{icon} {_e(f.filename)}</a></li>')
 
-    key_label = _e(vault_key) if (vault_key and has_real_files) else "預留"
+    # 1 階：若完全無真實佐證檔案，不顯示佐證庫區塊與未附加預留槽位
+    if not has_real_files or not items:
+        return ""
+
+    key_label = _e(vault_key) if vault_key else "佐證庫"
     return (
         f'<div class="vault-box">'
         f'<div class="vault-title">📁 佐證庫附加檔案（{key_label}）<span style="display:none">佐證庫（{key_label}）</span></div>'
