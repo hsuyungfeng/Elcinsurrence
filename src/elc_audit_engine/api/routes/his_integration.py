@@ -551,10 +551,10 @@ PATIENT_DB = {
                 "icd10": "J02.9",
                 "icd10_title": "急性咽炎，未特定 (Acute pharyngitis, unspecified)",
                 "soap": {
-                    "s": "主訴：近兩天喉嚨乾癢劇痛，吞嚥困難，伴隨輕微畏寒發燒 (37.8°C)，偶有乾咳，無呼吸急促或胸痛。",
-                    "o": "耳溫 37.8°C, BP 122/78 mmHg, HR 82 bpm。\n喉部視診：咽喉黏膜明顯充血發紅 (Pharynx hyperemic)，扁桃腺第一級紅腫 (Tonsils Grade I, non-exudative)，頸部淋巴結輕微觸痛。\n[健保雲端檢驗] 最近一次血球檢查 WBC 6,800/uL, CRP 0.4 mg/dL (1120701)。",
-                    "a": "1. J02.9 急性咽喉炎 (Acute pharyngitis)\n2. R50.9 發燒，未特定 (Fever, unspecified)",
-                    "p": "1. 開立 Acetaminophen 500mg tid + Ibuprofen 400mg prn 開立 3 日。\n2. Dextromethorphan 鎮咳與喉舒含錠。\n3. 醫囑衛教：多溫開水漱口休息，若高燒逾 38.5°C 或出現呼吸不暢速回診。\n4. [自費推薦] 建議補充自費免疫維他命高單位發泡錠及護喉消炎噴霧。",
+                    "s": "Chief Complaint: Severe throat scratchiness and painful swallowing for 2 days. Associated with mild chills and low-grade fever (37.8°C) since yesterday evening. Occasional non-productive dry cough. Denies shortness of breath, chest tightness, or hemoptysis.",
+                    "o": "V/S: BT 37.8°C, BP 122/78 mmHg, HR 82 bpm, RR 18/min.\nThroat Examination: Pharyngeal mucosa markedly hyperemic and injected. Bilateral tonsils mildly enlarged (Grade I) without purulent exudates. Soft palate symmetrical, uvula midline. Mild tenderness on bilateral anterior cervical lymph nodes.\n[NHI Cloud EHR Lab]: Latest CBC showed WBC 6,800/uL, CRP 0.4 mg/dL (1120701).",
+                    "a": "1. J02.9 Acute pharyngitis, unspecified\n2. R50.9 Fever, unspecified",
+                    "p": "1. Acetaminophen 500mg tid + Ibuprofen 400mg prn prescribed for 3 days.\n2. Dextromethorphan cough suppressant and soothing lozenges.\n3. Clinical advice: Encourage warm saline gargling and adequate oral hydration. Immediate return to clinic if body temperature exceeds 38.5°C or dyspnea occurs.\n4. [Self-Pay Recommendation]: High-dose effervescent Vitamin C/Zinc immune supplement and anti-inflammatory throat spray suggested.",
                 },
                 "vault_key": "F229871234-2608",
                 "vault_files": [
@@ -578,10 +578,10 @@ PATIENT_DB = {
                 "icd10": "M17.0",
                 "icd10_title": "雙側原發性膝骨關節炎 (Bilateral primary osteoarthritis of knee)",
                 "soap": {
-                    "s": "主訴：右膝關節上下樓梯與蹲下時痠痛無力逾三個月，早晨起床膝部僵硬約15分鐘，活動後稍改善。",
-                    "o": "雙膝無明顯發熱紅腫，右膝髕骨研磨試驗陽性 (Patellar grind test positive)，活動範圍 ROM: 0-120度。\nX-Ray 影像 (1120718)：雙膝外側關節腔略微狹窄，輕微骨刺生成，符 Kellgren-Lawrence Grade II。\n[健保雲端檢驗] HbA1c 5.8% (1120610), eGFR 88 mL/min (1120610)。",
-                    "a": "1. M17.0 雙側原發性退化性膝關節炎 (Primary osteoarthritis of both knees)",
-                    "p": "1. Celecoxib 200mg qd 開立 7 日。\n2. 安排物理治療（短波熱療與股四頭肌等長肌力訓練）。\n3. [自費項目推薦] 建議高濃度自體血小板 (PRP) 軟骨修復關節腔注射，或長效型玻尿酸 (HA) 潤滑保護。",
+                    "s": "Chief Complaint: Chronic aching pain and weakness in right knee when ascending/descending stairs and squatting for over 3 months. Morning joint stiffness lasting approximately 15 minutes, improving slightly after ambulation. Denies acute trauma, locking sensation, or giving-way.",
+                    "o": "PE: Bilateral knees without erythema, local warmth, or gross joint effusion. Right knee patellar grind test (+), crepitus noted during flexion-extension. ROM: 0° - 120°. Negative anterior/posterior drawer and McMurray test.\nKnee X-ray (1120718): Mild joint space narrowing at medial compartment, small marginal osteophytes at tibial spines, consistent with Kellgren-Lawrence Grade II osteoarthritis.\n[NHI Cloud EHR]: HbA1c 5.8% (1120610), eGFR 88 mL/min (1120610).",
+                    "a": "1. M17.0 Bilateral primary osteoarthritis of knee (Right knee symptomatic, Kellgren-Lawrence Grade II)",
+                    "p": "1. Celecoxib (Celebrex) 200mg qd prescribed for 7 days.\n2. Referral for physical therapy: Shortwave diathermy and isometric quadriceps strengthening exercises.\n3. Patient Education: Weight control guidance and avoidance of prolonged deep kneeling or squatting.\n4. [Self-Pay Recommendation]: Intra-articular platelet-rich plasma (PRP) regenerative cartilage therapy or cross-linked hyaluronic acid (HA) viscosupplementation advised.",
                 },
                 "vault_key": "F229871234-2607",
                 "vault_files": [
@@ -603,10 +603,10 @@ PATIENT_DB = {
                 "icd10": "K21.9",
                 "icd10_title": "胃食道逆流疾病 (Gastro-esophageal reflux disease without esophagitis)",
                 "soap": {
-                    "s": "主訴：飯後經常火燒心、胃部灼熱感向上竄，夜間平躺時有酸水逆流乾咳。",
-                    "o": "腹部柔軟無壓痛，無反跳痛或腹肌防衛。心音正常，胸部聽診無囉音。",
-                    "a": "1. K21.9 胃食道逆流疾病 2. K30 功能性消化不良",
-                    "p": "1. Esomeprazole (Nexium) 40mg qd ac 處方 14 日。\n2. 衛教避免睡前三小時進食，少辛辣油膩及甜食。\n3. [自費推薦] 建議安排無痛胃鏡微創篩檢或自費益生菌調理。",
+                    "s": "Chief Complaint: Recurrent retrosternal heartburn and epigastric burning sensations after meals for 3 weeks. Acid regurgitation with dry nocturnal cough exacerbated in supine position. Denies dysphagia, hematemesis, melena, or unintentional weight loss.",
+                    "o": "PE: Abdomen soft, flat, mild epigastric tenderness upon deep palpation. No guarding, rebound tenderness, or palpable hepatosplenomegaly. Normal bowel sounds. Chest clear to auscultation without wheezing or rhonchi.",
+                    "a": "1. K21.9 Gastro-esophageal reflux disease without esophagitis\n2. K30 Functional dyspepsia",
+                    "p": "1. Esomeprazole (Nexium) 40mg qd ac prescribed for 14 days.\n2. Lifestyle modification: Avoid eating within 3 hours of bedtime, elevate head of bed, refrain from spicy/greasy foods, caffeine, and carbonated beverages.\n3. [Self-Pay Recommendation]: Screening painless transoral esophagogastroduodenoscopy (EGD) and high-potency gastrointestinal probiotics recommended.",
                 },
                 "vault_key": "F229871234-2606",
                 "vault_files": [
@@ -636,10 +636,10 @@ PATIENT_DB = {
                 "icd10": "E11.9",
                 "icd10_title": "第二型糖尿病，未伴有併發症 (Type 2 diabetes mellitus)",
                 "soap": {
-                    "s": "主訴：糖尿病慢箋回診追蹤，自述近一週口渴多尿稍減緩，飲食配合減醣，偶有輕微頭暈。",
-                    "o": "BP 130/82 mmHg, 飯前血糖 138 mg/dL, HbA1c 7.2% (1120915)。眼底鏡無明顯增殖性視網膜病變，足部單絲觸覺測試正常。",
-                    "a": "1. E11.9 第二型糖尿病血糖控制待改善 2. E78.5 混合型高脂血症",
-                    "p": "1. Metformin 500mg bid + Empagliflozin 10mg qd。\n2. 開立連續處方箋 28 日。\n3. [自費推薦] 建議配戴連續葡萄糖監測器 (CGM) 兩週進行精準血糖波動分析。",
+                    "s": "Chief Complaint: Regular refill visit for Type 2 Diabetes Mellitus follow-up. Reports decreased polydipsia and polyuria after dietary carbohydrate restriction. Occasional mild morning dizziness without cold sweating, palpitations, or syncope.",
+                    "o": "V/S: BP 130/82 mmHg, HR 76 bpm, BMI 25.8 kg/m2.\nLabs: Fasting plasma glucose 138 mg/dL, HbA1c 7.2% (1120915). Normal urinalysis (microalbumin/creatinine ratio 18 mg/g).\nFunduscopic exam: No diabetic retinopathy. Semmes-Weinstein 10g monofilament test: intact sensation over bilateral plantar surfaces. Bilateral dorsalis pedis pulses palpable (+2/+2).",
+                    "a": "1. E11.9 Type 2 diabetes mellitus without complications (Suboptimal glycemic control)\n2. E78.5 Hyperlipidemia, unspecified",
+                    "p": "1. Metformin 500mg bid + Empagliflozin 10mg qd continued.\n2. Chronic illness refill prescription issued for 28 days.\n3. Diet & Exercise Counseling: Low glycemic index diet, 150 minutes of moderate aerobic exercise weekly.\n4. [Self-Pay Recommendation]: Continuous Glucose Monitoring (CGM, FreeStyle Libre) for 14 days to analyze glycemic variability and occult nocturnal hypoglycemia.",
                 },
                 "vault_key": "A123456789-2609",
                 "vault_files": [
@@ -661,10 +661,10 @@ PATIENT_DB = {
                 "icd10": "I10",
                 "icd10_title": "本態性高血壓 (Essential hypertension)",
                 "soap": {
-                    "s": "主訴：近幾天因公事繁忙睡眠品質差，早晨頭脹後腦勺緊繃感明顯。",
-                    "o": "門診 BP 154/96 mmHg, HR 78 bpm。頸動脈雜音無，心音純整。",
-                    "a": "1. I10 高血壓急性波動 2. G47.00 失眠症",
-                    "p": "1. 加開 Amlodipine 5mg qd，Zolpidem 10mg hs prn。\n2. 衛教早晚定時量血壓並做紀錄。",
+                    "s": "Chief Complaint: Severe occipital tension headache and neck stiffness for 4 days. Exacerbated in early morning, associated with poor sleep quality and heavy occupational work stress. Denies visual blurring, chest oppression, dyspnea, or limb numbness.",
+                    "o": "V/S: BP 154/96 mmHg (Right arm, seated), HR 78 bpm. Repeat BP after 15 minutes rest: 150/94 mmHg.\nPhysical Exam: Conscious, alert. No carotid bruits. S1/S2 regular, no audible murmurs or gallops. Neurological examination grossly intact without focal neurological deficit.",
+                    "a": "1. I10 Essential hypertension (Acute fluctuation due to stress/sleep debt)\n2. G47.00 Insomnia, unspecified",
+                    "p": "1. Add Amlodipine 5mg qd; Zolpidem 10mg hs prn for transient insomnia.\n2. Instruct patient on 722 Home Blood Pressure Monitoring protocol (7 consecutive days, twice daily, two measurements each time).\n3. Re-check BP and basic metabolic profile in clinic in 14 days.",
                 },
                 "vault_key": "A123456789-2608",
                 "vault_files": [
@@ -684,10 +684,10 @@ PATIENT_DB = {
                 "icd10": "M79.1",
                 "icd10_title": "肌痛與肩頸肌筋膜疼痛症 (Myalgia)",
                 "soap": {
-                    "s": "主訴：右側肩頸部肌肉緊繃痠痛，轉頭活動受限，工作打電腦後加劇。",
-                    "o": "右斜方肌與提肩胛肌可觸及激痛點 (Trigger point)，壓痛明顯伴隨局部抽搐反應。",
-                    "a": "1. M79.1 肩頸肌筋膜疼痛症候群",
-                    "p": "1. 安排物理治療深層熱療與電療。\n2. [自費推薦] 建議體外震波 (ESWT) 筋膜放鬆或自費高濃度葡萄糖激痛點注射。",
+                    "s": "Chief Complaint: Persistent tightness and dull aching over right neck and upper trapezius region for 2 weeks. Restricted cervical rotation, significantly exacerbated after prolonged computer workstation usage. No radicular pain radiating down upper extremities.",
+                    "o": "PE: Palpable taut bands with hyperirritable trigger points over right upper trapezius and levator scapulae muscles with positive local twitch response on snapping palpation. Active cervical rotation restricted to 60° to the right side. Spurling's test negative.",
+                    "a": "1. M79.1 Myofascial pain syndrome involving cervical and trapezius muscle groups",
+                    "p": "1. Physical therapy referral: Deep thermotherapy (hot pack + ultrasound) and interferential electrical stimulation.\n2. Flurbiprofen patch 1 patch qd + Chlorzoxazone muscle relaxant 200mg tid for 7 days.\n3. [Self-Pay Recommendation]: Extracorporeal Shock Wave Therapy (ESWT) for trigger point deactivation or ultrasound-guided trigger point injection with dextrose prolotherapy.",
                 },
                 "vault_key": "A123456789-2607",
                 "vault_files": [
@@ -719,10 +719,10 @@ PATIENT_DB = {
                 "icd10": "M17.0",
                 "icd10_title": "雙側原發性退化性膝關節炎 (Bilateral primary osteoarthritis of knee)",
                 "soap": {
-                    "s": "主訴：雙膝關節疼痛半年餘，近期因梅雨季氣候潮濕疼痛加劇，下床起立與走路極為吃力，蹲下無法自行站起，關節活動常有骨頭喀喀摩擦音。",
-                    "o": "雙膝關節局部微熱，雙側膝眼與關節間隙壓痛明顯，屈伸活動受限 ROM: 10-100度。X-Ray (1120912) 顯示雙膝外側與內側關節腔嚴重狹窄，顯著骨贅生成，符合 Kellgren-Lawrence Grade III。\n[健保雲端藥歷] eGFR 68 mL/min (1120801)。",
-                    "a": "1. M17.0 雙側原發性膝關節退化 (重度)\n2. M25.561 右膝關節痛",
-                    "p": "1. 關節腔抽取微量關節積液，開立 Celebrex 200mg qd + Ultracet prn 開立 7 日。\n2. 安排復健科深層熱療與股四頭肌運動。\n3. [自費項目推薦] 建議安排次世代高濃度血小板 (PRP) 軟骨增生修復注射，或長效型自費關節潤滑玻尿酸。",
+                    "s": "Chief Complaint: Severe bilateral knee aching and walking difficulties for over 6 months, worsening during humid rainy weather. Inability to rise from sitting position or squat without hand assistance. Audible bony crepitus and friction sensation during joint motion.",
+                    "o": "PE: Mild local warmth over bilateral knee joints with moderate suprapatellar effusion. Tenderness at medial and lateral joint lines. ROM restricted: 10° - 100°. Knee X-ray (1120912): Marked joint space narrowing at medial compartments bilaterally, extensive subchondral sclerosis and prominent marginal osteophytes, Kellgren-Lawrence Grade III.\n[NHI Cloud EHR]: eGFR 68 mL/min (1120801).",
+                    "a": "1. M17.0 Bilateral primary osteoarthritis of knee (Advanced Grade III)\n2. M25.561 Pain in right knee joint",
+                    "p": "1. Arthrocentesis: 8 mL clear straw-colored synovial fluid aspirated under aseptic technique.\n2. Celecoxib 200mg qd + Tramadol/Acetaminophen (Ultracet) 1 tab prn for breakthrough pain prescribed for 7 days.\n3. Physical therapy prescription for non-weight-bearing quadriceps training.\n4. [Self-Pay Recommendation]: Second-generation Platelet-Rich Plasma (PRP) joint regenerative therapy or high-molecular-weight cross-linked Hyaluronic Acid (HA) viscosupplementation advised.",
                 },
                 "vault_key": "H120987654-2609",
                 "vault_files": [
@@ -746,10 +746,10 @@ PATIENT_DB = {
                 "icd10": "M54.5",
                 "icd10_title": "下背痛與腰椎退化 (Low back pain)",
                 "soap": {
-                    "s": "主訴：下背部痠痛牽引至右臀部已兩週，彎腰或搬拿重物時劇烈痠痛，夜間側臥翻身時常抽痛驚醒。",
-                    "o": "腰椎活動度受限，右側直抬腿試驗 (SLR test) 70度陽性引起腰臀放射痛，腰椎前彎疼痛，L4-L5 棘突間顯著觸痛。",
-                    "a": "1. M54.5 下背痛 2. M51.26 腰椎椎間盤移位疑義",
-                    "p": "1. 安排門診腰椎牽引與中頻干擾電療。\n2. 處方肌肉鬆弛劑 Solaxin 200mg tid + NSAID 7 日。\n3. [自費推薦] 建議醫療級護腰固定帶支撐，並評估自費震波腰肌深層減壓療程。",
+                    "s": "Chief Complaint: Severe lower back pain radiating to right buttock for 2 weeks. Aggravated by bending forward, coughing, or carrying heavy objects. Frequent nighttime awakening from shooting pain when turning in bed.",
+                    "o": "PE: Limited lumbar flexion and extension. Straight Leg Raising (SLR) test positive on the right side at 70° producing radiating buttock ache. Tenderness upon palpation over L4-L5 interspinous space and right sacroiliac joint. Lower extremity sensory and motor exams symmetric (+5/+5).",
+                    "a": "1. M54.5 Low back pain\n2. M51.26 Other intervertebral disc displacement, lumbar region suspected",
+                    "p": "1. Lumbar pelvic traction and interferential current therapy scheduled.\n2. Carisoprodol (Solaxin) 200mg tid + Aceclofenac 100mg bid for 7 days.\n3. [Self-Pay Recommendation]: Medical-grade lumbar corset support and deep tissue radial shockwave therapy for lumbar paraspinal myofascial decompression.",
                 },
                 "vault_key": "H120987654-2608",
                 "vault_files": [
@@ -771,10 +771,10 @@ PATIENT_DB = {
                 "icd10": "I10",
                 "icd10_title": "本態性高血壓 (Essential hypertension)",
                 "soap": {
-                    "s": "主訴：定期慢箋回診拿藥，近期早晨起床後枕部緊繃脹痛，無胸悶心悸或肢體無力麻木。",
-                    "o": "門診 BP 148/92 mmHg, HR 74 bpm，BMI 26.2。心音純律整，雙下肢無水腫。健保雲端檢驗：eGFR 72 mL/min, 總膽固醇 210 mg/dL。",
-                    "a": "1. I10 本態性高血壓 2. E78.5 高脂血症",
-                    "p": "1. 續開降壓藥 Amlodipine 5mg qd + Losartan 50mg qd，開立慢箋 28 日。\n2. 衛教低鹽飲食，指導家屬每日早晚量測並記錄血壓。",
+                    "s": "Chief Complaint: Regular clinic visit for chronic hypertension refill. Reports mild morning occipital tension, denies dizziness, palpitations, chest discomfort, or orthopnea.",
+                    "o": "V/S: BP 148/92 mmHg, HR 74 bpm, BMI 26.2 kg/m2. Regular heart rhythm, no lower extremity edema. Normal S1/S2.\n[NHI Cloud EHR]: eGFR 72 mL/min, Total Cholesterol 210 mg/dL, Triglycerides 165 mg/dL.",
+                    "a": "1. I10 Essential hypertension\n2. E78.5 Hyperlipidemia, unspecified",
+                    "p": "1. Amlodipine 5mg qd + Losartan 50mg qd refilled for 28 days.\n2. Dietary education: DASH low-sodium diet, limit alcohol intake. Family instructed to log morning and evening blood pressure records.",
                 },
                 "vault_key": "H120987654-2606",
                 "vault_files": [
@@ -849,10 +849,10 @@ def soap_live_session():
         "created_at": now.isoformat(),
         # 內定即時進行中的自動生成 SOAP
         "live_soap": {
-            "s": "主訴：近兩天喉嚨乾癢劇痛，吞嚥困難，伴隨輕微畏寒發燒 (37.8°C)，偶有乾咳，無呼吸急促或胸痛。",
-            "o": "耳溫 37.8°C, BP 122/78 mmHg, HR 82 bpm。\n喉部視診：咽喉黏膜明顯充血發紅 (Pharynx hyperemic)，扁桃腺第一級紅腫 (Tonsils Grade I)，頸部淋巴結輕微觸痛。\n[健保雲端檢驗] 最近一次血球檢查 WBC 6,800/uL, CRP 0.4 mg/dL (1120701)。",
-            "a": "1. J02.9 急性咽喉炎 (Acute pharyngitis)\n2. R50.9 發燒，未特定 (Fever, unspecified)",
-            "p": "1. 開立 Acetaminophen 500mg tid + Ibuprofen 400mg prn 開立 3 日。\n2. Dextromethorphan 鎮咳與喉舒含錠。\n3. [自費推薦] 建議補充自費免疫維他命高單位發泡錠及護喉消炎噴霧。",
+            "s": "Chief Complaint: Severe throat scratchiness and painful swallowing for 2 days. Associated with mild chills and low-grade fever (37.8°C) since yesterday evening. Occasional non-productive dry cough. Denies shortness of breath, chest tightness, or hemoptysis.",
+            "o": "V/S: BT 37.8°C, BP 122/78 mmHg, HR 82 bpm, RR 18/min.\nThroat Examination: Pharyngeal mucosa markedly hyperemic and injected. Bilateral tonsils mildly enlarged (Grade I) without purulent exudates. Soft palate symmetrical, uvula midline. Mild tenderness on bilateral anterior cervical lymph nodes.\n[NHI Cloud EHR Lab]: Latest CBC showed WBC 6,800/uL, CRP 0.4 mg/dL (1120701).",
+            "a": "1. J02.9 Acute pharyngitis, unspecified\n2. R50.9 Fever, unspecified",
+            "p": "1. Acetaminophen 500mg tid + Ibuprofen 400mg prn prescribed for 3 days.\n2. Dextromethorphan cough suppressant and soothing lozenges.\n3. Clinical advice: Encourage warm saline gargling and adequate oral hydration. Immediate return to clinic if body temperature exceeds 38.5°C or dyspnea occurs.\n4. [Self-Pay Recommendation]: High-dose effervescent Vitamin C/Zinc immune supplement and anti-inflammatory throat spray suggested.",
         }
     }), 200
 
@@ -955,10 +955,10 @@ def soap_search_patient():
                 "icd10": "J02.9",
                 "icd10_title": "急性咽炎，未特定 (Acute pharyngitis, unspecified)",
                 "soap": {
-                    "s": "主訴：近兩天喉嚨乾癢劇痛，吞嚥困難，伴隨輕微畏寒發燒 (37.8°C)，偶有乾咳，無呼吸急促或胸痛。",
-                    "o": "耳溫 37.8°C, BP 122/78 mmHg, HR 82 bpm。\n喉部視診：咽喉黏膜明顯充血發紅 (Pharynx hyperemic)，扁桃腺第一級紅腫 (Tonsils Grade I, non-exudative)，頸部淋巴結輕微觸痛。\n[健保雲端檢驗] 最近一次血球檢查 WBC 6,800/uL, CRP 0.4 mg/dL (1120701)。",
-                    "a": "1. J02.9 急性咽喉炎 (Acute pharyngitis)\n2. R50.9 發燒，未特定 (Fever, unspecified)",
-                    "p": "1. 開立 Acetaminophen 500mg tid + Ibuprofen 400mg prn 開立 3 日。\n2. Dextromethorphan 鎮咳與喉舒含錠。\n3. 醫囑衛教：多溫開水漱口休息，若高燒逾 38.5°C 或出現呼吸不暢速回診。\n4. [自費推薦] 建議補充自費免疫維他命高單位發泡錠及護喉消炎噴霧。",
+                    "s": "Chief Complaint: Severe throat scratchiness and painful swallowing for 2 days. Associated with mild chills and low-grade fever (37.8°C) since yesterday evening. Occasional non-productive dry cough. Denies shortness of breath, chest tightness, or hemoptysis.",
+                    "o": "V/S: BT 37.8°C, BP 122/78 mmHg, HR 82 bpm, RR 18/min.\nThroat Examination: Pharyngeal mucosa markedly hyperemic and injected. Bilateral tonsils mildly enlarged (Grade I) without purulent exudates. Soft palate symmetrical, uvula midline. Mild tenderness on bilateral anterior cervical lymph nodes.\n[NHI Cloud EHR Lab]: Latest CBC showed WBC 6,800/uL, CRP 0.4 mg/dL (1120701).",
+                    "a": "1. J02.9 Acute pharyngitis, unspecified\n2. R50.9 Fever, unspecified",
+                    "p": "1. Acetaminophen 500mg tid + Ibuprofen 400mg prn prescribed for 3 days.\n2. Dextromethorphan cough suppressant and soothing lozenges.\n3. Clinical advice: Encourage warm saline gargling and adequate oral hydration. Immediate return to clinic if body temperature exceeds 38.5°C or dyspnea occurs.\n4. [Self-Pay Recommendation]: High-dose effervescent Vitamin C/Zinc immune supplement and anti-inflammatory throat spray suggested.",
                 },
                 "vault_key": f"{demo_id}-2608",
                 "vault_files": [
@@ -982,10 +982,10 @@ def soap_search_patient():
                 "icd10": "M17.0",
                 "icd10_title": "雙側原發性膝骨關節炎 (Bilateral primary osteoarthritis of knee)",
                 "soap": {
-                    "s": "主訴：右膝關節上下樓梯與蹲下時痠痛無力逾三個月，早晨起床膝部僵硬約15分鐘，活動後稍改善。",
-                    "o": "雙膝無明顯發熱紅腫，右膝髕骨研磨試驗陽性 (Patellar grind test positive)，活動範圍 ROM: 0-120度。\nX-Ray 影像 (1120718)：雙膝外側關節腔略微狹窄，輕微骨刺生成，符 Kellgren-Lawrence Grade II。\n[健保雲端檢驗] HbA1c 5.8% (1120610), eGFR 88 mL/min (1120610)。",
-                    "a": "1. M17.0 雙側原發性退化性膝關節炎 (Primary osteoarthritis of both knees)",
-                    "p": "1. Celecoxib 200mg qd 開立 7 日。\n2. 安排物理治療（短波熱療與股四頭肌等長肌力訓練）。\n3. [自費項目推薦] 建議高濃度自體血小板 (PRP) 軟骨修復關節腔注射，或長效型玻尿酸 (HA) 潤滑保護。",
+                    "s": "Chief Complaint: Chronic aching pain and weakness in right knee when ascending/descending stairs and squatting for over 3 months. Morning joint stiffness lasting approximately 15 minutes, improving slightly after ambulation. Denies acute trauma, locking sensation, or giving-way.",
+                    "o": "PE: Bilateral knees without erythema, local warmth, or gross joint effusion. Right knee patellar grind test (+), crepitus noted during flexion-extension. ROM: 0° - 120°. Negative anterior/posterior drawer and McMurray test.\nKnee X-ray (1120718): Mild joint space narrowing at medial compartment, small marginal osteophytes at tibial spines, consistent with Kellgren-Lawrence Grade II osteoarthritis.\n[NHI Cloud EHR]: HbA1c 5.8% (1120610), eGFR 88 mL/min (1120610).",
+                    "a": "1. M17.0 Bilateral primary osteoarthritis of knee (Right knee symptomatic, Kellgren-Lawrence Grade II)",
+                    "p": "1. Celecoxib (Celebrex) 200mg qd prescribed for 7 days.\n2. Referral for physical therapy: Shortwave diathermy and isometric quadriceps strengthening exercises.\n3. Patient Education: Weight control guidance and avoidance of prolonged deep kneeling or squatting.\n4. [Self-Pay Recommendation]: Intra-articular platelet-rich plasma (PRP) regenerative cartilage therapy or cross-linked hyaluronic acid (HA) viscosupplementation advised.",
                 },
                 "vault_key": f"{demo_id}-2607",
                 "vault_files": [
@@ -1028,10 +1028,10 @@ def soap_case_bundle(case_id: str):
             "visit_date": demo_date,
             "icd10_code": "J02.9",
             "soap": {
-                "subjective": "主訴：近兩天喉嚨乾癢劇痛，吞嚥困難，伴隨輕微畏寒發燒 (37.8°C)。",
-                "objective": "耳溫 37.8°C, BP 122/78 mmHg。咽喉黏膜明顯充血發紅，扁桃腺第一級紅腫。",
-                "assessment": "急性咽喉炎 (Acute pharyngitis)",
-                "plan": "開立解熱鎮痛藥物三天，自費免疫維他命發泡錠推薦。",
+                "subjective": "Chief Complaint: Severe throat scratchiness and painful swallowing for 2 days. Associated with mild chills and low-grade fever (37.8°C) since yesterday evening.",
+                "objective": "V/S: BT 37.8°C, BP 122/78 mmHg. Pharyngeal mucosa hyperemic, tonsils Grade I injected.",
+                "assessment": "Acute pharyngitis (J02.9)",
+                "plan": "Acetaminophen 500mg tid + Ibuprofen 400mg prn for 3 days. High-potency Vitamin C recommended.",
             },
             "vault_key": f"{demo_id}-2608" if "2608" in case_id or "11208" in case_id else f"{demo_id}-2611",
         }
@@ -1092,10 +1092,10 @@ def soap_export_forensic_zip(case_id: str):
             "visit_date": demo_date,
             "icd10_code": "J02.9",
             "soap": {
-                "subjective": "主訴：近兩天喉嚨乾癢劇痛，吞嚥困難，伴隨輕微畏寒發燒 (37.8°C)。",
-                "objective": "耳溫 37.8°C, BP 122/78 mmHg。咽喉黏膜明顯充血發紅，扁桃腺第一級紅腫。",
-                "assessment": "急性咽喉炎 (Acute pharyngitis)",
-                "plan": "開立解熱鎮痛藥物三天，自費免疫維他命發泡錠推薦。",
+                "subjective": "Chief Complaint: Severe throat scratchiness and painful swallowing for 2 days. Associated with mild chills and low-grade fever (37.8°C) since yesterday evening.",
+                "objective": "V/S: BT 37.8°C, BP 122/78 mmHg. Pharyngeal mucosa hyperemic, tonsils Grade I injected.",
+                "assessment": "Acute pharyngitis (J02.9)",
+                "plan": "Acetaminophen 500mg tid + Ibuprofen 400mg prn for 3 days. High-potency Vitamin C recommended.",
             },
             "vault_key": f"{demo_id}-2608" if "2608" in case_id or "11208" in case_id else f"{demo_id}-2611",
         }

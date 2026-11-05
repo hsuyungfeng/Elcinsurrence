@@ -649,6 +649,7 @@
       <div class="sidebar-header">
         <div class="sidebar-title" id="sidebarListTitle">事前預審抽樣清單</div>
         <div class="sidebar-tools">
+          <button class="btn-mini" id="btnSoapClearList" onclick="clearSoapPatientsList()" title="清空左側病患清單 (Clear Patient List)" style="display:none; color:#fca5a5;">🗑️</button>
           <button class="btn-mini" onclick="togglePatientEntryModal(true)" title="依病患身分證／生日／姓名鍵入加入案件">➕</button>
           <button class="btn-mini" onclick="document.getElementById('importFile').click()" title="匯入 TOTFA.zip／CSV／PDF／影像">📂</button>
           <button class="btn-mini btn-mini-danger" onclick="clearCacheAndReload()" title="清除本機快取與金鑰並強制重整頁面">🧹</button>
@@ -1932,13 +1933,21 @@
       
       if (mode === 'sampling') {
         document.getElementById('sidebarListTitle').innerText = '事前預審抽樣清單';
+        const clrBtn = document.getElementById('btnSoapClearList');
+        if (clrBtn) clrBtn.style.display = 'none';
       } else if (mode === 'appeal') {
         document.getElementById('sidebarListTitle').innerText = '核減刪減醫令清單';
+        const clrBtn = document.getElementById('btnSoapClearList');
+        if (clrBtn) clrBtn.style.display = 'none';
       } else if (mode === 'soap') {
         document.getElementById('sidebarListTitle').innerText = '診間門診病患清單';
+        const clrBtn = document.getElementById('btnSoapClearList');
+        if (clrBtn) clrBtn.style.display = 'inline-block';
         initSoapWorkbench();
       } else {
         document.getElementById('sidebarListTitle').innerText = '申報總檔批次清單';
+        const clrBtn = document.getElementById('btnSoapClearList');
+        if (clrBtn) clrBtn.style.display = 'none';
       }
 
       if (mode !== 'soap') {
@@ -1990,6 +1999,28 @@
       const container = document.getElementById('caseList');
       if (!container) return;
       container.innerHTML = '';
+
+      // 0. 側邊欄頂部控制列：病患統計與清空病患清單按鈕
+      const headerBar = document.createElement('div');
+      headerBar.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:5px 8px; margin-bottom:8px; background:rgba(15,23,42,0.7); border:1px solid rgba(148,163,184,0.25); border-radius:6px; font-size:11px;';
+
+      const countLabel = document.createElement('span');
+      countLabel.style.cssText = 'color:#94a3b8; font-weight:600;';
+      countLabel.textContent = `門診病患 (${soapPatients.length})`;
+
+      const clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.style.cssText = 'background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); color:#fca5a5; border-radius:4px; font-size:10px; padding:2px 6px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;';
+      clearBtn.textContent = '🗑️ 清空清單';
+      clearBtn.title = '清空左側病患清單並回到內定即時錄音 (Clear Patient List)';
+      clearBtn.onclick = (e) => {
+        e.stopPropagation();
+        clearSoapPatientsList();
+      };
+
+      headerBar.appendChild(countLabel);
+      headerBar.appendChild(clearBtn);
+      container.appendChild(headerBar);
 
       // 1. 置頂：內定即時錄音監控項目
       const liveItem = document.createElement('div');
@@ -2095,6 +2126,12 @@
       });
     }
 
+    function clearSoapPatientsList() {
+      soapPatients = [];
+      renderSoapPatientsSidebar();
+      switchToLiveMode();
+    }
+
     function switchToLiveMode() {
       isSoapLiveMode = true;
       currentSoapEncounter = null;
@@ -2118,19 +2155,19 @@
       const liveHint = document.getElementById('soapVaultLiveHintContainer');
       if (liveHint) liveHint.style.display = 'flex';
 
-      // 4. 病患橫幅與 SOAP Form 恢復為即時自動生成資料
+      // 4. 病患橫幅與 SOAP Form 恢復為即時自動生成資料 (English Clinical Format)
       const livePName = (liveSessionData && liveSessionData.patient_name) || '陳美玲';
       const livePId = (liveSessionData && liveSessionData.id_card) || 'F229871234';
       const headerTitle = document.getElementById('soapCurrentPatientHeader');
       if (headerTitle) headerTitle.textContent = `${livePName} (${livePId}) · 即時門診錄製中`;
       const headerIcd = document.getElementById('soapCurrentIcdHeader');
-      if (headerIcd) headerIcd.textContent = 'ICD-10: J02.9 急性咽炎 (AI 即時推理中)';
+      if (headerIcd) headerIcd.textContent = 'ICD-10: J02.9 Acute pharyngitis (AI 即時推理中)';
 
       const liveSoap = (liveSessionData && liveSessionData.live_soap) || {
-        s: '主訴：近兩天喉嚨乾癢劇痛，吞嚥困難，伴隨輕微畏寒發燒 (37.8°C)，偶有乾咳，無呼吸急促或胸痛。',
-        o: '耳溫 37.8°C, BP 122/78 mmHg, HR 82 bpm。\n喉部視診：咽喉黏膜明顯充血發紅 (Pharynx hyperemic)，扁桃腺第一級紅腫 (Tonsils Grade I)。\n[健保雲端檢驗] 最近一次血球檢查 WBC 6,800/uL, CRP 0.4 mg/dL。',
-        a: '1. J02.9 急性咽喉炎 (Acute pharyngitis)\n2. R50.9 發燒，未特定 (Fever, unspecified)',
-        p: '1. 開立 Acetaminophen 500mg tid + Ibuprofen 400mg prn 開立 3 日。\n2. Dextromethorphan 鎮咳與喉舒含錠。\n3. [自費推薦] 建議補充自費免疫維他命高單位發泡錠及護喉消炎噴霧。'
+        s: 'Chief Complaint: Severe throat scratchiness and painful swallowing for 2 days. Associated with mild chills and low-grade fever (37.8°C) since yesterday evening. Occasional non-productive dry cough. Denies shortness of breath, chest tightness, or hemoptysis.',
+        o: 'V/S: BT 37.8°C, BP 122/78 mmHg, HR 82 bpm, RR 18/min.\nThroat Examination: Pharyngeal mucosa markedly hyperemic and injected. Bilateral tonsils mildly enlarged (Grade I) without purulent exudates. Soft palate symmetrical, uvula midline. Mild tenderness on bilateral anterior cervical lymph nodes.\n[NHI Cloud EHR Lab]: Latest CBC showed WBC 6,800/uL, CRP 0.4 mg/dL (1120701).',
+        a: '1. J02.9 Acute pharyngitis, unspecified\n2. R50.9 Fever, unspecified',
+        p: '1. Acetaminophen 500mg tid + Ibuprofen 400mg prn prescribed for 3 days.\n2. Dextromethorphan cough suppressant and soothing lozenges.\n3. Clinical advice: Encourage warm saline gargling and adequate oral hydration. Immediate return to clinic if body temperature exceeds 38.5°C or dyspnea occurs.\n4. [Self-Pay Recommendation]: High-dose effervescent Vitamin C/Zinc immune supplement and anti-inflammatory throat spray suggested.'
       };
 
       const sEl = document.getElementById('soapInputS');
