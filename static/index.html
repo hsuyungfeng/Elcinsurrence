@@ -608,6 +608,40 @@
       color: #fff;
       font-weight: 700;
     }
+
+    /* 寫回 HIS 浮動通知橫幅 (HIS Sync Prompt Toast) */
+    .his-sync-prompt-banner {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 99999;
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.96));
+      border: 1px solid #38bdf8;
+      border-left: 5px solid #0ea5e9;
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 15px rgba(56, 189, 248, 0.3);
+      padding: 12px 18px;
+      max-width: 440px;
+      display: none;
+      align-items: center;
+      gap: 14px;
+      animation: slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .his-sync-prompt-banner.show {
+      display: flex;
+    }
+    @keyframes slideInUp {
+      from { transform: translateY(30px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .his-sync-btn-pulse {
+      animation: pulseGlow 2s infinite;
+    }
+    @keyframes pulseGlow {
+      0% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.6); }
+      70% { box-shadow: 0 0 0 8px rgba(14, 165, 233, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0); }
+    }
   </style>
 </head>
 <body>
@@ -867,11 +901,16 @@
         <!-- 2 Panels -->
         <div class="card-grid">
           <div class="panel">
-            <div class="panel-header">
+            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
               <div class="panel-title">📝 抽樣案件門診 SOAP 病歷</div>
+              <button type="button" class="btn-action" style="padding:3px 8px; font-size:11px; background:linear-gradient(135deg, #0ea5e9, #0284c7);" onclick="triggerDirectHisWrite('2階抽樣事前預審', document.getElementById('sSoapInput').value)">📤 寫回 HIS</button>
             </div>
             <div class="panel-body">
-              <textarea class="code-editor" id="sSoapInput"></textarea>
+              <div id="sHisSyncAlert" style="display:none; margin-bottom:8px; padding:6px 10px; background:rgba(245,158,11,0.15); border:1px solid #f59e0b; border-radius:6px; font-size:11px; color:#fcd34d; justify-content:space-between; align-items:center;">
+                <span>⚠️ 檢測到 SOAP 病歷已修改，請務必將修訂內容寫回 HIS！</span>
+                <button type="button" class="btn-action" style="padding:2px 6px; font-size:10px; background:#0284c7;" onclick="triggerDirectHisWrite('2階抽樣事前預審', document.getElementById('sSoapInput').value)">立即寫回</button>
+              </div>
+              <textarea class="code-editor" id="sSoapInput" oninput="onSoapContentChanged('sampling')"></textarea>
               <div style="margin-top: 14px; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; border: 1px solid var(--panel-border);">
                 <div style="font-size: 13px; font-weight: 700; color: #f59e0b; margin-bottom: 4px;">⚠️ 缺口分析與警示</div>
                 <div style="font-size: 12px; color: var(--text-muted);" id="sMissingReason">病歷 SOAP A 欄僅記載簡寫 DM，未附上近三次血糖趨勢與檢驗必要性說明。</div>
@@ -1025,21 +1064,26 @@
 
           <!-- 4-Section Appeal Draft Editor Panel -->
           <div class="panel">
-            <div class="panel-header">
+            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
               <div class="panel-title">✍️ 4 段式申復理由線上編輯器 (≤2000字)</div>
+              <button type="button" class="btn-action" style="padding:3px 8px; font-size:11px; background:linear-gradient(135deg, #0ea5e9, #0284c7);" onclick="triggerDirectHisWrite('3階核減事後申復', getAppealFullText())">📤 寫回 HIS</button>
             </div>
             <div class="panel-body">
+              <div id="aHisSyncAlert" style="display:none; margin-bottom:8px; padding:6px 10px; background:rgba(245,158,11,0.15); border:1px solid #f59e0b; border-radius:6px; font-size:11px; color:#fcd34d; justify-content:space-between; align-items:center;">
+                <span>⚠️ 檢測到申復病歷佐證已修改，請記得將補充之病歷佐證寫回 HIS！</span>
+                <button type="button" class="btn-action" style="padding:2px 6px; font-size:10px; background:#0284c7;" onclick="triggerDirectHisWrite('3階核減事後申復', getAppealFullText())">立即寫回</button>
+              </div>
               <label style="font-size: 11px; color: #38bdf8; display: block; margin-bottom: 2px;">① 案情摘要</label>
-              <textarea class="appeal-input" id="aSec1"></textarea>
+              <textarea class="appeal-input" id="aSec1" oninput="onSoapContentChanged('appeal')"></textarea>
 
               <label style="font-size: 11px; color: #38bdf8; display: block; margin-bottom: 2px;">② 醫療必要性 (多源證據)</label>
-              <textarea class="appeal-input" id="aSec2"></textarea>
+              <textarea class="appeal-input" id="aSec2" oninput="onSoapContentChanged('appeal')"></textarea>
 
               <label style="font-size: 11px; color: #38bdf8; display: block; margin-bottom: 2px;">③ 規則依據</label>
-              <textarea class="appeal-input" id="aSec3"></textarea>
+              <textarea class="appeal-input" id="aSec3" oninput="onSoapContentChanged('appeal')"></textarea>
 
               <label style="font-size: 11px; color: #38bdf8; display: block; margin-bottom: 2px;">④ 病歷佐證 (醫師申復說明)</label>
-              <textarea class="appeal-input" id="aSec4"></textarea>
+              <textarea class="appeal-input" id="aSec4" oninput="onSoapContentChanged('appeal')"></textarea>
 
               <!-- Qwen3.8-27B 申復比對分析與審批建議 -->
               <div id="aLlmSoapPanel" style="margin-top: 10px; background: rgba(15,23,42,0.6); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 10px; display: none;">
@@ -1222,6 +1266,12 @@
               </div>
             </div>
 
+            <!-- 改動即時提醒寫回 HIS 警示條 -->
+            <div id="soapHisSyncAlert" style="display:none; margin-top:8px; padding:8px 12px; background:rgba(14,165,233,0.15); border:1px solid #0ea5e9; border-radius:8px; font-size:12px; color:#bae6fd; justify-content:space-between; align-items:center;">
+              <span>📝 <strong>門診病歷已改動</strong>：偵測到您修訂了 SOAP 內容，為確保病歷客觀一致性，請及時寫回 HIS！</span>
+              <button type="button" class="btn-action his-sync-btn-pulse" style="padding:4px 10px; font-size:11px; background:linear-gradient(135deg, #0ea5e9, #0284c7);" onclick="pushSoapToHisUia()">📤 立即寫回 HIS</button>
+            </div>
+
             <!-- 結構化 4 段 SOAP 編輯表單 -->
             <div class="soap-form-grid">
               <!-- S: 主訴 -->
@@ -1230,7 +1280,7 @@
                   <span>🗣️ [S] 主訴 (Subjective)</span>
                   <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">病患自述症狀與病程時程</span>
                 </div>
-                <textarea id="soapInputS" class="soap-textarea-custom" rows="3" placeholder="請輸入主訴內容..."></textarea>
+                <textarea id="soapInputS" class="soap-textarea-custom" rows="3" placeholder="請輸入主訴內容..." oninput="onSoapContentChanged('court')"></textarea>
               </div>
 
               <!-- O: 客觀檢查 -->
@@ -1239,7 +1289,7 @@
                   <span>🩺 [O] 客觀檢查 (Objective)</span>
                   <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">理學檢查、自費超音波、雲端檢驗值</span>
                 </div>
-                <textarea id="soapInputO" class="soap-textarea-custom" rows="3" placeholder="請輸入客觀檢查數值..."></textarea>
+                <textarea id="soapInputO" class="soap-textarea-custom" rows="3" placeholder="請輸入客觀檢查數值..." oninput="onSoapContentChanged('court')"></textarea>
               </div>
 
               <!-- A: 診斷評估 -->
@@ -1248,7 +1298,7 @@
                   <span>🔬 [A] 診斷評估 (Assessment)</span>
                   <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">國際疾病診斷代碼 (ICD-10)</span>
                 </div>
-                <textarea id="soapInputA" class="soap-textarea-custom" rows="3" placeholder="請輸入診斷評估..."></textarea>
+                <textarea id="soapInputA" class="soap-textarea-custom" rows="3" placeholder="請輸入診斷評估..." oninput="onSoapContentChanged('court')"></textarea>
               </div>
 
               <!-- P: 處置治療 -->
@@ -1257,7 +1307,7 @@
                   <span>💊 [P] 處置治療 (Plan)</span>
                   <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">健保醫令、自費項目 (PRP/HA)、醫囑衛教</span>
                 </div>
-                <textarea id="soapInputP" class="soap-textarea-custom" rows="3" placeholder="請輸入處置治療計畫..."></textarea>
+                <textarea id="soapInputP" class="soap-textarea-custom" rows="3" placeholder="請輸入處置治療計畫..." oninput="onSoapContentChanged('court')"></textarea>
               </div>
             </div>
 
@@ -1318,6 +1368,17 @@
 
   <!-- 全域浮動字幕（Tooltip）組件 -->
   <div id="floatingTooltip" class="floating-tooltip"></div>
+
+  <!-- 寫回 HIS 浮動通知橫幅 (HIS Sync Prompt Toast) -->
+  <div id="hisSyncPromptBanner" class="his-sync-prompt-banner">
+    <div style="font-size:24px;">🔄</div>
+    <div style="flex:1;">
+      <div style="font-size:12px; font-weight:700; color:#38bdf8;">病歷資料已修訂</div>
+      <div style="font-size:11px; color:#cbd5e1; margin-top:2px;" id="hisSyncPromptText">檢測到 SOAP 內容變動，請記得寫回 HIS！</div>
+    </div>
+    <button type="button" class="btn-action his-sync-btn-pulse" style="padding:6px 12px; font-size:12px; background:linear-gradient(135deg, #0ea5e9, #0284c7);" onclick="triggerDirectHisWrite('病歷修訂同步', '')">📤 寫回 HIS</button>
+    <button type="button" style="background:none; border:none; color:#94a3b8; font-size:14px; cursor:pointer;" onclick="hideHisSyncToast()">✕</button>
+  </div>
 
   <script>
     /* ==================================================================== */
@@ -2489,8 +2550,75 @@
       });
     }
 
-    function pushSoapToHisUia() {
-      alert('🚀 已觸發 agent-desktop Windows UIA 無頭寫入！\n正在以 ValuePattern 將 S/O/A/P 回填至 HIS 門診視窗，不搶奪滑鼠焦點。');
+    let soapChangeTracker = {
+      sampling: false,
+      appeal: false,
+      court: false
+    };
+
+    function onSoapContentChanged(source) {
+      soapChangeTracker[source] = true;
+      if (source === 'sampling') {
+        const alertBox = document.getElementById('sHisSyncAlert');
+        if (alertBox) alertBox.style.display = 'flex';
+        showHisSyncToast('2階事前抽審 SOAP 病歷已更動，請記得寫回 HIS');
+      } else if (source === 'appeal') {
+        const alertBox = document.getElementById('aHisSyncAlert');
+        if (alertBox) alertBox.style.display = 'flex';
+        showHisSyncToast('3階事後申復理由/佐證已更動，請記得寫回 HIS');
+      } else if (source === 'court') {
+        const alertBox = document.getElementById('soapHisSyncAlert');
+        if (alertBox) alertBox.style.display = 'flex';
+        showHisSyncToast('司法保全/門診 SOAP 已修訂，請及時寫回 HIS');
+      }
+    }
+
+    function getAppealFullText() {
+      const s1 = document.getElementById('aSec1') ? document.getElementById('aSec1').value : '';
+      const s2 = document.getElementById('aSec2') ? document.getElementById('aSec2').value : '';
+      const s3 = document.getElementById('aSec3') ? document.getElementById('aSec3').value : '';
+      const s4 = document.getElementById('aSec4') ? document.getElementById('aSec4').value : '';
+      return `① 案情摘要:\n${s1}\n\n② 醫療必要性:\n${s2}\n\n③ 規則依據:\n${s3}\n\n④ 病歷佐證:\n${s4}`;
+    }
+
+    function triggerDirectHisWrite(sourceTitle, content) {
+      pushSoapToHisUia(sourceTitle);
+      if (sourceTitle.includes('2階')) {
+        const alertBox = document.getElementById('sHisSyncAlert');
+        if (alertBox) alertBox.style.display = 'none';
+      } else if (sourceTitle.includes('3階')) {
+        const alertBox = document.getElementById('aHisSyncAlert');
+        if (alertBox) alertBox.style.display = 'none';
+      } else {
+        const alertBox = document.getElementById('soapHisSyncAlert');
+        if (alertBox) alertBox.style.display = 'none';
+      }
+      hideHisSyncToast();
+    }
+
+    let hisToastTimer = null;
+    function showHisSyncToast(msg) {
+      const banner = document.getElementById('hisSyncPromptBanner');
+      const textEl = document.getElementById('hisSyncPromptText');
+      if (!banner || !textEl) return;
+      textEl.textContent = msg;
+      banner.className = 'his-sync-prompt-banner show';
+      if (hisToastTimer) clearTimeout(hisToastTimer);
+      hisToastTimer = setTimeout(() => {
+        banner.className = 'his-sync-prompt-banner';
+      }, 7000);
+    }
+
+    function hideHisSyncToast() {
+      const banner = document.getElementById('hisSyncPromptBanner');
+      if (banner) banner.className = 'his-sync-prompt-banner';
+      if (hisToastTimer) clearTimeout(hisToastTimer);
+    }
+
+    function pushSoapToHisUia(customSource = '門診即時SOAP') {
+      const sAlert = document.getElementById('soapHisSyncAlert');
+      if (sAlert) sAlert.style.display = 'none';
+      alert(`🚀 已觸發 agent-desktop Windows UIA 無頭寫入！\n【來源：${customSource}】\n正在以 ValuePattern 將修訂之 S/O/A/P 與病歷佐證回填至 HIS 門診系統，不搶奪滑鼠與鍵盤焦點。`);
     }
 
     function downloadForensicEvidenceZip() {
@@ -3717,7 +3845,8 @@
       const preview = document.getElementById('sLlmSoapPreview').innerText;
       if (preview) {
         document.getElementById('sSoapInput').value = preview;
-        alert('已將 LLM 建議 SOAP 填入病歷編輯框，可手動微調後送審！');
+        onSoapContentChanged('sampling');
+        alert('已將 LLM 建議 SOAP 填入病歷編輯框！\n⚠️ 請注意：若病歷已更動，請記得點擊「📤 寫回 HIS」將最新病歷回填至診間 HIS 系統！');
       }
     }
 
