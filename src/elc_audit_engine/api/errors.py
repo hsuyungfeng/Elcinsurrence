@@ -6,6 +6,7 @@ from flask import Flask, current_app, jsonify
 from werkzeug.exceptions import HTTPException
 
 from elc_audit_engine.auth import AuthenticationError
+from elc_audit_engine.case_store import CaseNotFoundError
 from elc_audit_engine.safe_paths import UnsafeIdentifierError
 
 
@@ -40,6 +41,10 @@ def register_error_handlers(app: Flask) -> None:
     def _handle_unsafe_identifier(exc: UnsafeIdentifierError):
         """不合法的識別碼（含路徑成分等）是呼叫方錯誤，回 400 而非 500。"""
         return _error(str(exc), 400)
+
+    @app.errorhandler(CaseNotFoundError)
+    def _handle_case_not_found(exc: CaseNotFoundError):
+        return _error(str(exc), 404)
 
     @app.errorhandler(UploadFileError)
     def _handle_upload_error(exc: UploadFileError):

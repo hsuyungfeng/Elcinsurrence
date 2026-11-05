@@ -123,6 +123,7 @@ Full phase details, success criteria, and requirements: [`milestones/v1.1-ROADMA
 | 12. 影像佐證上傳與關聯驅動 | v1.1 | 1/1 | Complete | 2026-08-11 |
 | 13. 核減明細原格式列印 | v1.1 | 3/3 | Complete | 2026-08-11 |
 | 14. 審核軌跡＋佐證包列印 | v1.1 | 3/3 | Complete | 2026-08-11 |
+| 28. 當月申報 TOTFA 與每日語音 SOAP 自動比對入庫暨 11 碼標準檔名 EMR 批次打包引擎 | v1.3 | 2/2 | Complete | 2026-11-05 |
 
 ## Out of Roadmap Scope
 

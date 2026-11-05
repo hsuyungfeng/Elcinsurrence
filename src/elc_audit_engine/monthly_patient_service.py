@@ -163,6 +163,7 @@ def find_monthly_patient_cases(
 def monthly_payload_to_sampling_case(payload: dict, case_seq: int | str = 1) -> dict:
     """將當月申報 payload 轉成抽審工作台之 Sampling Case 契約 dict。"""
     from elc_audit_engine.api.cases import to_sampling_case
+    from elc_audit_engine.reconciliation.soap_reconciler import format_soap_to_text
 
     target = _target_code(payload)
     rec = _record(payload, target)
@@ -175,11 +176,19 @@ def monthly_payload_to_sampling_case(payload: dict, case_seq: int | str = 1) -> 
     case["birth_date"] = payload.get("birth_date")
     case["id_card"] = payload.get("id_card") or payload.get("record_no")
     case["monthly_source"] = payload
+
+    # 繼承自動比對所得之真實日常門診語音 SOAP 與佐證金庫
+    soap_val = payload.get("soap_text") or (format_soap_to_text(payload.get("soap")) if isinstance(payload.get("soap"), dict) else payload.get("soap")) or case.get("soap") or ""
+    case["soap"] = soap_val
+    case["vault_key"] = payload.get("vault_key")
+    case["vault_files"] = payload.get("vault_files") or []
     return case
 
 
 def monthly_payload_to_appeal_case(payload: dict, case_seq: int | str = 1) -> dict:
     """將當月申報 payload 轉成申復工作台之 Appeal Case 契約 dict。"""
+    from elc_audit_engine.reconciliation.soap_reconciler import format_soap_to_text
+
     orders = payload.get("orders") or []
     target = _target_code(payload)
     matched_order = None
@@ -213,6 +222,19 @@ def monthly_payload_to_appeal_case(payload: dict, case_seq: int | str = 1) -> di
     digest_input = f"{id_val}-{visit_date}-{order_code}-{order_seq}"
     c_id = f"APP-M-{hashlib.sha256(digest_input.encode('utf-8')).hexdigest()[:14]}"
 
+    soap_val = payload.get("soap_text") or (format_soap_to_text(payload.get("soap")) if isinstance(payload.get("soap"), dict) else payload.get("soap")) or ""
+    vault_files = payload.get("vault_files") or []
+
+    # 依佐證檔案自動組裝 multisource_evidence 多源證據清單
+    evidence: dict[str, list] = {"labs": [], "images": [], "cloud_sync": []}
+    for vf in vault_files:
+        cat = vf.get("category")
+        fname = vf.get("filename", "")
+        if cat == "images" or fname.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+            evidence["images"].append({"name": fname, "report": f"佐證庫影像：{fname}"})
+        elif cat == "reports" or fname.lower().endswith((".pdf", ".txt")):
+            evidence["labs"].append({"name": fname, "result": f"佐證庫報告：{fname}"})
+
     return {
         "id": c_id,
         "demo": False,
@@ -227,8 +249,10 @@ def monthly_payload_to_appeal_case(payload: dict, case_seq: int | str = 1) -> di
         "deduct_amount": str(points),
         "deduction_reason": "申報費用審查核減（自當月申報預審資料帶入）",
         "visit_date": visit_date,
-        "soap": "",
-        "multisource_evidence": {"labs": [], "images": [], "cloud_sync": []},
+        "soap": soap_val,
+        "vault_key": payload.get("vault_key"),
+        "vault_files": vault_files,
+        "multisource_evidence": evidence,
         "source": "monthly_declaration",
         "monthly_source": payload,
     }

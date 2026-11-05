@@ -70,6 +70,13 @@ def _target_code(payload: dict) -> str | None:
 
 
 def _record(payload: dict, target_code: str | None) -> SamplingCaseRecord:
+    soap_val = payload.get("soap_text") or payload.get("soap") or ""
+    if isinstance(soap_val, dict):
+        from elc_audit_engine.reconciliation.soap_reconciler import format_soap_to_text
+        soap_str = format_soap_to_text(soap_val)
+    else:
+        soap_str = str(soap_val).strip()
+
     return SamplingCaseRecord(
         order_code=target_code or "",
         order_name=None,
@@ -78,7 +85,7 @@ def _record(payload: dict, target_code: str | None) -> SamplingCaseRecord:
         patient_name=payload.get("patient_name"),
         visit_date=payload.get("visit_date"),
         clinic=payload.get("clinic"),
-        soap_text="",
+        soap_text=soap_str,
         source="monthly_batch",
     )
 

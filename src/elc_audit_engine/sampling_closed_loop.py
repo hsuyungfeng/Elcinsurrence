@@ -183,10 +183,15 @@ def build_review(
 
 def save_review(store, case_id: str, review: dict) -> None:
     """把審查結果覆寫到案件 payload["review"]（不改動案件其他欄位與主狀態機）。"""
-    record = store.get(case_id)
-    payload = dict(record.payload or {})
-    payload["review"] = review
-    store.update_payload(case_id, payload)
+    if not case_id:
+        return
+    try:
+        record = store.get(case_id)
+        payload = dict(record.payload or {})
+        payload["review"] = review
+        store.update_payload(case_id, payload)
+    except CaseNotFoundError:
+        pass
 
 
 def _load_timeline(provider, record_no, visit_date):

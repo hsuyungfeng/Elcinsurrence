@@ -37,8 +37,14 @@ class MonthlyIngestSummary:
     case_ids: tuple[str, ...]
 
 
-def _payload(batch: str, case: SubmissionCase) -> dict:
-    return {
+def _payload(
+    batch: str,
+    case: SubmissionCase,
+    *,
+    store: CaseStore | None = None,
+    facility_code: str | None = None,
+) -> dict:
+    payload = {
         "batch": batch,
         "case_class": case.case_class,
         # case_seq 可於同批次重複，僅作顯示／彙總欄位，不作主鍵（AGENTs.md §2.3）。
@@ -57,6 +63,27 @@ def _payload(batch: str, case: SubmissionCase) -> dict:
         "orders": [order.raw for order in case.orders],
         "warnings": list(case.warnings),
     }
+
+    # 自動比對本機每日門診語音 SOAP 與佐證金庫（Phase 28-01）
+    try:
+        from elc_audit_engine.reconciliation.soap_reconciler import reconcile_case_soap
+        reconciled = reconcile_case_soap(store, payload, facility_code=facility_code)
+        if reconciled.get("found"):
+            payload["soap"] = reconciled.get("soap")
+            payload["soap_text"] = reconciled.get("soap_text")
+            payload["vault_key"] = reconciled.get("vault_key")
+            payload["vault_files"] = reconciled.get("vault_files")
+            payload["reconciled_source"] = reconciled.get("source")
+        else:
+            payload["soap"] = ""
+            payload["soap_text"] = ""
+            payload["vault_key"] = reconciled.get("vault_key")
+            payload["vault_files"] = []
+    except Exception:
+        payload["soap"] = ""
+        payload["soap_text"] = ""
+
+    return payload
 
 
 def ingest_monthly_declaration(
@@ -80,6 +107,7 @@ def ingest_monthly_declaration(
     """
     batch = batch_name_from_header(result.header)
     case_ids = monthly_case_ids(batch, result.cases)
+    facility_code = (result.header.get("t2") or "").strip()
 
     created = 0
     skipped = 0
@@ -89,7 +117,7 @@ def ingest_monthly_declaration(
                 case_id=case_id,
                 kind="monthly",
                 case_seq=case.case_seq,
-                payload=_payload(batch, case),
+                payload=_payload(batch, case, store=store, facility_code=facility_code),
                 actor=actor,
             )
             created += 1

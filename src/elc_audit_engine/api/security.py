@@ -50,6 +50,9 @@ AUTH_EXEMPT_ENDPOINTS = AUDIT_EXEMPT_ENDPOINTS | frozenset({
     "monthly.monthly_batch_report",
     "misc.get_facility",
     "misc.update_facility",
+    "emr_packaging.create_emr_batch_package",
+    "emr_packaging.list_emr_packages",
+    "emr_packaging.download_emr_package",
 })
 
 #: P1-5 縱深防禦：即使前端某處遺漏轉義，CSP 也擋掉外部腳本與資料外送。
