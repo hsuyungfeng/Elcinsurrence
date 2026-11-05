@@ -28,12 +28,15 @@ from datetime import UTC, datetime, timedelta
 
 BRIDGE_KIND = "bridge"
 
-# 健保作業種類代號（電子抽審.md §四）。
+# 健保作業種類代號（電子抽審.md §四）與跨引擎擴展代碼。
 S_TYPE_CODES: dict[str, str] = {
     "15": "費用抽審 XML 批次上傳",
     "00": "專業審查病歷影像",
     "07": "醫療費用電子申復資料",
     "09": "申復預檢",
+    "HIS_PUSH": "HIS 門診病歷自動回填 (agent-desktop)",
+    "WB_EXTRACT_MED": "健保雲端藥歷預讀 (WebBrain)",
+    "WB_UI_VERIFY": "工作台端到端自動化驗證 (WebBrain)",
 }
 
 STATUS_PENDING = "PENDING"
@@ -86,6 +89,7 @@ def enqueue_job(
     target_id: str,
     actor: str | None = None,
     max_retries: int = DEFAULT_MAX_RETRIES,
+    extra_payload: dict | None = None,
 ) -> dict:
     """建立待送任務。作業代號必須為 S_TYPE_CODES 之一；target_id 不得為空；max_retries 至少為 1。"""
     if s_type_code not in S_TYPE_CODES:
@@ -111,6 +115,7 @@ def enqueue_job(
         "lease_started_at": None,
         "lease_timeout_sec": None,
         "last_error": None,
+        "extra_payload": extra_payload or {},
     }
     store.create(case_id=job_id, kind=BRIDGE_KIND, payload=payload, actor=actor)
     return payload
