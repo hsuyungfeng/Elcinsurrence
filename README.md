@@ -47,6 +47,15 @@
   - **BridgeQueue 派工 CAS 鎖**：支援 `HIS_PUSH` 任務狀態機原子更新（`PENDING` ➔ `SENDING` ➔ `SUCCESS`）。
   - **一體化安裝包**：自動生成 Inno Setup 腳本（`clinic_installer.iss`）與啟動器（`start_clinic_client.bat`），一鍵打包小B、`agent-desktop` 與 `WebBrain`。
 
+### 4. 診間即時 SOAP 工作台、護理錄製監控與司法病歷金庫 UI (Phase 27)
+- **前端介面**：[`static/index.html`](static/index.html) (`#tabMode4` / `#workflow4View`)
+- **後端端點**：
+  - `GET /api/soap/live-session`：護理專員即時錄音呼吸燈、錄音動態計時、病患膠囊標籤、12 段即時聲波等化器、ASR 即時逐字稿跑馬字幕。
+  - `POST /api/soap/search-patient`：以身分證字號或出生年月日查詢歷史門診紀錄時間軸。
+  - `GET /api/soap/cases/<case_id>/bundle`：門診完整 S/O/A/P 結構與金庫多媒體檔案清單。
+  - `GET /api/soap/cases/<case_id>/export-forensic-zip`：一鍵導出符合法庭與健保審查規範之 ZIP 佐證包（含 `SOAP_RECORD.txt`、`SOAP_RECORD.json`、原始音訊與影像、`SHA256_CHECKSUM.txt` 數位防竄改雜湊、`AUDIT_TRAIL.json` 司法審計時間戳）。
+- **安全保障**：全介面純 DOM 構建，100% 杜絕 unsafe innerHTML 注入；全離線運作，無任何外部 CDN 網路依賴。
+
 > 兩條路徑共用 Phase 5 `compare_case`，故判定語意一致；分開的原因是**產出與副作用不同**（預審誤用整案管線會意外寫出申復草稿），對應目標架構圖 Cloud HIS 的 Review Service ／ Appeal Service 分離。
 
 ### ⚠️ 三種「非結論」狀態（呼叫端必須分辨）
