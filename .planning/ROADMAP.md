@@ -79,6 +79,24 @@ source: progress.md §四 (LOCKED roadmap), elaborated by docs/plans/2026-07-29-
 
 Full phase details, success criteria, and requirements: [`milestones/v1.1-ROADMAP.md`](milestones/v1.1-ROADMAP.md)
 
+<details>
+<summary>📋 v1.3 智慧審查工作台、語音金庫與標準 EMR 打包（Phases 15-28）</summary>
+
+- [x] Phase 15: 當月申報預審工作台
+- [x] Phase 16: 抽樣事前預審工作台
+- [x] Phase 17: 身分證佐證庫與第 2 階抽審回覆
+- [x] Phase 18: 精簡 SOAP 預生成與抽樣自動化
+- [x] Phase 19: 案件預審卡片視覺化呈現
+- [x] Phase 20: 批次聚合預審報告與第 3 階連動
+- [x] Phase 21: 健保電子抽審與申復 XML/ZIP 打包
+- [x] Phase 22: 核心架構重構與可靠性強化
+- [x] Phase 23: 工作台視覺佈局極大化與沉浸式操作優化
+- [x] Phase 24: SoapVoice 與 Elcinsurrence 跨倉資料對齊
+- [x] Phase 25: WebBrain 健保雲端藥歷檢索與端到端串接
+- [x] Phase 26: Agent Desktop Windows HIS 橋接與安裝包
+- [x] Phase 27: 診間即時 SOAP 工作台、護理錄製監控與司法病歷金庫 UI
+- [ ] Phase 28: 當月申報 (TOTFA) 與每日語音 SOAP 自動比對入庫暨 11 碼標準檔名 EMR 批次打包引擎（2 plans）
+
 </details>
 
 ### Phase 10: VPN／實機串接（Blocked — 外部依賴門控）
