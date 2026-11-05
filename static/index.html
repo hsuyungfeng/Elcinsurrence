@@ -2288,7 +2288,7 @@
         const countBadge = document.getElementById('soapEncounterCountBadge');
         if (countBadge) countBadge.textContent = `${encounters.length} 個歷史門診`;
 
-        // 如果搜尋到了病患，且該病患不在最左側病患側邊欄中，自動將其加入左側！
+        // 如果搜尋到了病患，且該病患不在最左側病患側邊欄中，自動將其加入左側！若已存在則同步更新 encounters
         if (data && data.patient) {
           const pData = data.patient;
           const exists = soapPatients.find(p => p.id_card === pData.id_card);
@@ -2303,6 +2303,8 @@
               encounters: encounters
             });
             renderSoapPatientsSidebar();
+          } else {
+            exists.encounters = encounters;
           }
         }
 

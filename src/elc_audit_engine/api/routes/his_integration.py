@@ -814,6 +814,10 @@ def soap_patients_list():
                     "icd10": enc["icd10"],
                     "icd10_title": enc.get("icd10_title", ""),
                     "files_count": enc.get("files_count", 0),
+                    "soap": enc.get("soap") or {},
+                    "files": enc.get("files") or enc.get("vault_files") or [],
+                    "vault_files": enc.get("vault_files") or enc.get("files") or [],
+                    "vault_key": enc.get("vault_key") or "",
                 }
                 for enc in pdata["encounters"]
             ]
