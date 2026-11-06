@@ -212,7 +212,7 @@
             HighFrequency["高頻醫令快取與精準過濾<br/>(總費用>1000, 點數≥350, 藥價≥5)"]
         end
 
-        subgraph LLMReasoning["本地推理層 (Qwen3.8-27B-FP8 / UD-Q4)"]
+        subgraph LLMReasoning["本地推理層 (本地 LLM)"]
             SOAPGen["SOAP 智慧補強引擎<br/>• 主體：英文專有名詞與醫學術語<br/>•
             補充：繁體中文健保審批指導"]
             AppealDraft["申復爭點草稿 (四段式 D10 理由書)"]
@@ -324,7 +324,7 @@
   1. POST /api/his/v1/cases/push（HIS 推送病歷至預審平台）：
       • 診所 HIS 於存檔或開立處方時，直接將看診資料（含 XML 欄位與 SOAP）以 JSON 推送過來。
   2. POST /api/his/v1/cases/soap-enhance（即時 SOAP 補強與比對）：
-      • 接收原始 SOAP + 雲端歷程，調用本地 Qwen 模型，回傳英文 SOAP 與繁中審批建議。
+      • 接收原始 SOAP + 雲端歷程，調用本地 LLM 模型，回傳英文 SOAP 與繁中審批建議。
   3. POST /api/his/v1/cases/{id}/approve-callback（審批回寫 Webhook）：
       • 當醫師在 Web 工作台上點擊「套用建議」或「核可」時，平台主動將定稿後的英文 SOAP Webhook
       回傳給診所 HIS 伺服器，直接寫入 HIS 門診病歷資料庫。
@@ -336,7 +336,7 @@
       • 維持當前純法規與高風險預審（外來 ZIP），不強求無中生有產出
       SOAP，重點在抓出高額核減漏洞（點數 >350、藥價 >5、適應症衝突）。
   2. 第 2、3 軌（事前預審 / 事後申復）定位：
-      • 導入 Qwen3.8-27B 本地比對，嚴格遵循「SOAP 英文主體 + 審核意見繁體中文」策略。
+      • 導入 本地 LLM 本地比對，嚴格遵循「SOAP 英文主體 + 審核意見繁體中文」策略。
   3. 下一步實施重點：
       • 調整 soap_advice.py 系統 Prompt，使模型嚴格輸出 臨床英文 SOAP 與 繁體中文審批要點。
       • 保留 HIS 整合的標準 REST API 接口，供日後直接與診所資料庫進行 Webhook 串接。

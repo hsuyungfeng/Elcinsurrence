@@ -19,7 +19,12 @@ from elc_audit_engine.comparator.soap_advice import (
     generate_soap_advice,
     validate_soap_quality,
 )
-from elc_audit_engine.monthly_audit import BatchAudit, OrderFinding
+from elc_audit_engine.monthly_audit import (
+    STATUS_RESTRICTION,
+    BatchAudit,
+    OrderFinding,
+    is_excluded_order_code,
+)
 from elc_audit_engine.parsers.totfa import DRUG_CATEGORY
 
 POINTS_FLAG = "points_over_350"
@@ -49,6 +54,18 @@ def is_pathology_code(code: str) -> bool:
     """病理檢驗醫令：代碼以 25 開頭（外科病理等級），或列於明確排除清單。"""
     normalized = (code or "").strip().upper()
     return normalized.startswith(PATHOLOGY_CODE_PREFIX) or normalized in PATHOLOGY_EXCLUDED_CODES
+
+
+def is_pregen_target(finding: OrderFinding) -> bool:
+    """需要範例病歷範本的醫令：處置／手術高價醫令，或有給付限制（restriction_present）的醫令。
+
+    排除診療費（001 開頭）與病理檢查；給付限制醫令不受點數與藥品門檻影響。
+    """
+    if is_excluded_order_code(finding.code):
+        return False
+    if finding.rule_status == STATUS_RESTRICTION and not is_pathology_code(finding.code):
+        return True
+    return is_procedure_finding(finding)
 
 
 def is_procedure_finding(finding: OrderFinding) -> bool:
@@ -107,12 +124,12 @@ def pregen_template(
 
 
 def procedure_targets(batch: BatchAudit) -> list[tuple[str, str, str, str]]:
-    """批次內處置／手術高價醫令的唯一 (醫令代碼, 醫令名稱, 主診斷, 規則全文) 清單（依首次出現排序）。"""
+    """批次內需範本醫令（處置高價＋給付限制）的唯一 (醫令代碼, 醫令名稱, 主診斷, 規則全文) 清單（依首次出現排序）。"""
     seen: set[tuple[str, str]] = set()
     targets: list[tuple[str, str, str, str]] = []
     for case in batch.cases:
         for finding in case.findings:
-            if not is_procedure_finding(finding):
+            if not is_pregen_target(finding):
                 continue
             key = _key(finding.code, case.primary_diagnosis or "")
             if key in seen or not key[0] or not key[1]:

@@ -7,6 +7,7 @@ import os
 from flask import Blueprint, current_app, jsonify, request, send_from_directory
 
 from config import settings
+from elc_audit_engine.monthly_package import PROFILE_CONFIRMED_KEY
 
 from ..errors import ApiError
 
@@ -54,6 +55,9 @@ def update_facility():
         raise ApiError("請求格式錯誤：需為 JSON 物件或表單")
     allowed = ("code", "name", "email", "address", "physician_name")
     updates = {k: str(payload[k]).strip() for k in allowed if k in payload and payload[k] is not None}
+    # Phase 29：使用者於診所表單確認院所資料後設為 true（下載前的首次確認）。
+    if PROFILE_CONFIRMED_KEY in payload:
+        updates[PROFILE_CONFIRMED_KEY] = payload[PROFILE_CONFIRMED_KEY] is True
     if not updates:
         raise ApiError("無提供任何院所欄位進行更新")
     # 若為 Web 介面儲存或指定驗證，檢查必填欄位 (code, name, email) 須填寫才可存入診所檔案

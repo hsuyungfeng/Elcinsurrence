@@ -218,13 +218,13 @@ def test_ingest_creates_monthly_cases_and_is_idempotent(store):
     result = parse_totfa_zip(_sample_zip())
 
     first = ingest_monthly_declaration(store, result, actor="tester")
-    assert first.batch == "MONTHLY-202307"
+    assert first.batch == "MONTHLY-202307-3503250461"
     assert (first.created, first.skipped_existing, first.rejected) == (2, 0, 0)
-    assert store.count_by_batch("MONTHLY-202307") == 2
+    assert store.count_by_batch("MONTHLY-202307-3503250461") == 2
 
     second = ingest_monthly_declaration(store, parse_totfa_zip(_sample_zip()), actor="tester")
     assert (second.created, second.skipped_existing) == (0, 2)
-    assert store.count_by_batch("MONTHLY-202307") == 2
+    assert store.count_by_batch("MONTHLY-202307-3503250461") == 2
     assert store.count(kind="monthly") == 2
 
 
@@ -236,13 +236,13 @@ def test_ingested_case_uses_content_hash_id_and_keeps_case_seq(store):
     assert record.kind == "monthly"
     assert record.state == "imported"
     assert record.case_seq == "1"  # case_seq 可重複，僅作欄位，不作主鍵
-    assert record.payload["batch"] == "MONTHLY-202307"
+    assert record.payload["batch"] == "MONTHLY-202307-3503250461"
     assert record.payload["record_no"] == "M0001"
 
 
 def test_patient_identifiers_are_persisted_for_report(store):
     ingest_monthly_declaration(store, parse_totfa_zip(_sample_zip()))
-    payloads = [record.payload for record in store.list_by_batch("MONTHLY-202307")]
+    payloads = [record.payload for record in store.list_by_batch("MONTHLY-202307-3503250461")]
     assert payloads
     for payload in payloads:
         assert payload["patient_name"] == SYNTHETIC_NAME  # d49（需求：報告顯示姓名）
@@ -256,9 +256,9 @@ def test_list_by_batch_only_returns_that_batch(store):
     other = _zip_bytes(_xml_bytes([_ddata(9, "MX", [_pdata(1, cat="2", code="Z", unit="1", points="1")])], t3="11208"))
     ingest_monthly_declaration(store, parse_totfa_zip(other))
 
-    assert store.count_by_batch("MONTHLY-202307") == 2
-    assert store.count_by_batch("MONTHLY-202308") == 1
-    assert len(store.list_by_batch("MONTHLY-202307")) == 2
+    assert store.count_by_batch("MONTHLY-202307-3503250461") == 2
+    assert store.count_by_batch("MONTHLY-202308-3503250461") == 1
+    assert len(store.list_by_batch("MONTHLY-202307-3503250461")) == 2
     assert store.list_by_batch("MONTHLY-202399") == ()
 
 
@@ -268,7 +268,7 @@ def test_rejected_cases_are_counted_not_stored(store):
     summary = ingest_monthly_declaration(store, parse_totfa_zip(_zip_bytes(_xml_bytes([bad, good]))))
 
     assert (summary.created, summary.rejected) == (1, 1)
-    assert store.count_by_batch("MONTHLY-202307") == 1
+    assert store.count_by_batch("MONTHLY-202307-3503250461") == 1
 
 
 def test_monthly_kind_is_accepted_and_unknown_kind_still_rejected(store):
@@ -287,7 +287,7 @@ def test_monthly_kind_is_accepted_and_unknown_kind_still_rejected(store):
 def test_real_totfa_zip_parses_to_expected_shape():
     result = parse_totfa_zip(REAL_ZIP)
 
-    assert batch_name_from_header(result.header) == "MONTHLY-202307"
+    assert batch_name_from_header(result.header) == "MONTHLY-202307-3503250461"
     assert len(result.cases) == 633
     assert result.rejected == ()
     # 規格實測：點數 > 350 的醫令有數百筆；藥品行單價皆為 0（無法以單價門檻判定）

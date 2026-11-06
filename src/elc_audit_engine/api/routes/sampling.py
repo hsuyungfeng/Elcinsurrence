@@ -10,6 +10,7 @@ from typing import Any
 from flask import Blueprint, Response, current_app, jsonify, request
 
 from elc_audit_engine.case_store import CaseNotFoundError
+from elc_audit_engine.parsers.totfa import MONTHLY_BATCH_PATTERN
 from elc_audit_engine.generators.sampling_xml import (
     SamplingXmlError,
     build_batch_sampling_xml,
@@ -300,7 +301,7 @@ def export_sampling_case_xml(case_id: str):
     return response
 
 
-_SAMPLE_BATCH_RE = re.compile(r"^MONTHLY-\d{6}$")
+_SAMPLE_BATCH_RE = re.compile(rf"^{MONTHLY_BATCH_PATTERN}$")
 _SAMPLE_MAX_COUNT = 200
 
 

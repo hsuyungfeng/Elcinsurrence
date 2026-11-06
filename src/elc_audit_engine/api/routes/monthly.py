@@ -1,4 +1,4 @@
-"""當月申報預審 API：上傳 TOTFA.zip（匯入＋比對）、批次清單、批次報告（JSON／HTML）。
+"""當月申報預審 API：上傳 申報壓縮檔（匯入＋比對）、批次清單、批次報告（JSON／HTML）。
 
 認證：全部端點皆需 X-API-Key（不列入 AUTH_EXEMPT_ENDPOINTS；新端點預設受保護）。
 PHI：回應只含代碼、日期與規則原文，不含病患姓名；上傳暫存檔於處理後即刪除。
@@ -16,6 +16,7 @@ from flask import Blueprint, Response, current_app, jsonify, request
 from config import settings
 from elc_audit_engine.case_store.monthly import ingest_monthly_declaration
 from elc_audit_engine.monthly_audit import audit_batch, report_view
+from elc_audit_engine.monthly_package import FacilityProfileError, build_batch_package, profile_status
 from elc_audit_engine.monthly_pregen import (
     STATUS_QUALITY_FAILED,
     STATUS_UNDETERMINED,
@@ -27,7 +28,7 @@ from elc_audit_engine.monthly_reasoning import attach_reasoning
 from elc_audit_engine.monthly_report_html import render_batch_report_html
 from elc_audit_engine.parsers.models import SubmissionParseResult
 from elc_audit_engine.parsers.submission_xml import SubmissionXmlError
-from elc_audit_engine.parsers.totfa import parse_totfa_zip
+from elc_audit_engine.parsers.totfa import MONTHLY_BATCH_PATTERN, parse_totfa_zip
 from elc_audit_engine.rule_repository import get_rule as _get_rule
 from elc_audit_engine.rule_repository.errors import RuleRepositoryError
 
@@ -37,7 +38,7 @@ from ..errors import ApiError
 bp = Blueprint("monthly", __name__)
 
 MAX_TOTFA_UPLOAD_BYTES = 10 * 1024 * 1024
-_BATCH_RE = re.compile(r"^MONTHLY-\d{6}$")
+_BATCH_RE = re.compile(rf"^{MONTHLY_BATCH_PATTERN}$")
 _REPORT_FORMATS = ("json", "html")
 _PARSE_FAILED = "TOTFA 檔案無法解析：需為含 TOTFA.xml（Big5）的 zip，且結構須符合申報格式"
 
@@ -69,10 +70,10 @@ def _totals_for_upload(report: dict) -> dict:
 
 @bp.route("/api/monthly/upload", methods=["POST"])
 def upload_monthly():
-    """上傳 TOTFA.zip：解析 → 冪等匯入 CaseStore → 規則比對（結果寫入案件產物）。"""
+    """上傳 申報壓縮檔：解析 → 冪等匯入 CaseStore → 規則比對（結果寫入案件產物）。"""
     upload = request.files.get("file")
     if upload is None or not (upload.filename or "").lower().endswith(".zip"):
-        raise ApiError("請以 multipart 欄位 file 上傳 TOTFA.zip")
+        raise ApiError("請以 multipart 欄位 file 上傳 申報壓縮檔")
 
     raw_dir = current_app.config["ELC_RAW_DIR"]
     os.makedirs(raw_dir, exist_ok=True)
@@ -83,13 +84,22 @@ def upload_monthly():
         try:
             result: SubmissionParseResult = parse_totfa_zip(dest)
             ingest = ingest_monthly_declaration(store, result, actor=caller_id())
-            # 自動將申報資料中之機構代碼寫入院所檔案（User Requirement: KEY 使用上傳資料中機構代碼、存入院所檔案）
+            # Phase 29：不覆寫本院院所設定。院所尚未設定時才以 zip 的機構代碼初始化；
+            # 機構代碼與本院不同（新機構 zip）則只標示 foreign_facility，本院設定保持不變。
             facility_code = (result.header.get("t2") or "").strip()
+            foreign_facility = False
             if facility_code:
                 try:
-                    settings.save_facility_config({"code": facility_code})
-                except Exception as exc:
-                    current_app.logger.warning("自動寫入院所機構代碼失敗：%s", exc)
+                    current_code = str(settings.load_facility_config().get("code") or "").strip()
+                except (FileNotFoundError, ValueError):
+                    current_code = ""
+                if not current_code:
+                    try:
+                        settings.save_facility_config({"code": facility_code})
+                    except Exception as exc:
+                        current_app.logger.warning("初始化院所機構代碼失敗：%s", exc)
+                elif current_code != facility_code:
+                    foreign_facility = True
         except SubmissionXmlError as exc:
             current_app.logger.warning("monthly upload rejected: %s", type(exc).__name__)
             raise ApiError(_PARSE_FAILED)
@@ -121,6 +131,7 @@ def upload_monthly():
         "status": "success",
         "batch": ingest.batch,
         "facility_code": fac_code,
+        "foreign_facility": foreign_facility,
         "total_cases": len(result.cases),
         "ingest": {
             "created": ingest.created,
@@ -277,3 +288,48 @@ def clear_single_monthly_batch(batch_id: str):
         "deleted_count": deleted,
         "message": f"已成功清空批次 {batch_id}（共 {deleted} 筆案件）",
     })
+
+
+@bp.route("/api/monthly/batch/<batch_id>/package", methods=["GET"])
+def monthly_batch_package(batch_id: str):
+    """下載批次包（ZIP）：報告 HTML＋每案病歷文件，供使用者存到本機。
+
+    院所資料未完整或未確認（首次下載須填診所表單）→ 412，附缺漏欄位清單；
+    確認後的後續下載直接產出。只讀快取範本，不在此呼叫 LLM。
+    """
+    if not _BATCH_RE.match(batch_id):
+        raise ApiError("batch_id 格式應為 MONTHLY-YYYYMM 或 MONTHLY-YYYYMM-機構代碼")
+    store = case_store()
+    if store.count_by_batch(batch_id) == 0:
+        raise ApiError("查無此批次", status=404)
+
+    try:
+        facility = settings.load_facility_config()
+    except (FileNotFoundError, ValueError):
+        facility = {}
+    status = profile_status(facility)
+    if not status.ready:
+        return jsonify({
+            "status": "error",
+            "code": "facility_profile_required",
+            "missing": list(status.missing),
+            "confirmed": status.confirmed,
+            "message": "請先填寫並確認院所資料（診所表單），之後即可直接下載",
+        }), 412
+
+    try:
+        body = build_batch_package(
+            store,
+            batch_id,
+            facility=facility,
+            rules_db_path=current_app.config.get("ELC_RULES_DB_PATH"),
+        )
+    except FacilityProfileError as exc:  # 理論上已於上方檢查，保留防禦
+        return jsonify({"status": "error", "code": "facility_profile_required", "missing": exc.missing,
+                         "confirmed": exc.confirmed, "message": str(exc)}), 412
+    filename = f"monthly_package_{batch_id}.zip"
+    return Response(
+        body,
+        mimetype="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

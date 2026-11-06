@@ -323,13 +323,15 @@ def _batch(*cases) -> BatchAudit:
     return BatchAudit(batch=BATCH, cases_total=len(cases), cases=flagged, report=aggregate_batch(len(cases), flagged))
 
 
-def test_drugs_and_low_points_are_not_procedure_targets():
+def test_restricted_orders_are_targets_and_unflagged_low_points_are_not():
+    # Phase 29：範本目標 = 處置高價醫令 ∪ 所有給付限制（restriction_present）醫令。
+    # 本例 PROC1、DRUG1 皆有給付限制 → 皆為目標；PROC2（≤350 點、無旗標）不成為 finding。
     batch = _batch(_case("A", "S61.2", [
-        _proc("PROC1", points="500"),          # 處置 >350 ✓
-        _proc("DRUG1", points="400", cat="4", unit="6.00", seq="2"),  # 藥品 ✗
-        _proc("PROC2", points="300", seq="3"),  # ≤350 ✗
+        _proc("PROC1", points="500"),          # 處置 >350 且有給付限制 ✓
+        _proc("DRUG1", points="400", cat="4", unit="6.00", seq="2"),  # 限制藥品 ✓
+        _proc("PROC2", points="300", seq="3"),  # 無旗標、不列入
     ]))
-    assert [t[0] for t in procedure_targets(batch)] == ["PROC1"]
+    assert [t[0] for t in procedure_targets(batch)] == ["PROC1", "DRUG1"]
     assert all(is_procedure_finding(f) for c in batch.cases for f in c.findings if f.code == "PROC1")
 
 
