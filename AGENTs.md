@@ -84,7 +84,8 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
   - **`parsers/`**: Parsers for XML declarations (TOTFA), deduction notifications, and outpatient SOAP text.
   - **`generators/`**: Builders for appeal drafts, Big5 XML (`appeal_xml.py`, `sampling_xml.py`), tracking tables, ODT/PDF templates, and evidence packets.
 
-- **`server.py`**: Lightweight development entrypoint delegating to `elc_audit_engine.api.create_app()`.
+- **`server.py`**: WSGI entrypoint (`server:app`) delegating to `elc_audit_engine.api.create_app()`. Production runs it via gunicorn under systemd (see §6); `python server.py` is development-only (Flask dev server, debug-capable).
+- **`deploy/`**: Production service files — `gunicorn.conf.py`, systemd user units (`elc-audit-engine.service`, healthcheck `.service`/`.timer`), `healthcheck.sh`, env template, and `README.md` (LAN guidance).
 - **`scripts/`**: CLI builders for appeal print, XML, deduction sheets, and evidence packets.
 
 ---
@@ -105,10 +106,48 @@ When operating within the Herdr terminal workspace manager (`HERDR_ENV=1`), task
 
 - **Environment Manager**: `uv`
   - Sync dependencies: `uv sync`
-  - Run server: `uv run python server.py`
+  - Run server (production, managed): `systemctl --user restart elc-audit-engine.service` — do NOT start a second instance on port 5000
+  - Run server (dev only, foreground): `uv run python server.py`
   - Run tests: `ELC_ALLOW_NO_AUTH_FOR_TESTS=1 uv run pytest -q tests doc/tests`
+  - Dependency pitfall: the user's global `~/.config/uv/uv.toml` sets `constraint-dependencies = ["pydantic<2.11"]`, which silently downgrades pydantic on `uv add`/`uv lock`. Lock with `uv lock --no-config` (or `--no-config` on `uv add`) so only the intended package changes; verify with `git diff uv.lock`.
 - **Testing Guardrails**:
   - Never write to production databases (`data/db/cases.sqlite3`) in tests.
   - Use fixtures from `tests/conftest.py` (e.g., `make_api_app`) which create temporary isolated databases.
 - **Herdr Environment**:
   - When running inside Herdr (`HERDR_ENV=1`), coordinate long-running jobs or agent tasks across assigned panes (`claude-executor` for coding/execution, `hermes-test` for tests, server panes for runtimes).
+
+---
+
+## 6. Deployment & Service Stability (systemd)
+
+The production server is a **systemd user service** (not a manual terminal process).
+
+| Item | Value |
+| :--- | :--- |
+| Service | `elc-audit-engine.service` (gunicorn 26.2.0, `server:app`, 1 worker × 8 threads) |
+| Restart | `Restart=always`, `RestartSec=3`; start-limit 10 failures / 300 s |
+| Crash record | `logs/crash.log` (written on every stop: `result`, `exit_code`, `exit_status`) |
+| Logs | `logs/access.log`, `logs/error.log` (gunicorn + Python tracebacks), `logs/healthcheck.log` |
+| Health | `GET /api/health` (auth-exempt). `elc-audit-engine-healthcheck.timer` runs `deploy/healthcheck.sh` every 60 s; restarts after 3 consecutive failures |
+| Config | `~/.config/elc-audit-engine/env` (mode 600; template `deploy/elc-audit-engine.env.example`) — **never commit** |
+| Units | `~/.config/systemd/user/` (copies of `deploy/*.service|*.timer`). Re-copy and `systemctl --user daemon-reload` after editing `deploy/` |
+| Boot | Linger enabled for user `hsu` → starts at boot without login |
+| Bind | `ELC_SERVER_HOST=127.0.0.1` (local only). Do not change to `0.0.0.0` without the LAN steps below |
+
+**Operations**
+- Status / restart / logs: `systemctl --user status|restart elc-audit-engine.service`, `journalctl --user -u elc-audit-engine.service -f`
+- Crash forensics: `cat logs/crash.log logs/error.log`
+- Verify: `curl http://127.0.0.1:5000/api/health` → `{"status":"ok"}`
+
+**LAN exposure checklist (required before serving other machines)**
+1. Keep gunicorn on `127.0.0.1`; put Caddy/Nginx with TLS in front.
+2. Set `ELC_ALLOWED_HOSTS` to the LAN hostname/IP (no port).
+3. Replace the development key `clinic:dev-key-for-local-dev-001` with strong per-client keys.
+4. Ensure `DISABLE_AUTH` is unset.
+5. Firewall: allow only the LAN subnet; do not open port 5000.
+6. Back up `data/` and `logs/`; `data/` contains patient-related data.
+
+**Known open items**
+- Nine pre-existing test failures (monthly SOAP pregen ×7, `test_monthly_report_ux`, `test_sampling_evidence_preview`) reproduce on the original code; not caused by deployment changes. Track separately.
+- `logs/healthcheck.log` may show one `failed (1/3)` line at service start (startup race); harmless below the threshold.
+- Uncommitted: `pyproject.toml`, `uv.lock` (gunicorn added), `.gitignore` (`logs/`), `deploy/`, `AGENTs.md`.

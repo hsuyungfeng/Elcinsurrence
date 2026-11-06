@@ -21,6 +21,7 @@ dependencies = [
     # image_processor.py 於執行期頂層匯入，原先只在 dev 群組或僅由 pillow-heif 間接帶入。
     "pypdf>=4.0.0",
     "pillow>=10.0.0",
+    "gunicorn>=26.2.0",
 ]
 
 # 紙本表格結構化 OCR（PP-StructureV3，可選）：不裝也能跑（降級 tesseract 行解析）。

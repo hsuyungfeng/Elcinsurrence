@@ -1,0 +1,27 @@
+[Unit]
+Description=ELC Audit Engine (Flask via gunicorn)
+Documentation=file:///home/hsu/Desktop/Elcinsurrence/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+# 短時間內反覆崩潰即停止重試，避免無限重啟迴圈；由健康檢查與日誌人工介入。
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+WorkingDirectory=/home/hsu/Desktop/Elcinsurrence
+# 金鑰等機密放在環境檔（不納入版本控制）；範本見 deploy/elc-audit-engine.env.example
+EnvironmentFile=%h/.config/elc-audit-engine/env
+ExecStart=/home/hsu/Desktop/Elcinsurrence/.venv/bin/gunicorn -c deploy/gunicorn.conf.py server:app
+# 任何非正常結束（崩潰、被 kill、非零退出）皆自動拉起
+Restart=always
+RestartSec=3
+# 每次停止都記錄退出碼與結果，供事後追查崩潰原因
+ExecStopPost=/bin/sh -c 'echo "$(date -Is) stopped result=$SERVICE_RESULT exit_code=$EXIT_CODE exit_status=$EXIT_STATUS" >> /home/hsu/Desktop/Elcinsurrence/logs/crash.log'
+KillMode=mixed
+TimeoutStopSec=40
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
