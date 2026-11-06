@@ -1,5 +1,6 @@
 # OMC 狀態目錄（工作階段暫存，不需版控）
 .omc/
+SoapVoice/
 
 # 嵌入向量快取（可重新產生）
 **/.embed_cache/
