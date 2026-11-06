@@ -1,4 +1,4 @@
-# Elcinsurrence 健保三軌自動化審核與申復工作台 (v5.0)
+# Elcinsurrence 健保三軌自動化審核與申復工作台 (v5.1)
 
 `Elcinsurrence` 是一套專為健保門診申報總檔、抽樣預審與核減申復設計的自動化審核與申復輔助引擎（`elc-audit-engine`），提供完整的三軌處理架構（當月預審 ＋ 抽樣預審 ＋ 核減申復）、原生 HIS 系統無頭回填對接（`agent-desktop`）、以及健保 VPN 雲端藥歷 2.0 自動化預讀橋接（`webbrain`）。
 
@@ -55,6 +55,42 @@
   - `GET /api/soap/cases/<case_id>/bundle`：門診完整 S/O/A/P 結構與金庫多媒體檔案清單。
   - `GET /api/soap/cases/<case_id>/export-forensic-zip`：一鍵導出符合法庭與健保審查規範之 ZIP 佐證包（含 `SOAP_RECORD.txt`、`SOAP_RECORD.json`、原始音訊與影像、`SHA256_CHECKSUM.txt` 數位防竄改雜湊、`AUDIT_TRAIL.json` 司法審計時間戳）。
 - **安全保障**：全介面純 DOM 構建，100% 杜絕 unsafe innerHTML 注入；全離線運作，無任何外部 CDN 網路依賴。
+
+### 5. 當月申報 TOTFA 與每日語音 SOAP 自動比對入庫暨 11 碼標準檔名 EMR 批次打包引擎 (Phase 28)
+- **架構與比對**：[`src/elc_audit_engine/reconciliation/soap_reconciler.py`](src/elc_audit_engine/reconciliation/soap_reconciler.py)
+  - 解決 `TOTFA.zip` 僅有費用、醫令與診斷碼而無病歷本文的問題。
+  - 當月申報檔匯入時，以多源三層策略（Layer 1: CaseStore HIS ➔ Layer 2: 診所本機 PATIENT_DB ➔ Layer 3: EvidenceVault）進行關聯比對，自動提取對應門診語音 SOAP、`soap_text`、`vault_key` 與佐證檔案寫入案件 payload，供第 2 階（抽樣預審）與第 3 階（事後申復）備存。
+- **11 碼標準檔名與 500MB ZIP 分包**：[`src/elc_audit_engine/packagers/emr_batch_packager.py`](src/elc_audit_engine/packagers/emr_batch_packager.py)
+  - **11 碼標準檔名**：`[第1階 2碼 11:西醫基層門診] + [第2階 1碼 A/B/C/D] + [案件分類 2碼 09] + [流水號 6碼] + [-N 擴充]`，嚴格半形英數字校驗（禁止全形或中文字元）。
+  - **四大資料屬性分類 (A/B/C/D)**：
+    - `A`：病歷本文類（門診 SOAP 紀錄單、病歷首頁、處方箋）。
+    - `B`：影像類（X 光、超音波、臨床處置照片、DICOM）。
+    - `C`：非影像檢驗報告（CBC、HbA1c、生化報告）。
+    - `D`：同意書與事前審查核准函。
+  - **A 類 PDF 樹狀書籤**：由 `StructuredSoapPdfBuilder` 自動動態產製，具備 `病歷首頁`、`門診處方箋`、`門診 SOAP 紀錄單` 三大書籤層級與醫師電子簽章驗證區。
+  - **500MB 動態分包**：封包命名格式 `{機構代碼 10碼}_{民國日期 7碼}_{序號 3碼}.zip`，達 450MB 動態臨界點自動裁切分包，封包內建 `MANIFEST.txt` 與 `SHA256_CHECKSUM.txt` 數位防竄改檢驗單。
+  - **源頭端品質驗證 (Validation-at-Source)**：副檔名白名單與阻斷檢查、DICOMDIR 引導目錄完整性檢核。
+- **工作台介面升級**：
+  - 第 2 階與第 3 階頂部操作列整合為緊湊 1 列（操作按鈕 ＋ 報告交付 ＋ 佐證庫上傳）。
+  - 結構化 4 格獨立色彩 SOAP 編輯表單（S 藍、O 綠、A 紫、P 橘黃）。
+  - 缺口分析警示「紅字建立清單」與智慧補強建議「綠色字體確認件」。
+  - 「同意修訂並寫回 HIS 與資料庫」雙向同步與變更即時偵測警示。
+- **RESTful API 端點**：
+  - `POST /api/emr/batch-package`：執行批次標準 11 碼重命名與 500MB ZIP 封包產製。
+  - `GET /api/emr/packages`：列出已產製之 EMR 封包清單。
+  - `GET /api/emr/download/<filename>`：安全下載 500MB ZIP 封包。
+
+---
+
+## 👥 Herdr 多 Agent 協同分工體系 (Herdr Agent Team)
+
+在 Herdr 終端多 Agent 環境 (`HERDR_ENV=1`) 下，由三個終端窗格（Pane）協同分工：
+
+| 終端窗格 (Pane) | 角色指派 | 執行模型 / 核心職責 |
+| :--- | :--- | :--- |
+| **`w7:p1`** | **Antigravity (Agy)** | **執行中樞、階段規劃與測試審核**<br>• GSD 階段規劃（`/gsd-plan-phase`、`/gsd-execute-phase`）<br>• 跨 Agent 任務調度、進度監控與架構規範把關<br>• 全套件整合測試、API 契約檢查與最終代碼合規驗收 |
+| **`w7:p2`** | **Claude** | **執行核心代碼實作與打包邏輯編寫**<br>• 健保 11 碼標準檔名編碼與資料屬性分類邏輯 (`emr_batch_packager.py`)<br>• A 類高畫質 PDF 書籤生成器與 500MB ZIP 動態分包實作<br>• 診間 HIS 雙向回寫與資料庫同步功能維護 |
+| **`w7:p3`** | **Hermes** | **邊界案例測試與本地模型推理比對**<br>• Qwen3.8-27B-FP8 本地大模型臨床推理與 SOAP 比對建議檢驗<br>• 異常輸入、缺欄位降級、中文檔名阻斷等邊界壓力測試<br>• 離線環境推論穩定度確認 |
 
 > 兩條路徑共用 Phase 5 `compare_case`，故判定語意一致；分開的原因是**產出與副作用不同**（預審誤用整案管線會意外寫出申復草稿），對應目標架構圖 Cloud HIS 的 Review Service ／ Appeal Service 分離。
 
@@ -543,7 +579,7 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 
 ---
 
-## 🌐 完整 REST API 端點一覽（v1.1）
+## 🌐 完整 REST API 端點一覽（v1.3）
 
 | Method | 端點 | 功能 | 認證 |
 |--------|------|------|------|
@@ -574,6 +610,12 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 | `POST` | `/api/deduction/print` | 核減明細原格式 PDF（Phase 13） | 選填 |
 | `POST` | `/api/appeal/evidence-packet/print` | 佐證包 PDF 合成（Phase 14） | 選填 |
 | `GET` | `/api/output/<檔名>.pdf` | 下載列印產出 PDF | **必填** |
+| `POST` | `/api/soap/search-patient` | 門診歷史病患與看診紀錄時間軸查詢 (Phase 27) | 選填 |
+| `GET` | `/api/soap/live-session` | 護理專員即時錄音監控與 ASR 逐字稿 (Phase 27) | 選填 |
+| `GET` | `/api/soap/cases/<case_id>/export-forensic-zip` | 一鍵導出法庭與健保審查 ZIP 佐證包 (Phase 27) | 選填 |
+| `POST` | `/api/emr/batch-package` | 批次標準 11 碼重命名與 500MB ZIP 分包產製 (Phase 28) | 選填 |
+| `GET` | `/api/emr/packages` | 查詢已產製之 EMR 審查封包清單 (Phase 28) | 選填 |
+| `GET` | `/api/emr/download/<filename>` | 安全下載 500MB EMR 審查 ZIP 封包 (Phase 28) | 選填 |
 
 > **認證「選填」說明**：帶合法 `X-API-Key` 時審計日誌記錄真實 `caller_id`；未帶時記 `anonymous`。「必填」端點缺 key 回 401（2026-09 部分強制，詳見「認證」小節）。
 

@@ -65,6 +65,7 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
     - `monthly`: `/api/monthly/*` (TOTFA upload, monthly batch pre-audit reports & clear endpoints)
     - `sampling`: `/api/sampling/*` (Stage 2 pre-audit, closed-loop batch audit, batch XML export, unified batch report)
     - `appeal`: `/api/appeal/*` (Stage 3 appeal drafts, linkage from Stage 2, batch appeal XML export, unified batch report)
+    - `emr_packaging`: `/api/emr/*` (11-code standard packaging, 500MB ZIP chunking, package listings & downloads)
     - `attachments`: `/api/appeal/attachments/*`
     - `print`: `/api/deduction/print`, `/api/appeal/evidence-packet/print`
     - `security`: Authentication, host whitelisting, and authorization hooks.
@@ -76,6 +77,8 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
   - **`bridge_queue.py`**: SQLite CAS atomic task queue managing jobs for `15`, `00`, `07`, `09`, `HIS_PUSH`, `WB_EXTRACT_MED`, `WB_UI_VERIFY`.
   - **`installer/build_clinic_installer.py`**: Single-click clinic workstation client installer script generator (`clinic_installer.iss`, `start_clinic_client.bat`).
   - **`unified_review_report.py`**: Unified review report generator aligning Stage 2 and Stage 3 batch views with the MONTHLY-YYYYMM report format.
+  - **`reconciliation/`**: Automatic month-start `TOTFA.zip` reconciliation against daily clinic outpatient voice SOAP records (`soap_reconciler.py`), populating SOAP into `CaseStore` for Stages 2 & 3.
+  - **`packagers/`**: NHI EMR batch packaging engine (`emr_batch_packager.py`) generating 11-code filenames, A/B/C/D 4-tier classification, A-tier PDF outline bookmarks, and 500MB ZIP chunking at 450MB threshold.
   - **`pipeline.py`**: Pipeline coordinators (`run_presubmission_check` and `run_case_pipeline`).
   - **`rule_repository/`**: SQLite rule store, docx tree indices, and LLM mapping scripts.
   - **`parsers/`**: Parsers for XML declarations (TOTFA), deduction notifications, and outpatient SOAP text.
@@ -86,7 +89,19 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
 
 ---
 
-## 4. Execution & Testing Conventions
+## 4. Herdr Multi-Agent Collaborative Architecture
+
+When operating within the Herdr terminal workspace manager (`HERDR_ENV=1`), tasks are coordinated across specialized agents pinned to panes in workspace `w7`:
+
+| Terminal Pane | Assigned Agent | Model & Capabilities | Core Responsibilities |
+| :--- | :--- | :--- | :--- |
+| **`w7:p1`** | **Antigravity (Agy)** | `inherit` / `gemini-2.5-pro` (Central Agent) | **執行中樞、階段規劃與測試審核**<br>• GSD 階段規劃 (`/gsd-plan-phase`、`/gsd-execute-phase`)<br>• 跨 Agent 任務指派與進度監控<br>• 全套件整合測試、API 契約檢查與最終代碼合規驗收 |
+| **`w7:p2`** | **Claude** | Claude Code CLI (Executor) | **執行核心代碼實作與打包邏輯編寫**<br>• 健保 11 碼標準檔名編碼與資料屬性分類邏輯 (`emr_batch_packager.py`)<br>• A 類高畫質 PDF 書籤生成器與 500MB ZIP 動態分包實作<br>• 診間 HIS 雙向回寫與資料庫同步功能維護 |
+| **`w7:p3`** | **Hermes** | Hermes Agent / Qwen3.8-27B-FP8 | **待命狀態，負責邊界案例測試與本地模型推理比對**<br>• Qwen3.8-27B-FP8 本地大模型臨床推理與 SOAP 比對建議檢驗<br>• 異常輸入、缺欄位降級、中文檔名阻斷等邊界壓力測試<br>• 離線環境推論穩定度確認 |
+
+---
+
+## 5. Execution & Testing Conventions
 
 - **Environment Manager**: `uv`
   - Sync dependencies: `uv sync`
