@@ -1,5 +1,6 @@
 """A-CR-09：狀態機語意——判定失敗不得記成已預審、驗證失敗不得 appealed、多步轉換原子。"""
-from elc_audit_engine.api.routes import sampling as sampling_routes
+# 判定呼叫已自路由層移至服務層（sampling_service.run_presubmission_check），故於服務模組打補丁。
+from elc_audit_engine.services import sampling_service as sampling_routes
 from types import SimpleNamespace
 
 import pytest

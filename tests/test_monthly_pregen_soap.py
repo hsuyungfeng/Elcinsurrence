@@ -31,11 +31,28 @@ from elc_audit_engine.rule_repository.models import RuleResult, not_found
 KEY = {"X-API-Key": "valid-key-123"}
 BATCH = "MONTHLY-202307"
 
+# 總字元數須落在 500–1000（見 comparator/soap_advice.py 與 LLM 系統提示）；
+# 舊版固定樣本僅約 330 字元，於 phase-18 加入總長檢核後即不合格，故擴充樣本。
 GOOD_SOAP = {
-    "s": "Patient reports painful nail bed injury of the right index finger after a machine accident.",
-    "o": "Nail bed laceration about 1.5 cm with partial nail plate avulsion; neurovascular intact.",
-    "a": "Traumatic nail bed injury with nail plate avulsion (S61.2).",
-    "p": "Nail bed repair under digital block; nail plate reposition; wound care instructions given.",
+    "s": (
+        "Patient reports painful nail bed injury of the right index finger after a machine accident "
+        "at the workshop about two hours before arrival. Pain is rated 6 out of 10 and worse with "
+        "movement. No prior injury to the same digit. Tetanus status reviewed and documented as up to date."
+    ),
+    "o": (
+        "Nail bed laceration about 1.5 cm with partial nail plate avulsion over the right index finger. "
+        "Capillary refill is brisk and neurovascular status is intact distally. No active bleeding after "
+        "compression. Surrounding soft tissue shows mild swelling without signs of infection."
+    ),
+    "a": (
+        "Traumatic nail bed injury with nail plate avulsion of the right index finger (S61.2). "
+        "No open fracture of the distal phalanx on initial assessment."
+    ),
+    "p": (
+        "Nail bed repair under digital block with absorbable sutures; nail plate reposition and splinting "
+        "applied. Wound care instructions given, including daily dressing change and elevation. Oral "
+        "analgesics prescribed. Follow-up in one week for wound check and suture assessment."
+    ),
 }
 GOOD_REPLY = {"status": "success", "comparison": "中文比對說明", "recommended_soap": GOOD_SOAP,
               "approval_advice": "中文審批建議"}

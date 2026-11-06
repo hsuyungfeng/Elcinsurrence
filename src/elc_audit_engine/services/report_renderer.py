@@ -750,9 +750,13 @@ def render_unified_review_html(view: ReviewCaseView) -> str:
     第 2 階預審卡片（preview-html）與第 3 階申復草稿共用本函式輸出。
     """
     title = STAGE_TITLES[view.stage]
+    # 單案頁首保留病患摘要（身分證／姓名／出生日期等），與聚合報告一致；
+    # phase-22 重構時曾遺失，導致預審卡片不再顯示病患資訊（見 tests/test_sampling_evidence_preview.py）。
+    summary = _case_summary_line(view)
+    summary_html = f'<div class="case-meta">{escape(summary)}</div>' if summary else ""
     header = (
         f'<header class="top"><div><div class="stage">{escape(title)}</div>'
-        f"<h1>{escape(view.case_id)}</h1></div></header>"
+        f"<h1>{escape(view.case_id)}</h1>{summary_html}</div></header>"
     )
     return _document(
         f"{title} {view.case_id}",

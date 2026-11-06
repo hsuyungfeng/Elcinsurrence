@@ -84,8 +84,9 @@ def test_case_header_shows_icd_chinese_title():
 
 def test_index_html_tab_order_and_sidebar_width():
     html = Path("static/index.html").read_text(encoding="utf-8")
-    # 左側欄縮小為 280px
-    assert "grid-template-columns: 280px 1fr;" in html
+    # 左側欄寬度由 CSS 變數 --sidebar-width 控制（Phase 23 縮半為 140px）
+    assert "--sidebar-width: 140px;" in html
+    assert "grid-template-columns: var(--sidebar-width) 1fr;" in html
     # 工作台分頁按鈕順序：1. 當月申報檔預審在最前
     pos_m = html.find("id=\"tabMode3\"")
     pos_s = html.find("id=\"tabMode1\"")
