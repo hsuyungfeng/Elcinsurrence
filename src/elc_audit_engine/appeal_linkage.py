@@ -12,12 +12,12 @@
 from __future__ import annotations
 
 import random
-import re
 
 from elc_audit_engine import evidence_vault
 from elc_audit_engine.case_store import DuplicateCaseError
 from elc_audit_engine.generators.appeal import build_appeal_draft
 from elc_audit_engine.parsers.models import DeductionRecord
+from elc_audit_engine.parsers.totfa import split_monthly_batch_id
 from elc_audit_engine.rule_repository import get_rule
 
 APPEAL_KIND = "appeal"
@@ -155,9 +155,9 @@ def _appeal_payload(record) -> dict:
 
 
 def _fee_year_month(batch: object) -> str | None:
-    """`MONTHLY-202307` → `202307`（費用年月 YYYYMM）；格式不符回 None。"""
-    match = re.fullmatch(r"MONTHLY-(\d{6})", str(batch or ""))
-    return match.group(1) if match else None
+    """`MONTHLY-202307`／`MONTHLY-202307-3503250461` → `202307`（費用年月 YYYYMM）；格式不符回 None。"""
+    parts = split_monthly_batch_id(batch)
+    return parts[0] if parts else None
 
 
 def appeal_xml_case(payload: dict) -> dict:

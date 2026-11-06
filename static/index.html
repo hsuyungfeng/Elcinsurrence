@@ -657,7 +657,7 @@
       <!-- 3-Track Mode Tabs: 1. 當月申報預審 (原3) -> 2. 抽樣事前預審 (原1) -> 3. 核減事後申復 (原2) -->
       <div class="mode-switcher">
         <button class="mode-btn" id="tabMode3" onclick="switchWorkflowMode('monthly')">
-          📊 1. 當月申報檔預審 (TOTFA.zip / 高價醫令與藥品 / 規則核對)
+          📊 1. 當月申報檔預審 (申報壓縮檔 / 高價醫令與藥品 / 規則核對)
         </button>
         <button class="mode-btn" id="tabMode1" onclick="switchWorkflowMode('sampling')">
           📋 2. 抽樣事前預審 (CSV 導入 / 醫令支持度預審)
@@ -685,7 +685,7 @@
         <div class="sidebar-tools">
           <button class="btn-mini" id="btnSoapClearList" onclick="clearSoapPatientsList()" title="清空左側病患清單 (Clear Patient List)" style="display:none; color:#fca5a5;">🗑️</button>
           <button class="btn-mini" onclick="togglePatientEntryModal(true)" title="依病患身分證／生日／姓名鍵入加入案件">➕</button>
-          <button class="btn-mini" onclick="document.getElementById('importFile').click()" title="匯入 TOTFA.zip／CSV／PDF／影像">📂</button>
+          <button class="btn-mini" onclick="document.getElementById('importFile').click()" title="匯入 申報壓縮檔／CSV／PDF／影像">📂</button>
           <button class="btn-mini btn-mini-danger" onclick="clearCacheAndReload()" title="清除本機快取與金鑰並強制重整頁面">🧹</button>
           <input type="file" id="importFile" accept=".csv,.pdf,.jpg,.jpeg,.png,.tif,.tiff,.bmp,.webp,.zip" style="display:none;" onchange="importCases(this.files[0])">
         </div>
@@ -761,7 +761,7 @@
           <button type="button" class="btn-action" style="padding: 2px 8px; font-size: 12px; background: transparent; border: 1px solid var(--border);" onclick="togglePatientEntryModal(false)">✕ 關閉</button>
         </div>
         <div style="font-size:12px; color:#94a3b8; margin-bottom:12px; line-height:1.5;">
-          輸入病患資料後，系統將自動比對當月預審（TOTFA.zip）申報資料，將該案全數醫令、診斷與金額自動帶入案件清單。若無相符紀錄亦可手動建案。
+          輸入病患資料後，系統將自動比對當月預審（申報壓縮檔）申報資料，將該案全數醫令、診斷與金額自動帶入案件清單。若無相符紀錄亦可手動建案。
         </div>
         <div style="display:flex; flex-direction:column; gap:10px; font-size:13px;">
           <div>
@@ -938,7 +938,7 @@
 
             <div class="panel">
               <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
-                <div class="panel-title">🛠️ 醫令支持度預先補強建議（Qwen3.8-27B 智慧分析）</div>
+                <div class="panel-title">🛠️ 醫令支持度預先補強建議（本地 LLM 智慧分析）</div>
                 <button type="button" class="btn-action" style="padding:3px 8px; font-size:11px; background:linear-gradient(135deg, #10b981, #059669);" onclick="pushStage2SoapToHis()">📤 寫回 HIS</button>
               </div>
               <div class="panel-body">
@@ -972,10 +972,10 @@
                   </div>
                 </div>
 
-                <!-- Qwen3.8-27B SOAP 比對建議與醫師審批面板 -->
+                <!-- 本地 LLM SOAP 比對建議與醫師審批面板 -->
                 <div id="sLlmSoapPanel" style="margin-top: 12px; background: rgba(15,23,42,0.6); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 12px; display: none;">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-weight: 700; color: #38bdf8; font-size: 13px;">🤖 LLM 智慧 SOAP 補強建議 (Qwen3.8-27B)</span>
+                    <span style="font-weight: 700; color: #38bdf8; font-size: 13px;">🤖 LLM 智慧 SOAP 補強建議 (本地 LLM)</span>
                     <button id="btn-s-apply-soap" data-test-id="btn-s-apply-soap" type="button" class="btn-action" style="background: linear-gradient(135deg, #0284c7, #0369a1); border: 1px solid #38bdf8; color: #fff; padding: 4px 10px; font-size: 12px; font-weight: 700;" onclick="applyRecommendedSoap()">🔄 按下換 SOAP（套用 LLM 建議至病歷）</button>
                   </div>
                   <div id="sLlmComparison" style="font-size: 12px; color: #cbd5e1; margin-bottom: 8px; line-height: 1.5; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;"></div>
@@ -1042,7 +1042,7 @@
             <div style="width: 1px; height: 16px; background: rgba(148,163,184,0.2); margin: 0 2px;"></div>
             <span style="font-size: 11px; font-weight: 700; color: #94a3b8;">📑 報告交付</span>
             <button id="btn-a-batch-report" data-test-id="btn-a-batch-report" class="btn-action" style="background: rgba(16,185,129,0.15); border: 1px solid #10b981; color: #34d399; padding: 5px 10px; font-size: 12px;" onclick="openAppealBatchReport()">🗂️ 批次申復報告 (HTML)</button>
-            <button id="btn-a-export-xml" data-test-id="btn-a-export-xml" class="btn-action" style="background: rgba(99,102,241,0.15); border: 1px solid #6366f1; color: #a5b4fc; padding: 5px 10px; font-size: 12px;" onclick="exportAppealBatchXml()">📦 全批次導出申復 XML (TOTFA.zip)</button>
+            <button id="btn-a-export-xml" data-test-id="btn-a-export-xml" class="btn-action" style="background: rgba(99,102,241,0.15); border: 1px solid #6366f1; color: #a5b4fc; padding: 5px 10px; font-size: 12px;" onclick="exportAppealBatchXml()">📦 全批次導出申復 XML (申報壓縮檔)</button>
 
             <div style="width: 1px; height: 16px; background: rgba(148,163,184,0.2); margin: 0 2px;"></div>
             <span style="font-size: 11px; font-weight: 700; color: #fbbf24;">📁 佐證庫：<span id="aVaultKeyLabel" style="font-weight:normal; color:#cbd5e1;">無法自動掛載</span></span>
@@ -1128,7 +1128,7 @@
           <!-- Multi-source Evidence & LLM Advice Panel (Right Side) -->
           <div class="panel">
             <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
-              <div class="panel-title">🔬 核減原因缺口與申復智慧建議 (Qwen3.8-27B 智慧分析)</div>
+              <div class="panel-title">🔬 核減原因缺口與申復智慧建議 (本地 LLM 智慧分析)</div>
               <button type="button" class="btn-action" style="padding:3px 8px; font-size:11px; background:linear-gradient(135deg, #10b981, #059669);" onclick="triggerDirectHisWrite('3階核減事後申復', getAppealFullText())">📤 寫回 HIS</button>
             </div>
             <div class="panel-body">
@@ -1177,10 +1177,10 @@
                 </div>
               </div>
 
-              <!-- Qwen3.8-27B 申復比對分析與審批建議 -->
+              <!-- 本地 LLM 申復比對分析與審批建議 -->
               <div id="aLlmSoapPanel" style="margin-top: 12px; background: rgba(15,23,42,0.6); border: 1px solid rgba(56,189,248,0.3); border-radius: 8px; padding: 12px; display: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                  <span style="font-weight: 700; color: #38bdf8; font-size: 13px;">🤖 LLM 智慧分析與申復建議 (Qwen3.8-27B)</span>
+                  <span style="font-weight: 700; color: #38bdf8; font-size: 13px;">🤖 LLM 智慧分析與申復建議 (本地 LLM)</span>
                   <button id="btn-a-apply-soap" data-test-id="btn-a-apply-soap" type="button" class="btn-action" style="background: linear-gradient(135deg, #0284c7, #0369a1); border: 1px solid #38bdf8; color: #fff; padding: 4px 10px; font-size: 12px; font-weight: 700;" onclick="applyAppealRecommendedDraft()">🔄 按下換 SOAP / 申復建議</button>
                 </div>
                 <div id="aLlmComparison" style="font-size: 12px; color: #cbd5e1; margin-bottom: 8px; line-height: 1.5; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;"></div>
@@ -1204,13 +1204,15 @@
       <div class="view-container" id="workflow3View">
         <div class="workflow-topbar">
           <div>
-            <span style="font-size: 11px; color: var(--text-muted); display: block;">當月申報預審 (TOTFA.zip)</span>
+            <span style="font-size: 11px; color: var(--text-muted); display: block;">當月申報預審 (申報壓縮檔)</span>
             <strong style="font-size: 15px;" id="mBatchTitle">尚未載入申報批次</strong>
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">
             <input type="file" id="monthlyFileInput" accept=".zip" style="display:none;" onchange="uploadMonthlyZip(this.files[0])">
-            <button class="btn-action" style="padding: 7px 12px; font-size: 13px;" onclick="document.getElementById('monthlyFileInput').click()">📦 上傳 TOTFA.zip 總檔</button>
+            <button class="btn-action" style="padding: 7px 12px; font-size: 13px;" onclick="document.getElementById('monthlyFileInput').click()">📦 上傳 申報壓縮檔 總檔</button>
             <button class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669); padding: 7px 12px; font-size: 13px;" onclick="openMonthlyHtmlReport()">🔍 開啟視覺化審核卡片 (HTML)</button>
+            <button class="btn-action" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed); padding: 7px 12px; font-size: 13px;" onclick="downloadMonthlyPackage()" title="下載報告與每案病歷（ZIP）到本機；首次需填寫診所表單">💾 下載到本機</button>
+            <button class="btn-action" style="background: linear-gradient(135deg, #6366f1, #4f46e5); padding: 7px 12px; font-size: 13px;" onclick="preGenThenDownload()" title="先為缺少範本的處置醫令預生成範例病歷，再下載">🧾 先預生成再下載</button>
             <button class="btn-action" style="background: linear-gradient(135deg, #0ea5e9, #0284c7); padding: 7px 12px; font-size: 13px;" onclick="generateExampleRecord()" title="以本機 LLM 依規則生成英文範例病歷（需醫師審核）">🧾 產生範例病歷</button>
             <button class="btn-action" style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; color: #fca5a5; font-size: 12px; padding: 7px 10px;" onclick="clearMonthlyBatch()" title="清空目前申報批次案件">🗑️ 清空申報批次</button>
             <div id="exampleDialog" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:99999; max-width: 680px; width: 92%; background: #1e293b; color: #f8fafc; border: 1px solid rgba(148,163,184,0.4); border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); padding: 16px;">
@@ -1742,7 +1744,8 @@
         const res = await authFetch('/api/facility', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source: 'web', code, name, email, address, physician_name }),
+          // profile_confirmed：使用者於診所表單確認後才可用於下載（首次下載的前置條件）
+          body: JSON.stringify({ source: 'web', code, name, email, address, physician_name, profile_confirmed: true }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -1756,6 +1759,10 @@
         if (ki) ki.value = currentFacility.code;
         toggleFacilityModal(false);
         alert('已成功存入院所檔案 (config/facility.json) 並設定為存取 KEY！');
+        if (pendingPackageDownload) {
+          pendingPackageDownload = false;
+          setTimeout(downloadMonthlyPackage, 0);
+        }
         await loadCaseData();
       } catch (err) {
         alert('儲存失敗：' + err.message);
@@ -2295,7 +2302,7 @@
       const titleEl = document.getElementById('soapWorkbenchTitle');
       if (titleEl) titleEl.textContent = '🔴 診間即時自動生成中 (Live Stream · 全程自動處理)';
       const subEl = document.getElementById('soapWorkbenchSubtitle');
-      if (subEl) subEl.textContent = '專員錄音中 · ASR 語音即時轉錄 · Qwen 臨床推理自動提取 · 無需人為介入';
+      if (subEl) subEl.textContent = '專員錄音中 · ASR 語音即時轉錄 · 本地 LLM 臨床推理自動提取 · 無需人為介入';
 
       // 2. 按鈕狀態：隱藏返回按鈕與打包按鈕 (內定模式不需人為介入打包)
       const returnBtn = document.getElementById('soapReturnLiveBtn');
@@ -2741,17 +2748,21 @@
       const res = await authFetch('/api/monthly/upload', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) {
-        alert('上傳失敗：' + (data.message || '請確認檔案是否為 TOTFA.zip'));
+        alert('上傳失敗：' + (data.message || '請確認檔案是否為 申報壓縮檔'));
         return;
       }
-      if (data.facility_code) {
+      // Phase 29：機構代碼與本院不同（新機構 zip）→ 不改動本院院所設定與 KEY，只建立獨立批次
+      if (data.facility_code && !data.foreign_facility) {
         currentFacility.code = data.facility_code;
         localStorage.setItem('elc_api_key', data.facility_code);
         const ki = document.getElementById('apiKeyInput');
         if (ki) ki.value = data.facility_code;
         updateFacilityUI(currentFacility);
       }
-      alert(`申報總檔已解析成功！批次：${data.batch}\n機構代碼：${data.facility_code || '未註記'}\n共 ${data.total_cases || 0} 筆門診案件，已完成規則核對。`);
+      const foreignNote = data.foreign_facility
+        ? '\n（機構代碼與本院不同：已建立獨立批次，本院院所設定未變更）'
+        : '';
+      alert(`申報總檔已解析成功！批次：${data.batch}\n機構代碼：${data.facility_code || '未註記'}${foreignNote}\n共 ${data.total_cases || 0} 筆門診案件，已完成規則核對。`);
       document.getElementById('monthlyFileInput').value = '';
       currentMonthlyBatchId = data.batch;
       localStorage.setItem('elc_active_month_batch', data.batch);
@@ -2775,6 +2786,63 @@
     }
 
     // 以標頭傳遞 API Key（伺服器只讀 X-API-Key，不接受網址參數；網址列的金鑰也會進入日誌）
+    // Phase 29：下載到本機（ZIP：報告＋每案病歷）。首次需填診所表單，之後直接下載。
+    let pendingPackageDownload = false;
+
+    async function downloadMonthlyPackage() {
+      if (!currentMonthlyBatchId) {
+        alert('請先上傳或選擇一個申報批次');
+        return;
+      }
+      try {
+        const resp = await authFetch(`/api/monthly/batch/${encodeURIComponent(currentMonthlyBatchId)}/package`);
+        if (resp.status === 412) {
+          const body = await resp.json().catch(() => ({}));
+          const missing = (body.missing || []).join('、');
+          alert('首次下載需先填寫並確認院所資料（診所表單）。' + (missing ? '缺少：' + missing : ''));
+          pendingPackageDownload = true;
+          toggleFacilityModal(true);
+          return;
+        }
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => ({}));
+          alert('下載失敗：' + (body.message || resp.status));
+          return;
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `monthly_package_${currentMonthlyBatchId}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (err) {
+        alert('無法連線至服務');
+      }
+    }
+
+    async function preGenThenDownload() {
+      if (!currentMonthlyBatchId) {
+        alert('請先上傳或選擇一個申報批次');
+        return;
+      }
+      try {
+        const res = await authFetch(`/api/monthly/batch/${encodeURIComponent(currentMonthlyBatchId)}/pregen?limit=10`, { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert('預生成失敗：' + (data.message || res.status));
+          return;
+        }
+        alert(`預生成完成：新生成 ${data.generated || 0} 筆、已快取 ${data.cached || 0} 筆、尚待處理 ${data.skipped_limit || 0} 筆（每次最多生成 10 筆，可再按一次）。`);
+      } catch (err) {
+        alert('無法連線至服務');
+        return;
+      }
+      await downloadMonthlyPackage();
+    }
+
     async function openMonthlyHtmlReport() {
       if (!currentMonthlyBatchId) {
         alert('請先上傳或選擇一個申報批次');
@@ -2900,7 +2968,7 @@
       const container = document.getElementById('caseList');
       container.innerHTML = '';
       if (!batches || batches.length === 0) {
-        showCaseListMessage('尚無申報總檔批次。請點擊「上傳 TOTFA.zip 總檔」。');
+        showCaseListMessage('尚無申報總檔批次。請點擊「上傳 申報壓縮檔 總檔」。');
         return;
       }
       batches.forEach(item => {
@@ -3614,7 +3682,7 @@
     async function sampleFromMonthlyBatch() {
       const batch = currentMonthlyBatchId || (monthlyBatches.length > 0 ? monthlyBatches[0].batch : null);
       if (!batch) {
-        alert('尚未上傳當月申報檔，請先於「1. 當月申報檔預審」上傳 TOTFA.zip 總檔');
+        alert('尚未上傳當月申報檔，請先於「1. 當月申報檔預審」上傳 申報壓縮檔 總檔');
         return;
       }
       const res = await authFetch('/api/sampling/sample-batch', {
@@ -3943,7 +4011,7 @@
       const url = URL.createObjectURL(await res.blob());
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'TOTFA.zip';
+      a.download = '申報壓縮檔.zip';
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -4055,7 +4123,7 @@
           adv.innerText;
       }
 
-      // Qwen3.8-27B 智慧比對與 SOAP 補強呈現
+      // 本地 LLM 智慧比對與 SOAP 補強呈現
       const llmPanel = document.getElementById('sLlmSoapPanel');
       if (data.soap_advice && (data.soap_advice.status === 'success' || data.soap_advice.status === 'fallback')) {
         llmPanel.style.display = 'block';
@@ -4185,7 +4253,7 @@
           document.getElementById('aSec3').value;
       }
 
-      // Qwen3.8-27B 申復比對分析與審批建議呈現
+      // 本地 LLM 申復比對分析與審批建議呈現
       const aLlmPanel = document.getElementById('aLlmSoapPanel');
       if (data.soap_advice && (data.soap_advice.status === 'success' || data.soap_advice.status === 'fallback')) {
         aLlmPanel.style.display = 'block';

@@ -62,7 +62,7 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
 
 - **`src/elc_audit_engine/`**:
   - **`api/`**: Modular Flask app created via factory pattern (`create_app`), separated into Blueprints:
-    - `monthly`: `/api/monthly/*` (TOTFA upload, monthly batch pre-audit reports & clear endpoints)
+    - `monthly`: `/api/monthly/*` (TOTFA upload, monthly batch pre-audit reports & clear endpoints, `GET /api/monthly/batch/<id>/package` ZIP download). Batch ID is `MONTHLY-YYYYMM` or `MONTHLY-YYYYMM-<機構代碼>` (Phase 29); uploads never overwrite the clinic's facility profile, and downloads require a confirmed profile (412 otherwise)
     - `sampling`: `/api/sampling/*` (Stage 2 pre-audit, closed-loop batch audit, batch XML export, unified batch report)
     - `appeal`: `/api/appeal/*` (Stage 3 appeal drafts, linkage from Stage 2, batch appeal XML export, unified batch report)
     - `emr_packaging`: `/api/emr/*` (11-code standard packaging, 500MB ZIP chunking, package listings & downloads)

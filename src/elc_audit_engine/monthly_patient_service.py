@@ -270,7 +270,7 @@ def import_monthly_to_sampling(
 
     batch = batch_id or find_latest_monthly_batch(store)
     if not batch:
-        return {"status": "error", "message": "尚未上傳任何當月申報批次資料 (TOTFA.zip)"}
+        return {"status": "error", "message": "尚未上傳任何當月申報批次資料 (申報壓縮檔)"}
 
     # 若批次案件大於 limit，使用 20 隨機 + 10 立意抽樣
     count = store.count_by_batch(batch)
@@ -322,7 +322,7 @@ def import_monthly_to_appeal(
 
     batch = batch_id or find_latest_monthly_batch(store)
     if not batch:
-        return {"status": "error", "message": "尚未上傳任何當月申報批次資料 (TOTFA.zip)"}
+        return {"status": "error", "message": "尚未上傳任何當月申報批次資料 (申報壓縮檔)"}
 
     count = store.count_by_batch(batch)
     if count == 0:

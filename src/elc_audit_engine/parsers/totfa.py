@@ -52,6 +52,26 @@ BATCH_PREFIX = "MONTHLY-"
 CASE_ID_PREFIX = "MON-"
 _ROC_YEAR_MONTH_RE = re.compile(r"^(\d{2,3})(\d{2})$")
 
+# Phase 29：批次 ID＝`MONTHLY-YYYYMM[-機構代碼]`。舊格式 `MONTHLY-YYYYMM`（無機構代碼）仍合法。
+# 機構代碼僅允許英數字 1–20 碼，避免路徑或注入字元進入批次名稱。
+FACILITY_CODE_RE = re.compile(r"^[A-Za-z0-9]{1,20}$")
+MONTHLY_BATCH_PATTERN = r"MONTHLY-\d{6}(?:-[A-Za-z0-9]{1,20})?"
+_BATCH_FULL_RE = re.compile(rf"^{MONTHLY_BATCH_PATTERN}$")
+_BATCH_PARTS_RE = re.compile(r"^MONTHLY-(\d{6})(?:-([A-Za-z0-9]{1,20}))?$")
+
+
+def is_monthly_batch_id(value: object) -> bool:
+    """是否為合法批次 ID（新舊格式皆接受）。"""
+    return bool(_BATCH_FULL_RE.match(str(value or "")))
+
+
+def split_monthly_batch_id(value: object) -> tuple[str, str | None] | None:
+    """`MONTHLY-202307-3503250461` → ("202307", "3503250461")；舊格式 → ("202307", None)；不合法回 None。"""
+    match = _BATCH_PARTS_RE.match(str(value or ""))
+    if match is None:
+        return None
+    return match.group(1), match.group(2)
+
 
 # ── 讀取 ──────────────────────────────────────────────────────────
 
@@ -106,7 +126,10 @@ def parse_totfa_zip(source: str | os.PathLike[str] | bytes | BinaryIO) -> Submis
 
 
 def batch_name_from_header(header: dict[str, str]) -> str:
-    """由 tdata 推得批次名 `MONTHLY-YYYYMM`（t3 費用年月，民國年）。
+    """由 tdata 推得批次名 `MONTHLY-YYYYMM[-機構代碼]`（t3 費用年月，民國年）。
+
+    tdata.t2（醫事機構代碼）存在且合法時加入批次名，使不同機構同月的 zip 各自成批；
+    t2 缺漏或格式不合法時退回舊格式 `MONTHLY-YYYYMM`（相容既有批次）。
 
     Raises:
         SubmissionXmlError: t3 缺漏或格式不符（民國 YYYMM、月份 01–12）。
@@ -119,7 +142,11 @@ def batch_name_from_header(header: dict[str, str]) -> str:
     month = int(match.group(2))
     if not 1 <= month <= 12:
         raise SubmissionXmlError(f"tdata.t3（費用年月）月份超出範圍：{t3!r}")
-    return f"{BATCH_PREFIX}{year:04d}{month:02d}"
+    base = f"{BATCH_PREFIX}{year:04d}{month:02d}"
+    facility = (header.get("t2") or "").strip()
+    if FACILITY_CODE_RE.match(facility):
+        return f"{base}-{facility}"
+    return base
 
 
 # ── 篩選 ──────────────────────────────────────────────────────────
