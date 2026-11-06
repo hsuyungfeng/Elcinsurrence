@@ -20,7 +20,8 @@ from elc_audit_engine.parsers.submission_xml import (
 FIXTURE = os.path.join(
     os.path.dirname(__file__), "fixtures", "submission_sample.xml"
 )
-REAL_FILE = os.path.join(os.path.dirname(__file__), "..", "TOTFA.xml")
+_CANDIDATE_REAL = os.path.join(os.path.dirname(__file__), "..", "data", "sample", "TOTFA.xml")
+REAL_FILE = _CANDIDATE_REAL if os.path.isfile(_CANDIDATE_REAL) else os.path.join(os.path.dirname(__file__), "..", "TOTFA.xml")
 
 _BIG5_XML = (
     '<?xml version="1.0" encoding="Big5"?>\r\n'
