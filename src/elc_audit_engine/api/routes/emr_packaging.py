@@ -136,8 +136,8 @@ def create_emr_batch_package():
                             "original_name": vf.filename,
                             "tier": tier,
                         })
-            except Exception:
-                pass
+            except Exception as exc:
+                current_app.logger.warning("failed reading vault file: %s", exc)
 
         cases_files.append({
             "case_id": case_id,

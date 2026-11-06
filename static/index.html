@@ -792,12 +792,12 @@
       <!-- ==================================================================== -->
       <div class="view-container active" id="workflow1View">
         <!-- Top Bar: 緊湊單列整合控制台 (包含案例資訊、操作按鈕、報告交付與佐證庫上傳) -->
-        <div class="workflow-topbar" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 14px; background: rgba(15,23,42,0.85); border-bottom: 1px solid var(--panel-border);">
+        <div class="workflow-topbar" style="display: flex; flex-wrap: nowrap; overflow-x: auto; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; background: rgba(15,23,42,0.85); border-bottom: 1px solid var(--panel-border); white-space: nowrap;">
           <!-- 案例資訊與支持度評估 -->
-          <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
             <div>
               <span style="font-size: 11px; color: var(--text-muted); display: block;">目前抽樣案例 (事前預審)</span>
-              <strong style="font-size: 14px; color: #f8fafc;" id="sOrderName">14050B - 糖化血色素檢驗 HbA1c</strong>
+              <strong style="font-size: 13px; color: #f8fafc;" id="sOrderName">14050B - 糖化血色素檢驗 HbA1c</strong>
             </div>
             <div style="display: flex; align-items: center; gap: 4px; padding-left: 8px; border-left: 1px solid rgba(148,163,184,0.2);">
               <span style="font-size: 11px; color: var(--text-muted);">預審支持度評估：</span>
@@ -806,7 +806,7 @@
           </div>
 
           <!-- 緊湊操作按鈕與佐證庫：1列整合 -->
-          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
+          <div style="display: flex; flex-wrap: nowrap; align-items: center; gap: 5px; flex-shrink: 0;">
             <button id="btn-s-batch-report-top" data-test-id="btn-s-batch-report-top" class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669); padding: 5px 10px; font-size: 12px;" onclick="openSamplingBatchReport()">🔍 開啟視覺化審核卡片 (HTML)</button>
             <button id="btn-s-run-audit" data-test-id="btn-s-run-audit" class="btn-action" style="padding: 5px 10px; font-size: 12px;" onclick="runSamplingAudit()">⚡ 審核病歷並評估支持度</button>
 
@@ -1010,27 +1010,27 @@
       <!-- ==================================================================== -->
       <div class="view-container" id="workflow2View">
         <!-- Top Bar: 緊湊單列整合控制台 (包含案例資訊、操作按鈕、報告交付與佐證庫上傳) -->
-        <div class="workflow-topbar" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 14px; background: rgba(15,23,42,0.85); border-bottom: 1px solid var(--panel-border);">
+        <div class="workflow-topbar" style="display: flex; flex-wrap: nowrap; overflow-x: auto; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; background: rgba(15,23,42,0.85); border-bottom: 1px solid var(--panel-border); white-space: nowrap;">
           <!-- 案例資訊、核減原因與病歷號 -->
-          <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
             <div>
               <span style="font-size: 11px; color: var(--text-muted); display: block;">核減刪減醫令申復處理</span>
-              <strong style="font-size: 14px; color: #ef4444;" id="aOrderName">64140C - 甲床與手指重建術 (核減 3,200 點)</strong>
+              <strong style="font-size: 13px; color: #ef4444;" id="aOrderName">64140C - 甲床與手指重建術 (核減 3,200 點)</strong>
             </div>
             <div style="display: flex; align-items: center; gap: 4px; padding-left: 8px; border-left: 1px solid rgba(148,163,184,0.2);">
               <span style="font-size: 11px; color: var(--text-muted);">核減原因：</span>
               <span style="font-size: 12px; color: #f59e0b;" id="aDeductionReason">病歷未載明肌腱撕裂之影像是項與術前評估</span>
             </div>
             <div style="display: flex; align-items: center; gap: 4px; padding-left: 8px; border-left: 1px solid rgba(148,163,184,0.2);">
-              <label for="aRecordNoInput" style="font-size: 11px; color: var(--text-muted); white-space: nowrap;">病歷號（選填，查半年病史）：</label>
+              <label for="aRecordNoInput" style="font-size: 11px; color: var(--text-muted); white-space: nowrap;">病歷號：</label>
               <input type="text" id="aRecordNoInput" placeholder="M220518024"
-                style="font-size: 12px; padding: 3px 6px; border: 1px solid var(--panel-border); border-radius: 4px; background: var(--panel-bg); color: var(--text-color); width: 105px;"
+                style="font-size: 12px; padding: 2px 6px; border: 1px solid var(--panel-border); border-radius: 4px; background: var(--panel-bg); color: var(--text-color); width: 95px;"
                 title="病歷號（Phase 3 d3），填入後生成草稿時一併查詢半年病史">
             </div>
           </div>
 
           <!-- 緊湊操作按鈕與佐證庫：1列整合 -->
-          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
+          <div style="display: flex; flex-wrap: nowrap; align-items: center; gap: 5px; flex-shrink: 0;">
             <button id="btn-a-batch-report-top" data-test-id="btn-a-batch-report-top" class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669); padding: 5px 10px; font-size: 12px;" onclick="openAppealBatchReport()">🔍 開啟視覺化審核卡片 (HTML)</button>
             <button id="btn-a-generate-draft" data-test-id="btn-a-generate-draft" class="btn-action" style="padding: 5px 10px; font-size: 12px;" onclick="generateAppealDraft()">⚡ 整合多源證據生成申復草稿</button>
 
@@ -4057,7 +4057,7 @@
 
       // Qwen3.8-27B 智慧比對與 SOAP 補強呈現
       const llmPanel = document.getElementById('sLlmSoapPanel');
-      if (data.soap_advice && data.soap_advice.status === 'success') {
+      if (data.soap_advice && (data.soap_advice.status === 'success' || data.soap_advice.status === 'fallback')) {
         llmPanel.style.display = 'block';
         document.getElementById('sLlmComparison').innerText = '🔍 比對分析：' + (data.soap_advice.comparison || '');
         const rSoap = data.soap_advice.recommended_soap || {};
@@ -4187,7 +4187,7 @@
 
       // Qwen3.8-27B 申復比對分析與審批建議呈現
       const aLlmPanel = document.getElementById('aLlmSoapPanel');
-      if (data.soap_advice && data.soap_advice.status === 'success') {
+      if (data.soap_advice && (data.soap_advice.status === 'success' || data.soap_advice.status === 'fallback')) {
         aLlmPanel.style.display = 'block';
         document.getElementById('aLlmComparison').innerText = '🔍 比對分析：' + (data.soap_advice.comparison || '');
         document.getElementById('aLlmAdvice').innerText = '👨‍⚕️ 審批補強要點：' + (data.soap_advice.approval_advice || '');

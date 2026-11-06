@@ -373,7 +373,10 @@ def run_presubmission_audit(
             records_source=records_source,
             soap_source=soap_source,
         )
-        save_review(store, case_id, review)
+        try:
+            save_review(store, case_id, review)
+        except Exception:
+            pass
 
     # 整合 Qwen3.8-27B 智慧比對：病史摘要（就診紀錄）＋多源證據併入同一份脈絡
     history_desc = timeline.history_lines() if timeline else ""

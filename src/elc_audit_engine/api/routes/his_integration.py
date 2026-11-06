@@ -349,14 +349,14 @@ def ingest_soapvoice_session():
             try:
                 audio_bytes = base64.b64decode(data["audio_base64"])
                 audio_filename = data.get("audio_filename", "consultation.opus")
-            except Exception:
-                pass
+            except Exception as exc:
+                current_app.logger.warning("failed decoding audio_base64: %s", exc)
         if "screenshot_base64" in data:
             try:
                 image_bytes = base64.b64decode(data["screenshot_base64"])
                 image_filename = data.get("screenshot_filename", "screenshot.png")
-            except Exception:
-                pass
+            except Exception as exc:
+                current_app.logger.warning("failed decoding screenshot_base64: %s", exc)
 
     if not id_card:
         raise ApiError("缺少必要欄位 id_card", status=400)
