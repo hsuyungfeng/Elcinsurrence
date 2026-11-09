@@ -1211,35 +1211,9 @@
             <input type="file" id="monthlyFileInput" accept=".zip" style="display:none;" onchange="uploadMonthlyZip(this.files[0])">
             <button class="btn-action" style="padding: 7px 12px; font-size: 13px;" onclick="document.getElementById('monthlyFileInput').click()">📦 上傳 申報壓縮檔 總檔</button>
             <button class="btn-action" style="background: linear-gradient(135deg, #10b981, #059669); padding: 7px 12px; font-size: 13px;" onclick="openMonthlyHtmlReport()">🔍 開啟視覺化審核卡片 (HTML)</button>
-            <button class="btn-action" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed); padding: 7px 12px; font-size: 13px;" onclick="downloadMonthlyPackage()" title="下載報告與每案病歷（ZIP）到本機；首次需填寫診所表單">💾 下載到本機</button>
-            <button class="btn-action" style="background: linear-gradient(135deg, #6366f1, #4f46e5); padding: 7px 12px; font-size: 13px;" onclick="preGenThenDownload()" title="先為缺少範本的處置醫令預生成範例病歷，再下載">🧾 先預生成再下載</button>
-            <button class="btn-action" style="background: linear-gradient(135deg, #0ea5e9, #0284c7); padding: 7px 12px; font-size: 13px;" onclick="generateExampleRecord()" title="以本機 LLM 依規則生成英文範例病歷（需醫師審核）">🧾 產生範例病歷</button>
+            <button class="btn-action" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed); padding: 7px 12px; font-size: 13px;" onclick="downloadMonthlyPackage()" title="僅針對「無 SOAP、只上傳申報檔」的案件：下載範例病歷（ZIP）到本機；缺少的範本由本機 LLM 生成。首次需填寫診所表單">💾 下載到本機（範例病歷）</button>
+            <button class="btn-action" style="background: linear-gradient(135deg, #6366f1, #4f46e5); padding: 7px 12px; font-size: 13px;" onclick="gapCheckMonthly()" title="已有 SOAP 與語音紀錄的案件：與標準範例病歷比對，列出缺少的必要描述">🔍 比對範例病歷（缺項）</button>
             <button class="btn-action" style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; color: #fca5a5; font-size: 12px; padding: 7px 10px;" onclick="clearMonthlyBatch()" title="清空目前申報批次案件">🗑️ 清空申報批次</button>
-            <div id="exampleDialog" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:99999; max-width: 680px; width: 92%; background: #1e293b; color: #f8fafc; border: 1px solid rgba(148,163,184,0.4); border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); padding: 16px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-                <div style="font-weight: 700; font-size: 15px; color: #38bdf8;">🧾 範例病歷（AI 生成，須醫師審核後才可使用）</div>
-                <button type="button" class="btn-action" style="padding: 2px 8px; font-size: 12px; background: transparent; border: 1px solid var(--border);" onclick="document.getElementById('exampleDialog').style.display='none'">✕ 關閉</button>
-              </div>
-              <div style="margin-bottom: 8px; display:flex; gap:8px;">
-                <input type="text" id="diagInput" placeholder="主診斷 (例: S90221A)" style="flex:1; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc; font-size:13px;" value="S90221A">
-                <input type="text" id="orderInput" placeholder="醫令代碼 (例: 64140C)" style="flex:1; padding:6px 10px; border-radius:6px; border:1px solid #475569; background:#0f172a; color:#f8fafc; font-size:13px;" value="64140C">
-                <button class="btn-action" onclick="fetchCustomSoapTemplate()" style="background:#0284c7; white-space:nowrap;">🔄 重新生成</button>
-                <button class="btn-action" onclick="clearExampleSoapInputs()" style="background:rgba(239,68,68,0.2); border:1px solid #ef4444; color:#fca5a5; white-space:nowrap;">🗑️ 清空內容</button>
-              </div>
-              <div style="position:relative;">
-                <textarea id="exampleRecordOut" style="width:100%; height:260px; font-family:monospace; font-size:13px; line-height:1.6; background:#0f172a; padding:10px; border-radius:6px; border:1px solid #475569; color:#f8fafc; resize:vertical; box-sizing:border-box;"></textarea>
-                <button id="copySoapBtn" onclick="copyExampleSoap()" style="position:absolute; top:8px; right:8px; background:#10b981; color:#fff; border:none; border-radius:4px; padding:4px 10px; font-size:12px; font-weight:600; cursor:pointer;">📋 複製病歷</button>
-              </div>
-              <div id="exampleRecordNote" style="font-size: 12px; color: #94a3b8; margin-top: 8px; line-height:1.5;"></div>
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 12px;">
-                <span id="saveDbStatus" style="font-size:12px; color:#10b981;"></span>
-                <div style="display:flex; gap:8px;">
-                  <button class="btn-action" style="background:#4f46e5;" onclick="saveSoapToDb()">💾 存入資料庫備用</button>
-                  <button class="btn-action" onclick="document.getElementById('exampleDialog').style.display='none'">完成</button>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         <div class="panel" style="flex: 1; min-height: 0; height: 100%; overflow: hidden;">
@@ -1935,71 +1909,6 @@
         .replace(/'/g, '&#039;');
     }
 
-    // 範例病歷：配合主診斷與醫令代碼生成，支援編輯、複製與存入 DB
-    let currentModalCaseId = null;
-
-    async function generateExampleRecord(prefillOrder, prefillDiag, caseId) {
-      const orderEl = document.getElementById('orderInput');
-      const diagEl = document.getElementById('diagInput');
-      if (prefillOrder && orderEl) orderEl.value = prefillOrder;
-      if (prefillDiag && diagEl) diagEl.value = prefillDiag;
-      if (caseId) currentModalCaseId = caseId;
-      const modal = document.getElementById('exampleDialog');
-      if (modal) {
-        modal.style.display = 'block';
-      }
-      await fetchCustomSoapTemplate();
-    }
-
-    async function fetchCustomSoapTemplate() {
-      const orderCode = (document.getElementById('orderInput').value || '').trim();
-      const diagCode = (document.getElementById('diagInput').value || '').trim();
-      const out = document.getElementById('exampleRecordOut');
-      const note = document.getElementById('exampleRecordNote');
-      const statusEl = document.getElementById('saveDbStatus');
-      if (!orderCode) {
-        alert('請輸入醫令代碼');
-        return;
-      }
-      out.value = 'AI 正在為您依據給付規定與主診斷生成標準病歷中，請稍候 …';
-      note.textContent = '';
-      statusEl.textContent = '';
-      try {
-        const resp = await authFetch('/api/his/v1/cases/soap-enhance', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            order_code: orderCode,
-            case_id: currentModalCaseId || 'MON-50454d462a22a23dbb47e4fb0769f105',
-            primary_diagnosis: diagCode,
-            patient_history: diagCode ? `主診斷：${diagCode}` : ''
-          }),
-        });
-        const body = await resp.json();
-        if (resp.ok && body.example_soap_template) {
-          out.value = body.example_soap_template;
-          const advice = (body.bilingual_advice && body.bilingual_advice.approval_advice) ? body.bilingual_advice.approval_advice : '';
-          const cacheTag = body.from_cache ? '【⚡ 讀取自通用快取資料庫】' : '【🤖 LLM 新生成已存庫】';
-          note.textContent = `${cacheTag} 💡 健保審查重點：${advice}`;
-        } else if (resp.ok && body.bilingual_advice && body.bilingual_advice.raw_response) {
-          out.value = body.bilingual_advice.raw_response;
-          note.textContent = '【注意】' + (body.warning || '模型已為您產出建議內容。');
-        } else {
-          out.value = body.message || body.warning || '未產生範例病歷';
-        }
-      } catch (err) {
-        out.value = '無法連線至服務：' + err;
-      }
-    }
-
-    function clearExampleSoapInputs() {
-      document.getElementById('diagInput').value = '';
-      document.getElementById('orderInput').value = '';
-      document.getElementById('exampleRecordOut').value = '';
-      document.getElementById('exampleRecordNote').textContent = '';
-      document.getElementById('saveDbStatus').textContent = '';
-    }
-
     async function clearMonthlyBatch() {
       if (!currentMonthlyBatchId) {
         alert('目前未選取任何申報批次');
@@ -2021,54 +1930,6 @@
       document.getElementById('mBatchTitle').innerText = '尚未載入申報批次';
       document.getElementById('monthlyReportIframe').srcdoc = '';
       await loadCaseData();
-    }
-
-    // 監聽 iframe postMessage（當使用者從內嵌報告點擊彈窗按鈕時）
-    window.addEventListener('message', function(event) {
-      if (event.data && (event.data.type === 'OPEN_EX_MODAL' || event.data.type === 'OPEN_SOAP_MODAL')) {
-        generateExampleRecord(event.data.order_code, event.data.primary_diagnosis, event.data.case_id);
-      }
-    });
-
-    function copyExampleSoap() {
-      const out = document.getElementById('exampleRecordOut');
-      out.select();
-      navigator.clipboard.writeText(out.value).then(() => {
-        const btn = document.getElementById('copySoapBtn');
-        const oldText = btn.textContent;
-        btn.textContent = '✅ 已複製！';
-        setTimeout(() => { btn.textContent = oldText; }, 2000);
-      }).catch(() => {
-        document.execCommand('copy');
-        alert('病歷內容已複製至剪貼簿！');
-      });
-    }
-
-    async function saveSoapToDb() {
-      const out = document.getElementById('exampleRecordOut');
-      const orderCode = (document.getElementById('orderInput').value || '').trim();
-      const statusEl = document.getElementById('saveDbStatus');
-      const targetCaseId = currentModalCaseId || 'MON-50454d462a22a23dbb47e4fb0769f105';
-      statusEl.textContent = '儲存中 …';
-      try {
-        const resp = await authFetch(`/api/his/v1/cases/${encodeURIComponent(targetCaseId)}/approve-callback`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            approved_soap: out.value,
-            approval_status: 'revised',
-            doctor_id: 'L122448086'
-          }),
-        });
-        if (resp.ok) {
-          statusEl.textContent = '✅ 已成功儲存至案件資料庫 (cases.sqlite3)';
-          setTimeout(() => { statusEl.textContent = ''; }, 4000);
-        } else {
-          statusEl.textContent = '❌ 儲存失敗';
-        }
-      } catch (e) {
-        statusEl.textContent = '❌ 連線失敗: ' + e;
-      }
     }
 
     let currentSoapEncounter = null;
@@ -2715,10 +2576,23 @@
       if (hisToastTimer) clearTimeout(hisToastTimer);
     }
 
+    // 非阻斷提示：右下角短暫顯示，不使用 alert（不阻斷操作、不搶鍵盤焦點）。
+    function showNonBlockingNotice(message, ms = 4000) {
+      const el = document.createElement('div');
+      el.setAttribute('role', 'status');
+      el.textContent = message;
+      el.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:99999;max-width:420px;padding:10px 14px;'
+        + 'border-radius:8px;background:#1e293b;color:#f8fafc;border:1px solid rgba(148,163,184,.4);'
+        + 'box-shadow:0 10px 25px rgba(0,0,0,.4);font-size:13px;line-height:1.5;';
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), ms);
+    }
+
     function pushSoapToHisUia(customSource = '門診即時SOAP') {
       const sAlert = document.getElementById('soapHisSyncAlert');
       if (sAlert) sAlert.style.display = 'none';
-      alert(`🚀 已觸發 agent-desktop Windows UIA 無頭寫入！\n【來源：${customSource}】\n正在以 ValuePattern 將修訂之 S/O/A/P 與病歷佐證回填至 HIS 門診系統，不搶奪滑鼠與鍵盤焦點。`);
+      // 醫師已於審核步驟核准，寫入不再二次確認；改為非阻斷提示，不搶焦點。
+      showNonBlockingNotice(`🚀 已排入 agent-desktop 寫入（來源：${customSource}）— 背景執行中，結果另行通知`);
     }
 
     function downloadForensicEvidenceZip() {
@@ -2786,7 +2660,7 @@
     }
 
     // 以標頭傳遞 API Key（伺服器只讀 X-API-Key，不接受網址參數；網址列的金鑰也會進入日誌）
-    // Phase 29：下載到本機（ZIP：報告＋每案病歷）。首次需填診所表單，之後直接下載。
+    // 下載到本機：僅針對沒有 SOAP、只上傳申報檔的案件，產生範例病歷（ZIP）。缺少的範本由本機 LLM 生成。首次需填診所表單，之後直接下載。
     let pendingPackageDownload = false;
 
     async function downloadMonthlyPackage() {
@@ -2813,7 +2687,7 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `monthly_package_${currentMonthlyBatchId}.zip`;
+        a.download = `monthly_examples_${currentMonthlyBatchId}.zip`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -2823,24 +2697,42 @@
       }
     }
 
-    async function preGenThenDownload() {
+    // 比對範例病歷（缺項）：已有 SOAP 與語音紀錄的案件，與標準範例病歷比對，列出缺少的必要描述。
+    async function gapCheckMonthly() {
       if (!currentMonthlyBatchId) {
         alert('請先上傳或選擇一個申報批次');
         return;
       }
       try {
-        const res = await authFetch(`/api/monthly/batch/${encodeURIComponent(currentMonthlyBatchId)}/pregen?limit=10`, { method: 'POST' });
+        const res = await authFetch(`/api/monthly/batch/${encodeURIComponent(currentMonthlyBatchId)}/gap-check`);
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          alert('預生成失敗：' + (data.message || res.status));
+          alert('比對失敗：' + (data.message || res.status));
           return;
         }
-        alert(`預生成完成：新生成 ${data.generated || 0} 筆、已快取 ${data.cached || 0} 筆、尚待處理 ${data.skipped_limit || 0} 筆（每次最多生成 10 筆，可再按一次）。`);
+        const lines = [];
+        for (const c of (data.cases || [])) {
+          lines.push(`案件 ${c.case_id}${c.case_seq ? '（流水號 ' + c.case_seq + '）' : ''}`);
+          if (c.note) { lines.push('  ' + c.note); continue; }
+          for (const it of (c.items || [])) {
+            if (it.status === 'no_template') {
+              lines.push(`  醫令 ${it.order_code}：${it.message}`);
+            } else {
+              const miss = (it.missing_sections || []).join('、') || '無';
+              lines.push(`  醫令 ${it.order_code}：相似度 ${it.overall_similarity}；缺少欄位：${miss}`);
+            }
+          }
+        }
+        const w = window.open('', '_blank');
+        if (!w) { alert('瀏覽器阻擋了視窗，請允許彈出視窗後再試'); return; }
+        const pre = w.document.createElement('pre');
+        pre.style.whiteSpace = 'pre-wrap';
+        pre.textContent = lines.length ? lines.join('\n') : '沒有可比對的案件（無 SOAP 或無需範本的醫令）';
+        w.document.title = '範例病歷比對（缺項）';
+        w.document.body.appendChild(pre);
       } catch (err) {
         alert('無法連線至服務');
-        return;
       }
-      await downloadMonthlyPackage();
     }
 
     async function openMonthlyHtmlReport() {

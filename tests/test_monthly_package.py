@@ -206,16 +206,14 @@ def test_package_after_confirmation_returns_zip_with_report_and_case_docs(make_a
     resp = client.get(f"/api/monthly/batch/{BATCH}/package", headers=KEY)
     assert resp.status_code == 200
     assert resp.mimetype == "application/zip"
-    assert f"monthly_package_{BATCH}.zip" in resp.headers["Content-Disposition"]
+    assert f"monthly_examples_{BATCH}.zip" in resp.headers["Content-Disposition"]
 
     with zipfile.ZipFile(io.BytesIO(resp.data)) as zf:
         names = zf.namelist()
-        assert "報告.html" in names
+        # 下載到本機只包含範例病歷（無 SOAP 案件），不含報告
+        assert "報告.html" not in names
         case_docs = [n for n in names if n.startswith("病歷/") and n.endswith(".html")]
-        assert len(case_docs) == 2  # 每筆申報案件一份病歷文件
-        report = zf.read("報告.html").decode("utf-8")
-        assert facility_config["name"] in report  # 院所資料已帶入報告
-
+        assert len(case_docs) == 2
         docs = {n: zf.read(n).decode("utf-8") for n in case_docs}
     # 案 1 有處置醫令、無 SOAP、無快取範本 → 明確標示未預生成（不捏造）
     assert any("尚未預生成" in text and "TST1" in text for text in docs.values())
@@ -324,3 +322,68 @@ def test_pregen_target_covers_payment_restricted_orders():
     # 診療費（001 開頭）與病理檢查排除
     assert is_pregen_target(_f("001123C", status=STATUS_RESTRICTION, flags=("points_over_350",))) is False
     assert is_pregen_target(_f("25003C", status=STATUS_RESTRICTION, flags=("points_over_350",))) is False
+
+
+def test_gap_check_compares_soap_cases_against_template_without_llm(make_api_app, facility_config, rules_db):
+    """比對範例病歷（缺項）：有 SOAP 的案件與標準範本比對；無範本者標示 no_template；只讀，不呼叫 LLM。"""
+    from elc_audit_engine.monthly_package import build_gap_check
+
+    app = make_api_app(ELC_RULES_DB_PATH=rules_db)
+    store = app.extensions["elc"].case_store
+    client = app.test_client()
+    _upload(client, _sample_zip(FAC))
+    # 為第一案補上 SOAP（模擬語音比對入庫）
+    case = next(r for r in store.list_by_batch(BATCH) if "TST1" in str(r.payload))
+    payload = dict(case.payload)
+    payload["soap"] = {"s": "Painful nail bed injury.", "o": "Laceration noted.", "a": "S61.2 injury.", "p": "Repair."}
+    store.update_payload(case.case_id, payload)
+    # 有範本 → 進入比對；缺欄位（P 留空）應被列為 missing_sections
+    dx = payload.get("primary_diagnosis") or ""
+    store.put_soap_template("TST1", dx, {"s": "Template S text here.", "o": "Template O text here.",
+                                         "a": "Template A text.", "p": "Template plan text here."},
+                            source="test", quality_score=95)
+    result = build_gap_check(store, BATCH, rules_db_path=rules_db)
+    assert result["advisory_only"] is True
+    entry = next(c for c in result["cases"] if c["case_id"] == case.case_id)
+    items = entry["items"]
+    assert items and items[0]["status"] == "compared"
+    assert isinstance(items[0]["missing_sections"], list)
+    assert "overall_similarity" in items[0]
+    # 另一筆無 SOAP 的案件不會出現在缺項比對中
+    assert all(c["case_id"] != next(r.case_id for r in store.list_by_batch(BATCH) if r.case_id != case.case_id)
+               for c in result["cases"])
+
+
+def test_package_generates_missing_templates_within_limit(make_api_app, facility_config, rules_db, monkeypatch):
+    """下載到本機：缺少的範本在 generate 額度內由 LLM 生成（以替身取代），通過檢核才存庫。"""
+    from elc_audit_engine import monthly_package as mp
+
+    calls = []
+
+    def fake_generator(**kwargs):
+        calls.append(kwargs["order_code"])
+        return {"status": "success", "recommended_soap": {
+            "s": "Painful nail bed injury of the right index finger.",
+            "o": "Nail bed laceration about 1.5 cm with partial nail plate avulsion.",
+            "a": "Traumatic nail bed injury (S61.2).",
+            "p": "Nail bed repair; wound care instructions; follow-up in one week.",
+        }}
+
+    monkeypatch.setattr(mp, "generate_template_soap_condensed", fake_generator)
+    app = make_api_app(ELC_RULES_DB_PATH=rules_db)
+    store = app.extensions["elc"].case_store
+    client = app.test_client()
+    _upload(client, _sample_zip(FAC))
+    client.post("/api/facility", headers=KEY, json={"source": "web", "code": facility_config["code"],
+                "name": facility_config["name"], "email": "c@example.tw", "profile_confirmed": True})
+    resp = client.get(f"/api/monthly/batch/{BATCH}/package?generate=5", headers=KEY)
+    assert resp.status_code == 200
+    assert "TST1" in calls  # 缺少範本的處置醫令觸發生成
+    with zipfile.ZipFile(io.BytesIO(resp.data)) as zf:
+        doc = zf.read(next(n for n in zf.namelist() if n.startswith("病歷/") and n.endswith(".html"))).decode("utf-8")
+    assert "範例病歷（依申報醫令預生成" in doc or "尚未預生成" in doc
+
+
+def test_package_rejects_generate_out_of_range(client, facility_config):
+    resp = client.get(f"/api/monthly/batch/{BATCH}/package?generate=99", headers=KEY)
+    assert resp.status_code == 400

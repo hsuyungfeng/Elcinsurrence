@@ -57,12 +57,9 @@ def test_roc_year_month_and_date_text_match_printer_format():
 _INJECTION = "x');alert(document.cookie);//"
 
 
-def test_soap_modal_button_has_no_inline_js_string_with_user_values():
-    html = report_assets.soap_modal_button(_INJECTION, _INJECTION, _INJECTION)
-    assert "onclick" not in html
-    assert 'data-order="' in html and 'data-diag="' in html and 'data-case="' in html
-    # 值經 HTML 轉義：引號不得以原樣出現在屬性中
-    assert "'" not in html.split('data-order="', 1)[1].split('"', 1)[0]
+def test_soap_modal_button_removed_no_output():
+    """範例病歷功能已取消：不再產生任何彈窗按鈕（即使輸入含注入字元）。"""
+    assert report_assets.soap_modal_button(_INJECTION, _INJECTION, _INJECTION) == ""
 
 
 def test_unified_report_modal_button_uses_data_attributes_not_onclick():
@@ -75,13 +72,13 @@ def test_unified_report_modal_button_uses_data_attributes_not_onclick():
         primary_diagnosis=_INJECTION,
     )
     html = render_unified_review_html(view)
-    assert "openSoapModal('" not in html  # 不再把值嵌入 onclick 的 JS 字串
-    assert "btn-soap-modal" in html and "data-order=" in html
+    assert "openSoapModal('" not in html
+    assert "btn-soap-modal" not in html  # 範例病歷功能已取消，不再產生按鈕
 
 
-def test_shared_script_delegates_modal_clicks():
-    assert "btn-soap-modal[data-order]" in report_assets.SHARED_SCRIPT
-    assert "getAttribute('data-order')" in report_assets.SHARED_SCRIPT
+def test_shared_script_has_no_example_modal_delegation():
+    assert "btn-soap-modal" not in report_assets.SHARED_SCRIPT
+    assert "openSoapModal" not in report_assets.SHARED_SCRIPT
 
 
 # ---------------------------------------------------------------- 保留：佐證庫預留槽位與點擊檢視

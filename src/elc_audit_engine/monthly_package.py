@@ -18,8 +18,15 @@ from typing import Any
 
 from elc_audit_engine.case_store import CaseStore
 from elc_audit_engine.monthly_audit import audit_batch
-from elc_audit_engine.monthly_pregen import is_pregen_target, load_templates
-from elc_audit_engine.monthly_report_html import render_batch_report_html
+from elc_audit_engine.comparator.soap_advice import generate_template_soap_condensed
+from elc_audit_engine.rule_repository import get_rule
+from elc_audit_engine.comparator.soap_comparison import compare_soap_with_template
+from elc_audit_engine.monthly_pregen import (
+    STATUS_GENERATED,
+    is_pregen_target,
+    load_templates,
+    pregen_template,
+)
 
 # 下載前必須具備的院所欄位（與 POST /api/facility 的 web 必填欄位一致）。
 REQUIRED_PROFILE_FIELDS = ("code", "name", "email")
@@ -163,39 +170,111 @@ def _facility_header_html(facility: dict) -> str:
     )
 
 
+def _case_targets(case) -> list:
+    """案件中需範本的醫令（點數 > 350 且有規定原文），與 pregen 目標判定一致。"""
+    return [f for f in case.findings if is_pregen_target(f)]
+
+
 def build_batch_package(
     store: CaseStore,
     batch_id: str,
     *,
     facility: dict,
     rules_db_path: str | None = None,
+    generate_limit: int = 0,
 ) -> bytes:
-    """組出批次下載包（ZIP bytes）。院所資料不完整／未確認時拋出 FacilityProfileError。
+    """下載包（給沒有 SOAP、僅上傳申報檔的外來機構）：每個無 SOAP 案件一份範例病歷。
 
-    ZIP 內容：
-    - `報告.html`：當月申報視覺化審核卡片（與批次頁「開啟視覺化審核卡片」相同）。
-    - `病歷/<case_id>.html`：每案病歷文件（SOAP 或快取範本或「尚未預生成」標示）。
+    - 只包含「無 SOAP」的案件；有 SOAP 的案件不在此下載（SOAP 比對請用缺項比對端點）。
+    - 範例病歷來源：已快取範本；缺少者在 `generate_limit` 額度內由本機 LLM 生成（通過品質檢核才存庫）。
+      額度用盡仍缺者標示「尚未預生成」。
+    - 院所資料必須完整且已確認，否則拋出 FacilityProfileError。
+
+    ZIP 內容：`病歷/<case_id>.html`（每案一份）。
     """
     status = profile_status(facility)
     if not status.ready:
         raise FacilityProfileError(list(status.missing), status.confirmed)
 
     audit = audit_batch(store, batch_id, rules_db_path=rules_db_path, persist=False)
-    # 範本以「全部處置醫令」查詢（不套用報告的給付規定篩選）：無規則的處置醫令仍可能有已快取範本。
-    templates = load_templates(store, audit)
 
-    report_html = render_batch_report_html(audit, templates=templates)
-    report_html = report_html.replace("<body>", "<body>" + _facility_header_html(facility), 1)
+    no_soap: list[tuple] = []
+    for case in audit.cases:
+        record = store.get(case.case_id)
+        payload = dict(record.payload or {}) if record is not None else {}
+        if _soap_from_payload(payload) is None:
+            no_soap.append((case, payload))
+
+    templates = load_templates(store, audit)
+    if generate_limit > 0:
+        generated = 0
+        for case, _payload in no_soap:
+            for finding in _case_targets(case):
+                if generated >= generate_limit:
+                    break
+                key = (finding.code.strip().upper(), (case.primary_diagnosis or "").strip().upper())
+                if key in templates:
+                    continue
+                outcome = pregen_template(
+                    store,
+                    order_code=finding.code,
+                    order_name=finding.rule_name or finding.code,
+                    primary_diagnosis=case.primary_diagnosis or "",
+                    rule_text=finding.rule_full_text or "",
+                    generator=generate_template_soap_condensed,
+                )
+                generated += 1
+                if outcome.status == STATUS_GENERATED:
+                    templates[key] = outcome.soap
+        templates = load_templates(store, audit) | templates
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("報告.html", report_html.encode("utf-8"))
-        for case in audit.cases:
-            record = store.get(case.case_id)
-            payload = dict(record.payload or {}) if record is not None else {}
+        for case, payload in no_soap:
             doc = _case_document(store, case, payload, templates)
             zf.writestr(f"病歷/{case.case_id}.html", doc.encode("utf-8"))
     return buf.getvalue()
+
+
+def build_gap_check(store: CaseStore, batch_id: str, *, rules_db_path: str | None = None) -> dict:
+    """SOAP 缺項比對：有 SOAP 的案件，逐一與該醫令的標準範本（soap_templates）比對，列出缺少的描述。
+
+    只讀快取範本，不呼叫 LLM。比對結果為 advisory，不改動案件狀態。
+    """
+    audit = audit_batch(store, batch_id, rules_db_path=rules_db_path, persist=False)
+    cases_out: list[dict] = []
+    for case in audit.cases:
+        record = store.get(case.case_id)
+        payload = dict(record.payload or {}) if record is not None else {}
+        soap = _soap_from_payload(payload)
+        if soap is None:
+            continue
+        targets = _case_targets(case)
+        entry: dict = {"case_id": case.case_id, "case_seq": case.case_seq, "items": []}
+        if "text" in soap:
+            entry["note"] = "SOAP 為單段文字，無法分欄比對"
+            cases_out.append(entry)
+            continue
+        if not targets:
+            entry["note"] = "本案無需範本比對的醫令（點數 > 350 且有規定原文）"
+            cases_out.append(entry)
+            continue
+        for finding in targets:
+            template = store.get_soap_template(finding.code, case.primary_diagnosis or "")
+            if template is None:
+                entry["items"].append({"order_code": finding.code, "status": "no_template",
+                                       "message": "尚無範本可比對（請先生成範本）"})
+                continue
+            result = compare_soap_with_template(soap, template["soap"], finding.rule_full_text or "")
+            entry["items"].append({
+                "order_code": finding.code,
+                "status": "compared",
+                "missing_sections": result["missing_sections"],
+                "overall_similarity": result["overall_similarity"],
+                "section_similarities": result["section_similarities"],
+            })
+        cases_out.append(entry)
+    return {"batch": batch_id, "cases": cases_out, "advisory_only": True}
 
 
 __all__ = [
@@ -203,5 +282,107 @@ __all__ = [
     "PROFILE_CONFIRMED_KEY",
     "ProfileStatus",
     "build_batch_package",
+    "build_gap_check",
     "profile_status",
 ]
+
+
+# ── EMR 審查包（每案 XML 核算＋HTML 審查，影像內嵌）──────────────────
+
+def build_emr_bundle(
+    store: CaseStore,
+    batch_id: str,
+    *,
+    facility_code: str,
+    roc_date: str,
+    tier1: str = "11",
+    images_for_case=None,
+    rules_db_path: str | None = None,
+):
+    """組出批次的 EMR 審查包。
+
+    回傳 (zips, failures)：zips 為 [(zip檔名, bytes)]；failures 為 [{case_id, reason}]。
+    任一案件失敗（缺來源、缺必要欄位、檔名衝突）即不產生任何 ZIP，避免殘缺上傳檔。
+    `images_for_case(case_id) -> list[bytes]` 提供影像原始位元組（未提供則無影像）。
+    """
+    from elc_audit_engine.generators.emr_review_bundle import (
+        BundleError,
+        ReviewImage,
+        build_base_name,
+        build_case_bundle,
+        compress_image,
+        pack_zips,
+    )
+    from elc_audit_engine.generators.sampling_xml import SamplingXmlError, build_sampling_xml
+
+    records = store.list_by_batch(batch_id)
+    audit_cases = {c.case_id: c for c in audit_batch(store, batch_id, rules_db_path=rules_db_path, persist=False).cases}
+    bundles = []
+    failures: list[dict] = []
+    seen_names: dict[str, str] = {}
+    for record in records:
+        payload = dict(record.payload or {})
+        case_id = record.case_id
+        try:
+            base = build_base_name(tier1, "A", str(payload.get("case_class") or ""), str(payload.get("case_seq") or ""))
+        except BundleError as exc:
+            failures.append({"case_id": case_id, "reason": f"檔名：{exc}"})
+            continue
+        if base in seen_names:
+            failures.append({"case_id": case_id, "reason": f"檔名衝突（與 {seen_names[base]} 相同）"})
+            continue
+        seen_names[base] = case_id
+        try:
+            build_sampling_xml({"batch": batch_id, "monthly_source": payload})  # 驗證必要欄位（結果另行組裝）
+            xml_payload = {"batch": batch_id, "monthly_source": payload}
+        except SamplingXmlError as exc:
+            failures.append({"case_id": case_id, "reason": f"XML：{exc}"})
+            continue
+
+        soap = _soap_from_payload(payload)
+        if soap is not None and "text" in soap:
+            soap = {"s": soap["text"], "o": "", "a": "", "p": ""}  # 單段文字：整段列於 S，不分欄（不捏造）
+        soap_note = None
+        if soap is None:
+            # 無 SOAP：以已快取的範例病歷 SOAP 代替（僅供 HTML 審查，標示為範例，不進入 XML）
+            for finding in _case_targets(audit_cases.get(case_id)) if audit_cases.get(case_id) else []:
+                template = store.get_soap_template(finding.code, payload.get("primary_diagnosis") or "")
+                if template is not None:
+                    soap = dict(template["soap"])
+                    soap_note = f"範例病歷（依醫令 {finding.code} 預生成，非實際病歷，須醫師審核）"
+                    break
+        images = []
+        if images_for_case is not None:
+            for raw in images_for_case(case_id):
+                jpeg = compress_image(raw)
+                if jpeg is not None:
+                    images.append(ReviewImage(caption=f"影像 {len(images) + 1}", jpeg=jpeg))
+        bundle = build_case_bundle(
+            base_name=base,
+            xml_payload=xml_payload,
+            case_title=f"{base}（流水號 {payload.get('case_seq') or '—'}）",
+            soap=soap,
+            orders=[
+                {"code": o.get("p4"), "name": _rule_name(o.get("p4"), rules_db_path), "points": o.get("p12")}
+                for o in (payload.get("orders") or []) if isinstance(o, dict)
+            ],
+            images=images,
+            soap_note=soap_note,
+        )
+        bundles.append(bundle)
+
+    if failures:
+        return [], failures
+    zips = pack_zips(bundles, facility_code=facility_code, roc_date=roc_date)
+    return zips, []
+
+
+def _rule_name(code: str | None, rules_db_path: str | None) -> str:
+    """醫令名稱：由規則庫（payment/drug）查得；查無則回傳空字串，不捏造。"""
+    if not code:
+        return ""
+    try:
+        rule = get_rule(code, db_path=rules_db_path)
+    except Exception:
+        return ""
+    return (rule.name or "") if rule.found else ""
