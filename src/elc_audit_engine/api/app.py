@@ -55,6 +55,12 @@ def create_app(
     app.config.update(config or {})
     if "ELC_API_KEYS" not in app.config:
         app.config["ELC_API_KEYS"] = load_api_keys_or_fail(app)
+    if "ELC_AGENT_KEYS" not in app.config:
+        try:
+            from elc_audit_engine.auth import load_agent_keys
+            app.config["ELC_AGENT_KEYS"] = load_agent_keys()
+        except Exception:
+            app.config["ELC_AGENT_KEYS"] = {}
     app.config["ELC_ALLOWED_HOSTS"] = frozenset(
         h.lower() for h in app.config.get("ELC_ALLOWED_HOSTS") or load_allowed_hosts()
     )

@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from flask import Blueprint, jsonify, request
 
 from elc_audit_engine.bridge_queue import (
@@ -24,6 +26,8 @@ from elc_audit_engine.case_store import CaseNotFoundError
 
 from ..context import caller_id, case_store
 from ..errors import ApiError
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint("bridge", __name__)
 
@@ -77,12 +81,22 @@ def report_bridge_job_status(job_id: str):
     狀態轉換不合法 409；NHI_Query 格式不符 422；任務不存在 404。
     """
     data = _json_object()
-    _job_or_404(job_id)
+    current = _job_or_404(job_id)
+    new_status = str(data.get("status") or "")
+
+    # Phase 29 §8.5：HIS_PUSH 任務的草稿狀態須先於佇列回報同步。
+    # 同步失敗時不標記任務成功（回 500），讓 Agent 重送；不得靜默吞掉例外（P1-1）。
+    draft_id = None
+    if current.get("s_type_code") == "HIS_PUSH":
+        draft_id = (current.get("extra_payload") or {}).get("draft_id")
+    if draft_id and new_status in ("SUCCESS", "FAILED"):
+        _sync_draft_before_report(case_store(), draft_id, new_status, data)
+
     try:
         job = report_status(
             case_store(),
             job_id,
-            status=str(data.get("status") or ""),
+            status=new_status,
             local_id=data.get("sLocal_ID") or None,
             nhi_id=data.get("sNHI_ID") or None,
             nhi_status=data.get("NHI_Query") or data.get("nhi_status") or None,
@@ -93,7 +107,29 @@ def report_bridge_job_status(job_id: str):
         raise ApiError(str(exc), status=409)
     except BridgeValidationError as exc:
         raise ApiError(str(exc), status=422)
+
     return jsonify({"status": "success", "job": job})
+
+
+def _sync_draft_before_report(store, draft_id: str, new_status: str, data: dict) -> None:
+    """HIS_PUSH 回報前同步草稿：SUCCESS → pushed；FAILED → failed。已處於目標狀態者略過（重送冪等）。"""
+    try:
+        draft = store.get_soap_draft(draft_id)
+    except Exception as exc:  # 草稿不存在或讀取失敗：不得假裝已同步
+        logger.error("HIS_PUSH 草稿讀取失敗 draft_id=%s: %s", draft_id, type(exc).__name__)
+        raise ApiError("草稿狀態同步失敗（草稿不存在或讀取失敗），任務未標記成功", status=500)
+    target = "pushed" if new_status == "SUCCESS" else "failed"
+    if draft.state == target:
+        return
+    try:
+        if target == "pushed":
+            store.update_soap_draft_state(draft_id, "pushed", agent_id=caller_id())
+        else:
+            reason = str(data.get("reason") or data.get("failure_reason") or "bridge_failed")
+            store.update_soap_draft_state(draft_id, "failed", failure_reason=reason)
+    except Exception as exc:
+        logger.error("HIS_PUSH 草稿狀態同步失敗 draft_id=%s target=%s: %s", draft_id, target, type(exc).__name__)
+        raise ApiError("草稿狀態同步失敗，任務未標記成功，請稍後重送回報", status=500)
 
 
 @bp.route("/api/bridge/jobs/<job_id>", methods=["GET"])

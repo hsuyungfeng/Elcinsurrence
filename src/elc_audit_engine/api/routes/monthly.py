@@ -16,7 +16,12 @@ from flask import Blueprint, Response, current_app, jsonify, request
 from config import settings
 from elc_audit_engine.case_store.monthly import ingest_monthly_declaration
 from elc_audit_engine.monthly_audit import audit_batch, report_view
-from elc_audit_engine.monthly_package import FacilityProfileError, build_batch_package, profile_status
+from elc_audit_engine.monthly_package import (
+    FacilityProfileError,
+    build_batch_package,
+    build_gap_check,
+    profile_status,
+)
 from elc_audit_engine.monthly_pregen import (
     STATUS_QUALITY_FAILED,
     STATUS_UNDETERMINED,
@@ -292,11 +297,18 @@ def clear_single_monthly_batch(batch_id: str):
 
 @bp.route("/api/monthly/batch/<batch_id>/package", methods=["GET"])
 def monthly_batch_package(batch_id: str):
-    """下載批次包（ZIP）：報告 HTML＋每案病歷文件，供使用者存到本機。
+    """下載到本機（ZIP）：僅針對「無 SOAP、只上傳申報檔」的案件，提供範例病歷。
 
-    院所資料未完整或未確認（首次下載須填診所表單）→ 412，附缺漏欄位清單；
-    確認後的後續下載直接產出。只讀快取範本，不在此呼叫 LLM。
+    `?generate=N`（0～50，預設 20）：快取缺少的範本時，最多由本機 LLM 生成 N 筆（通過品質檢核才存庫）；
+    其餘仍缺者在文件中標示「尚未預生成」。院所資料未完整或未確認 → 412。
     """
+    try:
+        generate_limit = int(request.args.get("generate", "20"))
+    except ValueError:
+        raise ApiError("generate 須為整數")
+    if not 0 <= generate_limit <= 50:
+        raise ApiError("generate 須介於 0～50")
+
     if not _BATCH_RE.match(batch_id):
         raise ApiError("batch_id 格式應為 MONTHLY-YYYYMM 或 MONTHLY-YYYYMM-機構代碼")
     store = case_store()
@@ -323,13 +335,93 @@ def monthly_batch_package(batch_id: str):
             batch_id,
             facility=facility,
             rules_db_path=current_app.config.get("ELC_RULES_DB_PATH"),
+            generate_limit=generate_limit,
         )
     except FacilityProfileError as exc:  # 理論上已於上方檢查，保留防禦
         return jsonify({"status": "error", "code": "facility_profile_required", "missing": exc.missing,
                          "confirmed": exc.confirmed, "message": str(exc)}), 412
-    filename = f"monthly_package_{batch_id}.zip"
+    filename = f"monthly_examples_{batch_id}.zip"
     return Response(
         body,
         mimetype="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@bp.route("/api/monthly/batch/<batch_id>/gap-check", methods=["GET"])
+def monthly_batch_gap_check(batch_id: str):
+    """SOAP 缺項比對：有 SOAP 的案件與標準範本（soap_templates）比對，列出缺少的描述（advisory，只讀）。"""
+    if not _BATCH_RE.match(batch_id):
+        raise ApiError("batch_id 格式應為 MONTHLY-YYYYMM 或 MONTHLY-YYYYMM-機構代碼")
+    store = case_store()
+    if store.count_by_batch(batch_id) == 0:
+        raise ApiError("查無此批次", status=404)
+    return jsonify(build_gap_check(store, batch_id, rules_db_path=current_app.config.get("ELC_RULES_DB_PATH")))
+
+
+def _roc_today() -> str:
+    """今日民國 7 碼（YYYMMDD），例：2026-11-09 → 1151109。"""
+    from datetime import date
+
+    today = date.today()
+    return f"{today.year - 1911:03d}{today.month:02d}{today.day:02d}"
+
+
+def _case_images(case_id: str) -> list[bytes]:
+    """以 case_id 讀取附件中的影像原始位元組（僅 image/*，不回傳其他檔案）。"""
+    from elc_audit_engine.attachment_store import list_attachments
+
+    out: list[bytes] = []
+    for rec in list_attachments(case_id):
+        if not str(rec.mime_type or "").startswith("image/"):
+            continue
+        try:
+            with open(rec.file_path, "rb") as fh:
+                out.append(fh.read())
+        except OSError:
+            continue
+    return out
+
+
+@bp.route("/api/monthly/batch/<batch_id>/emr-bundle", methods=["GET"])
+def monthly_batch_emr_bundle(batch_id: str):
+    """EMR 審查包：每案 XML（健保核算，Big5）＋ HTML（審查，影像內嵌），打包為 ZIP 上傳用。
+
+    query：`tier1`（第一階層代碼，2 碼，預設 11）、`roc`（民國 7 碼，預設今日）。
+    任一案件失敗 → 422 並列出案件與原因（不產生殘缺檔）。目前單次僅支援一個 ZIP；超過 450MB 需分批（409）。
+    """
+    from elc_audit_engine.monthly_package import build_emr_bundle
+
+    if not _BATCH_RE.match(batch_id):
+        raise ApiError("batch_id 格式應為 MONTHLY-YYYYMM 或 MONTHLY-YYYYMM-機構代碼")
+    tier1 = request.args.get("tier1", "11")
+    roc = request.args.get("roc") or _roc_today()
+    store = case_store()
+    if store.count_by_batch(batch_id) == 0:
+        raise ApiError("查無此批次", status=404)
+    try:
+        facility_code = str(settings.load_facility_config().get("code") or "").strip()
+    except (FileNotFoundError, ValueError):
+        raise ApiError("院所設定缺少醫事機構代碼，無法產生 ZIP 檔名", status=412)
+
+    from elc_audit_engine.generators.emr_review_bundle import BundleError
+
+    try:
+        zips, failures = build_emr_bundle(
+            store, batch_id, facility_code=facility_code, roc_date=roc,
+            tier1=tier1, images_for_case=_case_images,
+            rules_db_path=current_app.config.get("ELC_RULES_DB_PATH"),
+        )
+    except BundleError as exc:
+        raise ApiError(str(exc), status=422)
+    if failures:
+        return jsonify({"status": "error", "code": "emr_bundle_incomplete",
+                        "message": f"{len(failures)} 筆案件無法組成合規檔案，未產生 ZIP",
+                        "failures": failures}), 422
+    if len(zips) != 1:
+        return jsonify({"status": "error", "code": "multiple_packages",
+                        "message": f"需切成 {len(zips)} 個 ZIP（超過 450MB），目前請分批下載",
+                        "packages": [name for name, _ in zips]}), 409
+    name, body = zips[0]
+    return Response(body, mimetype="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})

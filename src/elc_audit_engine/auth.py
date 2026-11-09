@@ -32,6 +32,9 @@ API_KEY_HEADER = "X-API-Key"
 #: 環境變數名稱：`his1:key1,his2:key2` 格式的呼叫方↔key 對照表。
 ENV_API_KEYS = "ELC_API_KEYS"
 
+#: 環境變數名稱：Windows Agent 獨立金鑰對照表（Phase 29 §7.3）。
+ENV_AGENT_KEYS = "ELC_AGENT_KEYS"
+
 #: 弱 key 門檻：短於此長度視為不安全，拒絕啟動（而非警告後放行）。
 _MIN_KEY_LEN = 16
 
@@ -141,6 +144,27 @@ def load_api_keys(raw: str | None = None) -> dict[str, str]:
             "不得以無認證狀態啟動"
         )
     return parse_api_keys(raw)
+
+
+def load_agent_keys(raw: str | None = None) -> dict[str, str]:
+    """載入 Windows Agent 專用金鑰表（Phase 29 §7.3）。未設定時回傳空表。"""
+    if raw is None:
+        raw = os.environ.get(ENV_AGENT_KEYS)
+    if not raw:
+        return {}
+    return parse_api_keys(raw)
+
+
+def resolve_agent_caller(presented_key: str | None, agent_keys: dict[str, str]) -> str | None:
+    """以 constant-time 比對 Agent 金鑰。若無匹配回傳 None。"""
+    if not agent_keys or not presented_key:
+        return None
+    candidate = presented_key.encode("utf-8")
+    matched_id: str | None = None
+    for key, agent_id in agent_keys.items():
+        if hmac.compare_digest(candidate, key.encode("utf-8")):
+            matched_id = agent_id
+    return matched_id
 
 
 def get_facility_code() -> str | None:
