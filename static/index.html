@@ -1703,15 +1703,15 @@
       const physician_name = (document.getElementById('facPhysicianInput').value || '').trim();
 
       if (!code) {
-        alert('請輸入醫事機構代碼（必填欄位）！');
+        showNonBlockingNotice('請輸入醫事機構代碼（必填欄位）！');
         return;
       }
       if (!name) {
-        alert('請輸入醫療院所名稱（必填欄位）！');
+        showNonBlockingNotice('請輸入醫療院所名稱（必填欄位）！');
         return;
       }
       if (!email) {
-        alert('請輸入聯絡信箱 Mail Address（必填欄位）！');
+        showNonBlockingNotice('請輸入聯絡信箱 Mail Address（必填欄位）！');
         return;
       }
       try {
@@ -1723,7 +1723,7 @@
         });
         const data = await res.json();
         if (!res.ok) {
-          alert('儲存失敗：' + (data.message || res.status));
+          showNonBlockingNotice('儲存失敗：' + (data.message || res.status));
           return;
         }
         currentFacility = data.facility;
@@ -1732,14 +1732,14 @@
         const ki = document.getElementById('apiKeyInput');
         if (ki) ki.value = currentFacility.code;
         toggleFacilityModal(false);
-        alert('已成功存入院所檔案 (config/facility.json) 並設定為存取 KEY！');
+        showNonBlockingNotice('已成功存入院所檔案 (config/facility.json) 並設定為存取 KEY！');
         if (pendingPackageDownload) {
           pendingPackageDownload = false;
           setTimeout(downloadMonthlyPackage, 0);
         }
         await loadCaseData();
       } catch (err) {
-        alert('儲存失敗：' + err.message);
+        showNonBlockingNotice('儲存失敗：' + err.message);
       }
     }
 
@@ -1758,7 +1758,7 @@
       const patient_name = (document.getElementById('peNameInput').value || '').trim();
 
       if (!id_card && !birth_date && !patient_name) {
-        alert('請至少填寫身分證字號、出生年月日或姓名其中一項！');
+        showNonBlockingNotice('請至少填寫身分證字號、出生年月日或姓名其中一項！');
         return;
       }
 
@@ -1774,7 +1774,7 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          alert('加入案件失敗：' + (data.message || res.status));
+          showNonBlockingNotice('加入案件失敗：' + (data.message || res.status));
           return;
         }
         togglePatientEntryModal(false);
@@ -1783,13 +1783,13 @@
         document.getElementById('peNameInput').value = '';
 
         if (data.matched_monthly) {
-          alert(`✅ 成功自當月預審申報檔帶入 ${data.count} 筆案件！全案醫令、就診日與診斷資料已自動填妥。`);
+          showNonBlockingNotice(`✅ 成功自當月預審申報檔帶入 ${data.count} 筆案件！全案醫令、就診日與診斷資料已自動填妥。`);
         } else {
-          alert(`ℹ️ 當月預審申報資料中查無完全相符紀錄，已為該病患建立新案件供後續維護。`);
+          showNonBlockingNotice(`ℹ️ 當月預審申報資料中查無完全相符紀錄，已為該病患建立新案件供後續維護。`);
         }
         await loadCaseData();
       } catch (err) {
-        alert('加入案件失敗：' + err.message);
+        showNonBlockingNotice('加入案件失敗：' + err.message);
       }
     }
 
@@ -1802,13 +1802,13 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          alert('載入當月預審資料失敗：' + (data.message || res.status));
+          showNonBlockingNotice('載入當月預審資料失敗：' + (data.message || res.status));
           return;
         }
-        alert(`已自當月申報批次 ${data.batch} 成功載入預審資料！\n全批共 ${data.total_in_batch} 筆，帶入 ${data.imported} 筆。\n（新增 ${data.persisted} 筆，既有略過 ${data.conflicts.length} 筆）`);
+        showNonBlockingNotice(`已自當月申報批次 ${data.batch} 成功載入預審資料！\n全批共 ${data.total_in_batch} 筆，帶入 ${data.imported} 筆。\n（新增 ${data.persisted} 筆，既有略過 ${data.conflicts.length} 筆）`);
         await loadCaseData();
       } catch (err) {
-        alert('載入失敗：' + err.message);
+        showNonBlockingNotice('載入失敗：' + err.message);
       }
     }
 
@@ -1821,13 +1821,13 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          alert('載入當月預審資料失敗：' + (data.message || res.status));
+          showNonBlockingNotice('載入當月預審資料失敗：' + (data.message || res.status));
           return;
         }
-        alert(`已自當月申報批次 ${data.batch} 成功載入申復清單！\n全批共 ${data.total_in_batch} 筆，帶入 ${data.imported} 筆高額案件。\n（新增 ${data.persisted} 筆，既有略過 ${data.conflicts.length} 筆）`);
+        showNonBlockingNotice(`已自當月申報批次 ${data.batch} 成功載入申復清單！\n全批共 ${data.total_in_batch} 筆，帶入 ${data.imported} 筆高額案件。\n（新增 ${data.persisted} 筆，既有略過 ${data.conflicts.length} 筆）`);
         await loadCaseData();
       } catch (err) {
-        alert('載入失敗：' + err.message);
+        showNonBlockingNotice('載入失敗：' + err.message);
       }
     }
 
@@ -1911,7 +1911,7 @@
 
     async function clearMonthlyBatch() {
       if (!currentMonthlyBatchId) {
-        alert('目前未選取任何申報批次');
+        showNonBlockingNotice('目前未選取任何申報批次');
         return;
       }
       if (!confirm(`確定要清空申報批次 ${currentMonthlyBatchId} 嗎？此操作將自資料庫中刪除該批次的所有案件。`)) {
@@ -1922,10 +1922,10 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert('清空批次失敗：' + (data.message || res.status));
+        showNonBlockingNotice('清空批次失敗：' + (data.message || res.status));
         return;
       }
-      alert(data.message || '批次案件已成功清空');
+      showNonBlockingNotice(data.message || '批次案件已成功清空');
       currentMonthlyBatchId = null;
       document.getElementById('mBatchTitle').innerText = '尚未載入申報批次';
       document.getElementById('monthlyReportIframe').srcdoc = '';
@@ -2284,7 +2284,7 @@
       if (!listEl) return;
 
       if (!query && isManualSearch) {
-        alert('請先輸入欲查詢的身分證字號 (例如 A123456789) 或出生年月日！');
+        showNonBlockingNotice('請先輸入欲查詢的身分證字號 (例如 A123456789) 或出生年月日！');
         return;
       }
       const actualQuery = query || 'F229871234';
@@ -2507,7 +2507,7 @@
 
       const fullText = `[S] 主訴 (Subjective):\n${s}\n\n[O] 客觀檢查 (Objective):\n${o}\n\n[A] 診斷評估 (Assessment):\n${a}\n\n[P] 處置治療 (Plan):\n${p}`;
       navigator.clipboard.writeText(fullText).then(() => {
-        alert('✅ 完整門診 SOAP 病歷已複製至剪貼簿！');
+        showNonBlockingNotice('✅ 完整門診 SOAP 病歷已複製至剪貼簿！');
       });
     }
 
@@ -2597,7 +2597,7 @@
 
     function downloadForensicEvidenceZip() {
       if (isSoapLiveMode) {
-        alert('目前為內定即時門診錄音中，請先於左側選取欲調閱之歷史門診紀錄，即可打包該次法院/審查佐證包！');
+        showNonBlockingNotice('目前為內定即時門診錄音中，請先於左側選取欲調閱之歷史門診紀錄，即可打包該次法院/審查佐證包！');
         return;
       }
       const caseId = (currentSoapEncounter && currentSoapEncounter.case_id) || 'ENC-F229871234-1120815';
@@ -2612,7 +2612,7 @@
       if (sEl) {
         sEl.value = '主訴：' + text;
       }
-      alert('⏹️ 錄音已停止！ASR 逐字稿已自動提取並生成結構化 SOAP 主訴！');
+      showNonBlockingNotice('⏹️ 錄音已停止！ASR 逐字稿已自動提取並生成結構化 SOAP 主訴！');
     }
 
     async function uploadMonthlyZip(file) {
@@ -2622,7 +2622,7 @@
       const res = await authFetch('/api/monthly/upload', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) {
-        alert('上傳失敗：' + (data.message || '請確認檔案是否為 申報壓縮檔'));
+        showNonBlockingNotice('上傳失敗：' + (data.message || '請確認檔案是否為 申報壓縮檔'));
         return;
       }
       // Phase 29：機構代碼與本院不同（新機構 zip）→ 不改動本院院所設定與 KEY，只建立獨立批次
@@ -2636,7 +2636,7 @@
       const foreignNote = data.foreign_facility
         ? '\n（機構代碼與本院不同：已建立獨立批次，本院院所設定未變更）'
         : '';
-      alert(`申報總檔已解析成功！批次：${data.batch}\n機構代碼：${data.facility_code || '未註記'}${foreignNote}\n共 ${data.total_cases || 0} 筆門診案件，已完成規則核對。`);
+      showNonBlockingNotice(`申報總檔已解析成功！批次：${data.batch}\n機構代碼：${data.facility_code || '未註記'}${foreignNote}\n共 ${data.total_cases || 0} 筆門診案件，已完成規則核對。`);
       document.getElementById('monthlyFileInput').value = '';
       currentMonthlyBatchId = data.batch;
       localStorage.setItem('elc_active_month_batch', data.batch);
@@ -2665,7 +2665,7 @@
 
     async function downloadMonthlyPackage() {
       if (!currentMonthlyBatchId) {
-        alert('請先上傳或選擇一個申報批次');
+        showNonBlockingNotice('請先上傳或選擇一個申報批次');
         return;
       }
       try {
@@ -2673,14 +2673,14 @@
         if (resp.status === 412) {
           const body = await resp.json().catch(() => ({}));
           const missing = (body.missing || []).join('、');
-          alert('首次下載需先填寫並確認院所資料（診所表單）。' + (missing ? '缺少：' + missing : ''));
+          showNonBlockingNotice('首次下載需先填寫並確認院所資料（診所表單）。' + (missing ? '缺少：' + missing : ''));
           pendingPackageDownload = true;
           toggleFacilityModal(true);
           return;
         }
         if (!resp.ok) {
           const body = await resp.json().catch(() => ({}));
-          alert('下載失敗：' + (body.message || resp.status));
+          showNonBlockingNotice('下載失敗：' + (body.message || resp.status));
           return;
         }
         const blob = await resp.blob();
@@ -2693,21 +2693,21 @@
         a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       } catch (err) {
-        alert('無法連線至服務');
+        showNonBlockingNotice('無法連線至服務');
       }
     }
 
     // 比對範例病歷（缺項）：已有 SOAP 與語音紀錄的案件，與標準範例病歷比對，列出缺少的必要描述。
     async function gapCheckMonthly() {
       if (!currentMonthlyBatchId) {
-        alert('請先上傳或選擇一個申報批次');
+        showNonBlockingNotice('請先上傳或選擇一個申報批次');
         return;
       }
       try {
         const res = await authFetch(`/api/monthly/batch/${encodeURIComponent(currentMonthlyBatchId)}/gap-check`);
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          alert('比對失敗：' + (data.message || res.status));
+          showNonBlockingNotice('比對失敗：' + (data.message || res.status));
           return;
         }
         const lines = [];
@@ -2724,33 +2724,33 @@
           }
         }
         const w = window.open('', '_blank');
-        if (!w) { alert('瀏覽器阻擋了視窗，請允許彈出視窗後再試'); return; }
+        if (!w) { showNonBlockingNotice('瀏覽器阻擋了視窗，請允許彈出視窗後再試'); return; }
         const pre = w.document.createElement('pre');
         pre.style.whiteSpace = 'pre-wrap';
         pre.textContent = lines.length ? lines.join('\n') : '沒有可比對的案件（無 SOAP 或無需範本的醫令）';
         w.document.title = '範例病歷比對（缺項）';
         w.document.body.appendChild(pre);
       } catch (err) {
-        alert('無法連線至服務');
+        showNonBlockingNotice('無法連線至服務');
       }
     }
 
     async function openMonthlyHtmlReport() {
       if (!currentMonthlyBatchId) {
-        alert('請先上傳或選擇一個申報批次');
+        showNonBlockingNotice('請先上傳或選擇一個申報批次');
         return;
       }
       try {
         const resp = await authFetch(`/api/monthly/batch/${encodeURIComponent(currentMonthlyBatchId)}/report?format=html`);
         if (!resp.ok) {
           const body = await resp.json().catch(() => ({}));
-          alert(`無法開啟報告：${body.message || resp.status}`);
+          showNonBlockingNotice(`無法開啟報告：${body.message || resp.status}`);
           return;
         }
         const blob = new Blob([await resp.text()], { type: 'text/html;charset=utf-8' });
         window.open(URL.createObjectURL(blob), '_blank');
       } catch (err) {
-        alert('無法連線至服務');
+        showNonBlockingNotice('無法連線至服務');
       }
     }
 
@@ -2762,11 +2762,11 @@
       const res = await authFetch(`/api/${kind}/import`, { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) {
-        alert('匯入失敗：' + (data.message || '請稍後再試'));
+        showNonBlockingNotice('匯入失敗：' + (data.message || '請稍後再試'));
         return;
       }
       if (data.status === 'partial') {
-        alert(data.message + (data.extracted_text_preview ? '\n\n【OCR 預覽】\n' + data.extracted_text_preview : ''));
+        showNonBlockingNotice(data.message + (data.extracted_text_preview ? '\n\n【OCR 預覽】\n' + data.extracted_text_preview : ''));
         return;
       }
       if (data.facility_code) {
@@ -2782,7 +2782,7 @@
           .map(r => `第 ${r.row} 列：${r.reason}`).join('\n');
         msg += `\n拒絕 ${data.rejected} 筆：\n${reasons}`;
       }
-      alert(msg);
+      showNonBlockingNotice(msg);
       document.getElementById('importFile').value = '';
       await loadCaseData();
     }
@@ -3119,7 +3119,7 @@
       }
       const alertEl = document.getElementById('sHisSyncAlert');
       if (alertEl) alertEl.style.display = 'none';
-      alert('✅ 已同意修訂！\n已將最新 SOAP 病歷成功寫回 HIS 門診病歷，並同步永久儲存至伺服器資料庫 (Database)！');
+      showNonBlockingNotice('✅ 已同意修訂！\n已將最新 SOAP 病歷成功寫回 HIS 門診病歷，並同步永久儲存至伺服器資料庫 (Database)！');
     }
 
     async function confirmAndPushStage3Both() {
@@ -3131,7 +3131,7 @@
       }
       const alertEl = document.getElementById('aHisSyncAlert');
       if (alertEl) alertEl.style.display = 'none';
-      alert('✅ 已同意修訂！\n已將最新申復病歷佐證成功寫回 HIS 系統，並同步永久儲存至伺服器資料庫 (Database)！申復案卷已送出。');
+      showNonBlockingNotice('✅ 已同意修訂！\n已將最新申復病歷佐證成功寫回 HIS 系統，並同步永久儲存至伺服器資料庫 (Database)！申復案卷已送出。');
     }
 
     function selectSamplingCase(id) {
@@ -3563,10 +3563,10 @@
       const res = await authFetch('/api/sampling/cases/clear', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert('清空失敗：' + (data.message || res.status));
+        showNonBlockingNotice('清空失敗：' + (data.message || res.status));
         return;
       }
-      alert(data.message || '已清空抽樣案件');
+      showNonBlockingNotice(data.message || '已清空抽樣案件');
       currentSelectedCase = null;
       await loadCaseData();
     }
@@ -3574,7 +3574,7 @@
     async function sampleFromMonthlyBatch() {
       const batch = currentMonthlyBatchId || (monthlyBatches.length > 0 ? monthlyBatches[0].batch : null);
       if (!batch) {
-        alert('尚未上傳當月申報檔，請先於「1. 當月申報檔預審」上傳 申報壓縮檔 總檔');
+        showNonBlockingNotice('尚未上傳當月申報檔，請先於「1. 當月申報檔預審」上傳 申報壓縮檔 總檔');
         return;
       }
       const res = await authFetch('/api/sampling/sample-batch', {
@@ -3584,16 +3584,16 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert('自動抽樣失敗：' + (data.message || res.status));
+        showNonBlockingNotice('自動抽樣失敗：' + (data.message || res.status));
         return;
       }
-      alert(`抽樣完成：批次 ${data.batch}，共 ${data.sampled} 筆（隨機 ${data.random}／立意 ${data.intentional}）。\n新增 ${data.case_store_persisted} 筆，既有略過 ${data.case_store_conflicts.length} 筆。`);
+      showNonBlockingNotice(`抽樣完成：批次 ${data.batch}，共 ${data.sampled} 筆（隨機 ${data.random}／立意 ${data.intentional}）。\n新增 ${data.case_store_persisted} 筆，既有略過 ${data.case_store_conflicts.length} 筆。`);
       await loadCaseData();
     }
 
     async function saveSamplingEvidence() {
       if (!currentSelectedCase) {
-        alert('請先選擇一筆抽樣案件');
+        showNonBlockingNotice('請先選擇一筆抽樣案件');
         return;
       }
       const caseId = currentSelectedCase.id;
@@ -3607,7 +3607,7 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert('儲存失敗：' + (data.message || res.status));
+        showNonBlockingNotice('儲存失敗：' + (data.message || res.status));
         return;
       }
       currentSelectedCase.lab_results = data.lab_results;
@@ -3623,19 +3623,19 @@
       fd.append('file', file);
       const res = await authFetch('/api/appeal/attachments/upload', { method: 'POST', body: fd });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) alert('上傳失敗：' + (data.message || res.status));
+      if (!res.ok) showNonBlockingNotice('上傳失敗：' + (data.message || res.status));
       document.getElementById('sAttachInput').value = '';
       await refreshSamplingAttachments(caseId);
     }
 
     async function openSamplingPreview() {
       if (!currentSelectedCase) {
-        alert('請先選擇一筆抽樣案件');
+        showNonBlockingNotice('請先選擇一筆抽樣案件');
         return;
       }
       const res = await authFetch(`/api/sampling/cases/${encodeURIComponent(currentSelectedCase.id)}/preview-html`);
       if (!res.ok) {
-        alert('無法開啟預審卡片（' + res.status + '）');
+        showNonBlockingNotice('無法開啟預審卡片（' + res.status + '）');
         return;
       }
       const blob = new Blob([await res.text()], { type: 'text/html;charset=utf-8' });
@@ -3658,7 +3658,7 @@
 
       const totalCases = samplingCases.length;
       if (totalCases === 0) {
-        alert('目前無抽樣案件可供審查');
+        showNonBlockingNotice('目前無抽樣案件可供審查');
         if (pContainer) pContainer.style.display = 'none';
         if (btnAudit) btnAudit.disabled = false;
         return;
@@ -3774,7 +3774,7 @@
         if (pEta) pEta.innerText = '審查完成！';
 
         const states = Object.entries(stateCounts).map(([state, n]) => `${state}：${n}`).join('\n');
-        alert(`批次審查完成：${completedCount} / ${totalCases} 案\n${states}` + (errors.length ? `\n失敗 ${errors.length} 案` : ''));
+        showNonBlockingNotice(`批次審查完成：${completedCount} / ${totalCases} 案\n${states}` + (errors.length ? `\n失敗 ${errors.length} 案` : ''));
       } finally {
         setTimeout(() => {
           if (pContainer) pContainer.style.display = 'none';
@@ -3787,7 +3787,7 @@
     async function openSamplingBatchReport() {
       const res = await authFetch('/api/sampling/batch-report');
       if (!res.ok) {
-        alert('無法開啟批次報告（' + res.status + '）');
+        showNonBlockingNotice('無法開啟批次報告（' + res.status + '）');
         return;
       }
       const blob = new Blob([await res.text()], { type: 'text/html;charset=utf-8' });
@@ -3798,7 +3798,7 @@
       const res = await authFetch('/api/sampling/export-batch-xml');
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        alert('全批次導出失敗：' + (body.message || res.status));
+        showNonBlockingNotice('全批次導出失敗：' + (body.message || res.status));
         return;
       }
       const url = URL.createObjectURL(await res.blob());
@@ -3816,22 +3816,22 @@
       const res = await authFetch('/api/appeal/cases/clear', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert('清空失敗：' + (data.message || res.status));
+        showNonBlockingNotice('清空失敗：' + (data.message || res.status));
         return;
       }
-      alert(data.message || '已清空申復案件');
+      showNonBlockingNotice(data.message || '已清空申復案件');
       currentSelectedCase = null;
       await loadCaseData();
     }
 
     async function openAppealCasePreview() {
       if (!currentSelectedCase) {
-        alert('請先選擇一筆申復案件');
+        showNonBlockingNotice('請先選擇一筆申復案件');
         return;
       }
       const res = await authFetch(`/api/appeal/cases/${encodeURIComponent(currentSelectedCase.id)}/preview-html`);
       if (!res.ok) {
-        alert('無法開啟申復卡片（' + res.status + '）');
+        showNonBlockingNotice('無法開啟申復卡片（' + res.status + '）');
         return;
       }
       const blob = new Blob([await res.text()], { type: 'text/html;charset=utf-8' });
@@ -3841,7 +3841,7 @@
     async function openAppealBatchReport() {
       const res = await authFetch('/api/appeal/batch-report');
       if (!res.ok) {
-        alert('無法開啟申復批次報告（' + res.status + '）');
+        showNonBlockingNotice('無法開啟申復批次報告（' + res.status + '）');
         return;
       }
       const blob = new Blob([await res.text()], { type: 'text/html;charset=utf-8' });
@@ -3850,13 +3850,13 @@
 
     async function downloadSingleAppealXml() {
       if (!currentSelectedCase) {
-        alert('請先選擇一筆申復案件');
+        showNonBlockingNotice('請先選擇一筆申復案件');
         return;
       }
       const res = await authFetch(`/api/appeal/cases/${encodeURIComponent(currentSelectedCase.id)}/export-xml`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        alert('單案申復 XML 導出失敗：' + (body.message || res.status));
+        showNonBlockingNotice('單案申復 XML 導出失敗：' + (body.message || res.status));
         return;
       }
       const blob = await res.blob();
@@ -3872,13 +3872,13 @@
 
     async function downloadSingleAppealJson() {
       if (!currentSelectedCase) {
-        alert('請先選擇一筆申復案件');
+        showNonBlockingNotice('請先選擇一筆申復案件');
         return;
       }
       const res = await authFetch(`/api/appeal/cases/${encodeURIComponent(currentSelectedCase.id)}/export-json`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        alert('單案申復 JSON 導出失敗：' + (body.message || res.status));
+        showNonBlockingNotice('單案申復 JSON 導出失敗：' + (body.message || res.status));
         return;
       }
       const data = await res.json();
@@ -3897,7 +3897,7 @@
       const res = await authFetch('/api/appeal/export-batch-xml');
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        alert('全批次申復導出失敗：' + (body.message || res.status));
+        showNonBlockingNotice('全批次申復導出失敗：' + (body.message || res.status));
         return;
       }
       const url = URL.createObjectURL(await res.blob());
@@ -3918,10 +3918,10 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert('連動失敗：' + (data.message || res.status));
+        showNonBlockingNotice('連動失敗：' + (data.message || res.status));
         return;
       }
-      alert(`已連動 ${data.created.length} 案至第 3 階申復庫` +
+      showNonBlockingNotice(`已連動 ${data.created.length} 案至第 3 階申復庫` +
         (data.duplicates.length ? `（${data.duplicates.length} 案已存在，略過）` : ''));
       if (currentMode === 'appeal') {
         await loadCaseData();
@@ -3930,14 +3930,14 @@
 
     async function exportSamplingXml() {
       if (!currentSelectedCase) {
-        alert('請先選擇一筆抽樣案件');
+        showNonBlockingNotice('請先選擇一筆抽樣案件');
         return;
       }
       const caseId = currentSelectedCase.id;
       const res = await authFetch(`/api/sampling/cases/${encodeURIComponent(caseId)}/export-xml`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        alert('導出失敗：' + (body.message || res.status));
+        showNonBlockingNotice('導出失敗：' + (body.message || res.status));
         return;
       }
       const url = URL.createObjectURL(await res.blob());
@@ -4037,7 +4037,7 @@
       if (preview) {
         setStage2Soap(preview);
         onSoapContentChanged('sampling');
-        alert('已將 LLM 建議 SOAP 填入病歷 S/O/A/P 各欄！\n⚠️ 請注意：需要確認件並回寫 HIS 系統，請點擊「📤 寫回 HIS」回填最新病歷！');
+        showNonBlockingNotice('已將 LLM 建議 SOAP 填入病歷 S/O/A/P 各欄！\n⚠️ 請注意：需要確認件並回寫 HIS 系統，請點擊「📤 寫回 HIS」回填最新病歷！');
       }
     }
 
@@ -4053,7 +4053,7 @@
           }
         });
         onSoapContentChanged('appeal');
-        alert('已成功將 LLM 建議申復理由套用至 4 段式編輯器！\n⚠️ 請注意：需要確認件並回寫 HIS 系統，請點擊「同意修訂並寫回 HIS 與資料庫」！');
+        showNonBlockingNotice('已成功將 LLM 建議申復理由套用至 4 段式編輯器！\n⚠️ 請注意：需要確認件並回寫 HIS 系統，請點擊「同意修訂並寫回 HIS 與資料庫」！');
       } else {
         generateAppealDraft();
       }
@@ -4107,7 +4107,7 @@
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.message || '草稿生成失敗');
+        showNonBlockingNotice(data.message || '草稿生成失敗');
         return;
       }
 
