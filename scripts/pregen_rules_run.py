@@ -6,7 +6,8 @@
   並排除：診療費（001 開頭）、病理檢查（25 開頭、25003C、25004C）。
 
 來源 CSV 為唯一依據（與 rules.sqlite3 的規定原文已逐筆核對一致）。
-範本為通用範本（primary_diagnosis=''），已快取者略過，除非 --force 或列於 --codes。
+範本為通用範本（primary_diagnosis=''），已快取者略過；只有加上 --force 才會重新生成已快取者。
+--codes 僅限定目標範圍，不會強制覆寫既有範本。
 
 安全機制：
 - 單次最多呼叫 LLM `--limit` 次（快取命中不計）。
@@ -18,7 +19,8 @@
     uv run python scripts/pregen_rules_run.py --dry-run
     uv run python scripts/pregen_rules_run.py --limit 20
     uv run python scripts/pregen_rules_run.py --limit 1000            # 全量（可多次執行續跑）
-    uv run python scripts/pregen_rules_run.py --codes 19001C,48010C --force
+    uv run python scripts/pregen_rules_run.py --codes 19001C,48010C          # 只生成未快取者
+    uv run python scripts/pregen_rules_run.py --codes 19001C,48010C --force  # 強制覆寫這兩筆
 """
 
 from __future__ import annotations
@@ -159,7 +161,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--csv", default=DEFAULT_CSV, help="支付規定 CSV（預設 260801 C 類）")
     parser.add_argument("--limit", type=int, default=20, help="本次最多呼叫 LLM 的醫令數（預設 20）")
-    parser.add_argument("--codes", default="", help="逗號分隔醫令代碼；列出者一律重新生成（配合 --force 語意）")
+    parser.add_argument("--codes", default="", help="逗號分隔醫令代碼，限定目標範圍（已快取者仍略過，除非加 --force）")
     parser.add_argument("--force", action="store_true", help="目標中已快取者亦重新生成")
     parser.add_argument("--dry-run", action="store_true", help="只列出目標與快取狀態，不呼叫 LLM")
     parser.add_argument("--log", default=DEFAULT_LOG, help="JSONL 紀錄路徑")
@@ -188,7 +190,7 @@ def main() -> int:
         targets,
         store=store,
         limit=args.limit,
-        force_codes=({t.code for t in targets} if args.force else set()) | explicit,
+        force_codes={t.code for t in targets} if args.force else set(),
         log_path=args.log,
         max_consecutive_undetermined=args.max_consecutive_undetermined,
     )
