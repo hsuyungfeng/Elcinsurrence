@@ -19,8 +19,9 @@ _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
 _SOAP_SECTIONS = ("s", "o", "a", "p")
 _MIN_SECTION_CHARS = 20
 _MAX_SECTION_CHARS = 500
-_MIN_TOTAL_CHARS = 500
-_MAX_TOTAL_CHARS = 1000
+# 範例病歷總長：目標 200–400 字元，硬上限 500（超過即不通過）。
+_MIN_TOTAL_CHARS = 200
+_MAX_TOTAL_CHARS = 500
 _PASS_SCORE = 70
 # 佔位符／未完成用語（大小寫不敏感）：代表模型未實際寫出內容。
 _PLACEHOLDER_RE = re.compile(
@@ -102,7 +103,7 @@ _SYSTEM_PROMPT = (
     "- NEVER output generic meta-complaints or placeholders like 'data not documented', 'symptoms missing', 'ICD pending', 'prescription issued as per standard', or 'please verify'.\n"
     "- Instead, construct a complete, plausible outpatient case with standard Taiwan clinical phrasing, specific physical exam details, exact ICD-10 diagnostic codes, and concrete procedural/management steps that fully justify the medical necessity under NHI guidelines.\n\n"
     "CRITICAL CONCISENESS & LENGTH CONSTRAINT:\n"
-    "- Total character length across S + O + A + P fields combined MUST BE BETWEEN 500 AND 1000 CHARACTERS.\n"
+    "- Total character length across S + O + A + P fields combined MUST BE BETWEEN 200 AND 400 CHARACTERS, and must NEVER exceed 500 CHARACTERS.\n"
     "- Keep clinical documentation focused, concise, and professional without redundant fluff, while strictly meeting Taiwan NHI audit guidelines.\n\n"
     "CRITICAL BILINGUAL CONSTRAINTS:\n"
     "1. `recommended_soap` (S, O, A, P fields) MUST be written entirely in professional Medical English with standard clinical terminology and abbreviations used in Taiwan hospital/clinic EHR systems.\n"
@@ -203,3 +204,83 @@ def generate_soap_advice(
             "approval_advice": "請人工查核病歷支持度。",
             "raw_response": "",
         }
+
+
+# ── 範例病歷範本（通用、長度受控）──────────────────────────────────
+# 與 generate_soap_advice 不同：只輸出 SOAP JSON、逐欄字數上限、不含中文審批。
+# 用於批次預生成；總長目標 200–380 字元（硬上限 500 由 validate_soap_quality 把關）。
+_TEMPLATE_SYSTEM_PROMPT = (
+    "You write concise English SOAP example templates for Taiwan NHI audit training.\n"
+    "Output ONLY one JSON object with string keys: s, o, a, p. No markdown, no commentary.\n"
+    "LENGTH (characters, counted per key):\n"
+    "- s: 60 to 90, o: 80 to 110, a: 50 to 70, p: 100 to 150.\n"
+    "- The four values together must be 240 to 380 characters (never below 200, never above 500).\n"
+    "Style: telegraphic clinical English, no placeholders, no Chinese characters, no 'missing' or 'pending'.\n"
+    "Content must be consistent with the rule text provided. Put an ICD-10 code in a ONLY if the rule text states one;\n"
+    "never invent diagnosis codes or rule content."
+)
+
+
+def generate_template_soap(
+    *,
+    order_code: str,
+    order_name: str,
+    soap_text: str = "",
+    patient_history: str = "",
+    rule_text: str = "",
+    max_tokens: int = 500,
+) -> dict[str, Any]:
+    """批次範本生成（長度受控）。回傳與 generate_soap_advice 相同形狀，供 pregen_template 使用。"""
+    user_prompt = (
+        f"Order code: {order_code}\n"
+        f"Order name: {order_name}\n"
+        f"Payment rule text (authoritative, do not contradict):\n{fence(rule_text or '(none)', 'rule')}\n\n"
+        "Return the JSON object now."
+    )
+    try:
+        resp = chat_completion(_TEMPLATE_SYSTEM_PROMPT, user_prompt, max_tokens=max_tokens)
+        parsed = _parse_llm_json(resp)
+        if not parsed:
+            return {"status": "error", "recommended_soap": {}, "raw_response": resp}
+        soap = parsed.get("recommended_soap") if isinstance(parsed.get("recommended_soap"), dict) else parsed
+        if not all(isinstance(soap.get(k), str) for k in ("s", "o", "a", "p")):
+            return {"status": "error", "recommended_soap": {}, "raw_response": resp}
+        return {"status": "success", "recommended_soap": {k: soap[k].strip() for k in ("s", "o", "a", "p")},
+                "comparison": "", "approval_advice": "", "raw_response": resp}
+    except Exception as exc:
+        return {"status": "error", "error": str(exc), "recommended_soap": {}}
+
+
+_CONDENSE_SYSTEM_PROMPT = (
+    "You condense an English SOAP example template.\n"
+    "Output ONLY one JSON object with string keys: s, o, a, p. No markdown, no commentary.\n"
+    "The four values together must be 240 to 380 characters. Keep the same clinical meaning, "
+    "remove redundancy, keep telegraphic clinical English. Do not add new facts, codes, or Chinese text."
+)
+
+
+def _total_chars(soap: dict[str, str]) -> int:
+    return sum(len(str(soap.get(k) or "").strip()) for k in ("s", "o", "a", "p"))
+
+
+def generate_template_soap_condensed(**kwargs: Any) -> dict[str, Any]:
+    """先以 generate_template_soap 生成；若總長超過 500 字，再請 LLM 壓縮一次（不新增事實）。"""
+    result = generate_template_soap(**kwargs)
+    if result.get("status") != "success":
+        return result
+    soap = result["recommended_soap"]
+    if _total_chars(soap) <= _MAX_TOTAL_CHARS:
+        return result
+    try:
+        resp = chat_completion(
+            _CONDENSE_SYSTEM_PROMPT,
+            "Condense this SOAP JSON:\n" + json.dumps(soap, ensure_ascii=False),
+            max_tokens=400,
+        )
+        parsed = _parse_llm_json(resp)
+        if parsed and all(isinstance(parsed.get(k), str) for k in ("s", "o", "a", "p")):
+            condensed = {k: parsed[k].strip() for k in ("s", "o", "a", "p")}
+            return {**result, "recommended_soap": condensed, "condensed": True}
+    except Exception:
+        pass
+    return result
