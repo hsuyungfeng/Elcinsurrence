@@ -106,6 +106,70 @@ SCHEMA_SOAP_TEMPLATES = (
     ")"
 )
 
+# Phase 29: soap_drafts（LLM 預生成 SOAP 草稿、醫師審核與 HIS 回填進度）
+SCHEMA_SOAP_DRAFTS = (
+    "CREATE TABLE IF NOT EXISTS soap_drafts ("
+    "draft_id TEXT PRIMARY KEY, "
+    "case_id TEXT NOT NULL, "
+    "order_code TEXT, "
+    "version INTEGER NOT NULL DEFAULT 1, "
+    "state TEXT NOT NULL, "
+    "soap_json TEXT NOT NULL, "
+    "content_hash TEXT NOT NULL, "
+    "quality_score INTEGER, "
+    "quality_issues_json TEXT, "
+    "comparison_json TEXT, "
+    "reviewer_id TEXT, "
+    "review_decision TEXT, "
+    "review_reason TEXT, "
+    "reviewed_at TEXT, "
+    "pushed_at TEXT, "
+    "agent_id TEXT, "
+    "failure_reason TEXT, "
+    "created_at TEXT NOT NULL, "
+    "updated_at TEXT NOT NULL"
+    ")"
+)
+SCHEMA_INDEX_SOAP_DRAFTS_CASE = (
+    "CREATE INDEX IF NOT EXISTS idx_soap_drafts_case ON soap_drafts (case_id)"
+)
+SCHEMA_INDEX_SOAP_DRAFTS_STATE = (
+    "CREATE INDEX IF NOT EXISTS idx_soap_drafts_state ON soap_drafts (state)"
+)
+SCHEMA_INDEX_SOAP_DRAFTS_CASE_HASH = (
+    "CREATE INDEX IF NOT EXISTS idx_soap_drafts_case_hash ON soap_drafts (case_id, content_hash)"
+)
+
+# soap_draft_history：醫師編修歷史與版本追蹤
+SCHEMA_SOAP_DRAFT_HISTORY = (
+    "CREATE TABLE IF NOT EXISTS soap_draft_history ("
+    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+    "draft_id TEXT NOT NULL, "
+    "version INTEGER NOT NULL, "
+    "state TEXT NOT NULL, "
+    "soap_json TEXT NOT NULL, "
+    "content_hash TEXT NOT NULL, "
+    "reviewer_id TEXT, "
+    "review_decision TEXT, "
+    "review_reason TEXT, "
+    "created_at TEXT NOT NULL"
+    ")"
+)
+SCHEMA_INDEX_SOAP_DRAFT_HIST = (
+    "CREATE INDEX IF NOT EXISTS idx_soap_draft_hist ON soap_draft_history (draft_id, version)"
+)
+
+# agent_heartbeats：Windows Agent 心跳登記表
+SCHEMA_AGENT_HEARTBEATS = (
+    "CREATE TABLE IF NOT EXISTS agent_heartbeats ("
+    "agent_id TEXT PRIMARY KEY, "
+    "version TEXT, "
+    "his_status TEXT, "
+    "client_timestamp TEXT, "
+    "last_heartbeat_at TEXT NOT NULL"
+    ")"
+)
+
 
 def get_connection(db_path: str) -> sqlite3.Connection:
     """建立（或開啟）SQLite 連線，回傳前確保父目錄存在。
@@ -126,7 +190,7 @@ def get_connection(db_path: str) -> sqlite3.Connection:
 
 
 def init_schema(db_path: str) -> None:
-    """在 `db_path` 指向的資料庫建立 `cases`／`case_transitions`／`case_artifacts` 表與索引（冪等）。"""
+    """在 `db_path` 指向的資料庫建立各業務表與索引（冪等）。"""
     conn = get_connection(db_path)
     try:
         conn.execute(SCHEMA_CASES)
@@ -137,6 +201,13 @@ def init_schema(db_path: str) -> None:
         conn.execute(SCHEMA_INDEX_CASES_BATCH)
         conn.execute(SCHEMA_INDEX_CASES_BRIDGE_STATUS)
         conn.execute(SCHEMA_SOAP_TEMPLATES)
+        conn.execute(SCHEMA_SOAP_DRAFTS)
+        conn.execute(SCHEMA_INDEX_SOAP_DRAFTS_CASE)
+        conn.execute(SCHEMA_INDEX_SOAP_DRAFTS_STATE)
+        conn.execute(SCHEMA_INDEX_SOAP_DRAFTS_CASE_HASH)
+        conn.execute(SCHEMA_SOAP_DRAFT_HISTORY)
+        conn.execute(SCHEMA_INDEX_SOAP_DRAFT_HIST)
+        conn.execute(SCHEMA_AGENT_HEARTBEATS)
         conn.commit()
     finally:
         conn.close()

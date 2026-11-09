@@ -1,0 +1,571 @@
+"""Phase 29 T7 — HIS 寫入（Agent 側）與寫回同步整合測試（29-DESIGN.md §7、§8）。
+
+對應驗收項目：
+- A3 寫回 readback 校驗：不一致 → failed（含「欄位目視檢查通過但內容被附加」的細微差異）
+- A5 Agent 離線／重啟：租約過期回收 + 重啟後可繼續
+- A7 Agent 層日誌不含 SOAP 內文
+- §7.4 HIS 廠商須現場校準：未校準者 Agent 啟動時拒絕正式寫入
+- §8.9 只寫 S/O/A/P：診斷碼/醫令/藥令欄位不得被寫入
+- §8.5/§11.2 寫回同步（server 側 /api/bridge/jobs/<id>/status → draft 狀態機）
+
+與 agy 的 deploy/windows_agent 測試互補：本檔用真實 store 橋接與完整
+HISPushAutomator 驗證整合路徑。
+"""
+from __future__ import annotations
+
+import logging
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+
+import pytest
+
+from deploy.windows_agent.agent import (
+    AgentConfig,
+    UncalibratedVendorProfileError,
+    WindowsAgent,
+)
+from elc_audit_engine.agent_desktop_bridge import (
+    AgentDesktopRunner,
+    DEFAULT_HIS_PROFILES,
+    HISPushAutomator,
+    StaleRefError,
+    UIElementRef,
+)
+from elc_audit_engine.bridge_queue import (
+    DEFAULT_LEASE_TIMEOUT_SEC,
+    enqueue_job,
+    get_job,
+    list_pending,
+    reclaim_expired,
+    report_status,
+)
+from elc_audit_engine.case_store import CaseStore
+from elc_audit_engine.case_store.soap_draft_states import (
+    STATE_APPROVED,
+    STATE_FAILED,
+    STATE_PUSHED,
+    STATE_QUEUED,
+    STATE_VALIDATED,
+    compute_soap_content_hash,
+)
+
+KEY = {"X-API-Key": "valid-key-123"}
+
+SOAP_OK = {
+    "s": "Patient presents with a three day history of sore throat, low grade fever, and runny nose.",
+    "o": "Temperature 37.8 C, pharyngeal hyperemia, tender bilateral cervical lymphadenopathy.",
+    "a": "Acute pharyngitis, most consistent with viral etiology, primary diagnosis coded J02.9.",
+    "p": "Advise rest, warm fluids, and symptomatic relief; follow up in five days if fever persists.",
+}
+SOAP_SENTINEL = {
+    "s": "SENTINEL-ZZQ7-COMPLAINT-SYMPTOMS and the patient reports a mild cough for two days.",
+    "o": "Chart SENTINEL-ZZQ7-PATIENT-IDENTIFIER records temperature 38 C and congested oropharynx.",
+    "a": "Acute upper respiratory infection consistent with viral pharyngitis, coded J06.9.",
+    "p": "Advise rest and fluids, symptomatic treatment, and a follow up visit in four days.",
+}
+
+
+def _config(**over) -> AgentConfig:
+    base = dict(
+        server_url="http://localhost:9",
+        agent_id="agent-29",
+        agent_key="test-key",
+        calibrated=True,
+        heartbeat_interval=30,
+        poll_interval=1,
+    )
+    base.update(over)
+    return AgentConfig(**base)
+
+
+def _make_job(case_id: str = "CASE-29-01", soap: dict | None = None, job_id: str | None = None) -> dict:
+    soap = soap or SOAP_OK
+    return {
+        "job_id": job_id or f"job-{case_id.lower().replace('-', '_')}",
+        "s_type_code": "HIS_PUSH",
+        "extra_payload": {
+            "draft_id": f"draft-{case_id.lower()}",
+            "case_id": case_id,
+            "order_code": "E5002C",
+            "version": 1,
+            "content_hash": compute_soap_content_hash(soap),
+            "soap": dict(soap),
+            "visit_date": "2026-11-09",
+        },
+    }
+
+
+class MockHttpClient:
+    """記憶體版 HTTP 客戶端：可注入待領任務、模擬 claim 失敗、記錄回報。"""
+
+    def __init__(self, pending_jobs: list[dict] | None = None, claim_error: bool = False):
+        self.pending_jobs = pending_jobs or []
+        self.claim_error = claim_error
+        self.heartbeats = 0
+        self.reports: list[tuple[str, dict]] = []
+
+    def request(self, method, path, params=None, json_body=None):
+        if method == "POST" and path == "/api/agent/heartbeat":
+            self.heartbeats += 1
+            return (200, {"status": "ok"})
+        if method == "GET" and "/api/bridge/jobs/pending" in path:
+            code = "HIS_PUSH" if "HIS_PUSH" in path else None
+            jobs = [j for j in self.pending_jobs if not code or j["s_type_code"] == code]
+            return (200, {"jobs": jobs})
+        if method == "POST" and path.startswith("/api/bridge/jobs/") and path.endswith("/status"):
+            job_id = path.split("/")[4]
+            if self.claim_error:
+                return (500, {"error": "server crash"})
+            self.reports.append((job_id, json_body))
+            return (200, {"status": "ok"})
+        return (404, {})
+
+
+class StoreHttpClient(MockHttpClient):
+    """以真實 CaseStore 為後端的 HTTP 客戶端（A5／§8.5 用）。"""
+
+    def __init__(self, store: CaseStore):
+        super().__init__()
+        self.store = store
+
+    def request(self, method, path, params=None, json_body=None):
+        if method == "POST" and path == "/api/agent/heartbeat":
+            self.heartbeats += 1
+            return (200, {"status": "ok"})
+        if method == "GET" and "/api/bridge/jobs/pending" in path:
+            code = "HIS_PUSH" if "HIS_PUSH" in path else None
+            return (200, {"jobs": list_pending(self.store, s_type_code=code)})
+        if method == "POST" and path.startswith("/api/bridge/jobs/") and path.endswith("/status"):
+            job_id = path.split("/")[4]
+            body = json_body or {}
+            report_status(
+                self.store,
+                job_id,
+                status=body["status"],
+                local_id=body.get("local_id"),
+                expected_status=body.get("expected_status"),
+            )
+            return (200, {"status": "ok"})
+        return (404, {})
+
+
+class FakeAutomator:
+    """HISPushAutomator 替身：控制寫入內容與 readback 回傳。"""
+
+    def __init__(self, readback_overrides: dict | None = None, raise_exc: Exception | None = None):
+        self.readback_overrides = readback_overrides or {}
+        self.raise_exc = raise_exc
+        self.calls = 0
+
+    @property
+    def profiles(self):
+        return {}
+
+    def push_soap(self, soap, current_patient_getter=None, write_soap_only=False):
+        from elc_audit_engine.agent_desktop_bridge import WriteResult
+
+        self.calls += 1
+        if self.raise_exc:
+            raise self.raise_exc
+        written = {}
+        values = {}
+        for field, ref in (("s", "@s"), ("o", "@o"), ("a", "@a"), ("p", "@p")):
+            target = (soap.get(field) or "").strip()
+            if not target:
+                continue
+            written[ref] = target
+            values[field] = target
+        readback = dict(values)
+        for field, value in self.readback_overrides.items():
+            readback[field] = value
+        return WriteResult(status="success", written_refs=written, **values)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# §7.4 廠商校準（calibration）門控
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestVendorCalibration:
+    def test_default_profiles_are_skeletons(self):
+        """§7.4：隨附 profile 只是骨架（calibrated=False），不得直接用於正式寫入。"""
+        assert set(DEFAULT_HIS_PROFILES) == {"vision", "medis", "sugon", "cathay"}
+        for vendor, profile in DEFAULT_HIS_PROFILES.items():
+            assert profile.get("calibrated") is False, f"{vendor} 骨架 profile 被當成已校準"
+            for key in ("elements", "expected_patient", "visit_date"):
+                assert key in profile
+
+    @pytest.mark.parametrize("vendor", ["vision", "medis", "sugon", "cathay"])
+    def test_startup_rejects_uncalibrated_vendor(self, vendor):
+        """未校準（設定檔）→ Agent 啟動時拒絕正式寫入。"""
+        cfg = _config(calibrated=False)
+        automator = HISPushAutomator(runner=AgentDesktopRunner())  # 預設骨架 profile
+        with pytest.raises(UncalibratedVendorProfileError):
+            WindowsAgent(config=cfg, automator=automator, http_client=MockHttpClient())
+
+    def test_startup_ok_when_config_calibrated(self):
+        automator = HISPushAutomator(runner=AgentDesktopRunner())
+        agent = WindowsAgent(config=_config(calibrated=True), automator=automator, http_client=MockHttpClient())
+        assert agent.automator is automator
+
+    def test_startup_ok_when_profile_calibrated(self):
+        """現場校準後：profile 帶 calibrated 標記，即使設定檔未勾選也可啟動。"""
+        profiles = {
+            **DEFAULT_HIS_PROFILES,
+            "vision": {
+                **DEFAULT_HIS_PROFILES["vision"],
+                "calibrated": True,
+                "calibrated_at": "2026-11-09",
+                "calibrated_by": "site-engineer",
+            },
+        }
+        automator = HISPushAutomator(runner=AgentDesktopRunner(), profiles=profiles)
+        agent = WindowsAgent(config=_config(calibrated=False), automator=automator, http_client=MockHttpClient())
+        assert agent is not None
+
+    def test_uncalibrated_job_rejected_without_any_write(self, caplog):
+        """allow_uncalibrated=True 僅供測試：執行時該筆 job 被拒絕、零寫入。"""
+        caplog.set_level(logging.DEBUG)
+        fake = FakeAutomator()
+        agent = WindowsAgent(
+            config=_config(calibrated=False, allow_uncalibrated=True),
+            automator=FakeAutomator(),  # 注意：profile 未校準
+            http_client=MockHttpClient(pending_jobs=[_make_job()]),
+        )
+        res = agent.run_once()
+        assert res is not None
+        assert res["status"] == "failed"
+        assert res["reason"] == "uncalibrated_profile"
+        reports = dict(agent.http_client.reports)
+        assert reports[_make_job()["job_id"]]["status"] == "FAILED"
+        assert "uncalibrated_profile" in reports[_make_job()["job_id"]].get("reason", "")
+        for record in caplog.records:
+            msg = record.getMessage()
+            assert "SENTINEL" not in msg
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# §8.5/§8.6 寫入與 readback 校驗
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestPushAndReadback:
+    def test_success_writes_and_reports_success(self):
+        http = MockHttpClient(pending_jobs=[_make_job()])
+        agent = WindowsAgent(config=_config(), automator=FakeAutomator(), http_client=http)
+        res = agent.run_once()
+        assert res["status"] == "success"
+        job_id = _make_job()["job_id"]
+        reports = dict(http.reports)
+        assert reports[job_id]["status"] == "SUCCESS"
+        assert reports[job_id]["local_id"].startswith("PUSH-")
+        # readback 與寫入一致
+        rb = reports[job_id]["readback"]
+        assert compute_soap_content_hash({k: v for k, v in rb.items() if k in ("s", "o", "a", "p")}) == \
+            reports[job_id]["readback_hash"]
+
+    def test_readback_mismatch_marks_job_failed(self):
+        """A3：readback 任一欄與寫入不同 → 不回報 success，job 為 failed。"""
+        fake = FakeAutomator(readback_overrides={"s": "Someone else overwrote this subjective text entirely."})
+        http = MockHttpClient(pending_jobs=[_make_job()])
+        agent = WindowsAgent(config=_config(), automator=fake, http_client=http)
+        res = agent.run_once()
+        assert res["status"] == "failed"
+        assert res["reason"] == "readback_mismatch"
+        reports = dict(http.reports)
+        assert reports[_make_job()["job_id"]]["status"] == "FAILED"
+        assert "readback_mismatch" in reports[_make_job()["job_id"]].get("reason", "")
+        # 絕不可回報 SUCCESS
+        assert all(r[1]["status"] != "SUCCESS" for r in http.reports)
+
+    def test_subtle_readback_drift_caught_by_real_automator(self):
+        """A3 細微差異：HIS 欄位被附加備註（target 仍包含於 actual，欄位檢查會放過），
+        唯有 readback 全文比對能抓到。"""
+        from elc_audit_engine.agent_desktop_bridge import HISPushAutomator
+
+        driver_store: dict[str, str] = {}
+
+        def driver(action, **kw):
+            if action == "snapshot":
+                return [
+                    UIElementRef(ref_id="@s", role="Edit", automation_id="txtSubjective", name="主訴"),
+                    UIElementRef(ref_id="@o", role="Edit", automation_id="txtObjective", name="客觀檢查"),
+                    UIElementRef(ref_id="@a", role="Edit", automation_id="txtAssessment", name="臨床評估"),
+                    UIElementRef(ref_id="@p", role="Edit", automation_id="txtPlan", name="治療計畫"),
+                ]
+            if action == "set_value":
+                driver_store[kw["ref_id"]] = kw["value"]
+                return None
+            if action == "get_value":
+                return driver_store.get(kw["ref_id"], "") + "\nAPPENDED-NOTE"
+            return None
+
+        automator = HISPushAutomator(runner=AgentDesktopRunner(driver=driver))
+        http = MockHttpClient(pending_jobs=[_make_job()])
+        agent = WindowsAgent(config=_config(), automator=automator, http_client=http)
+        res = agent.run_once()
+        assert res["status"] == "failed"
+        assert res["reason"] == "readback_mismatch"
+        reports = dict(http.reports)
+        assert reports[_make_job()["job_id"]]["status"] == "FAILED"
+
+    def test_wrong_patient_blocks_write(self):
+        """病歷病患與 job 不符 → 中止、不寫入任何欄位。"""
+        fake = FakeAutomator()
+        agent = WindowsAgent(
+            config=_config(current_patient_getter=lambda: "CASE-9999"),
+            automator=fake,
+            http_client=MockHttpClient(pending_jobs=[_make_job(case_id="CASE-29-01")]),
+        )
+        res = agent.run_once()
+        assert res["status"] == "failed"
+        assert res["reason"] == "patient_mismatch"
+        assert fake.calls == 0
+        reports = dict(agent.http_client.reports)
+        assert reports[_make_job(case_id="CASE-29-01")["job_id"]]["status"] == "FAILED"
+
+    def test_unobservable_patient_does_not_block(self):
+        """病歷尚未開啟（getter 回傳 None）≠ 病患不符：不得因此阻擋寫入。"""
+        fake = FakeAutomator()
+        agent = WindowsAgent(
+            config=_config(current_patient_getter=lambda: None),
+            automator=fake,
+            http_client=MockHttpClient(pending_jobs=[_make_job()]),
+        )
+        res = agent.run_once()
+        assert res["status"] == "success"
+        assert fake.calls == 1
+
+    def test_ui_error_reports_failed(self):
+        fake = FakeAutomator(raise_exc=StaleRefError("@s"))
+        http = MockHttpClient(pending_jobs=[_make_job()])
+        agent = WindowsAgent(config=_config(), automator=fake, http_client=http)
+        res = agent.run_once()
+        assert res["status"] == "failed"
+        assert res["reason"] == "ui_error"
+        reports = dict(http.reports)
+        assert reports[_make_job()["job_id"]]["status"] == "FAILED"
+
+    def test_no_pending_job_returns_none(self):
+        agent = WindowsAgent(config=_config(), automator=FakeAutomator(), http_client=MockHttpClient())
+        assert agent.run_once() is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# §8.9/§11.4 寫入範圍：只寫 S/O/A/P
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestWriteScope:
+    def test_only_soap_fields_written_never_icd10_orders_meds(self):
+        """§8.9：診斷碼/醫令/藥令僅為建議——即使 payload 帶有這些欄位與可寫入的 UI 元素，也不得寫入。"""
+        from elc_audit_engine.agent_desktop_bridge import HISPushAutomator
+
+        driver_store: dict[str, str] = {}
+
+        def driver(action, **kw):
+            if action == "snapshot":
+                refs = [
+                    UIElementRef(ref_id="@s", role="Edit", automation_id="txtSubjective", name="主訴"),
+                    UIElementRef(ref_id="@o", role="Edit", automation_id="txtObjective", name="客觀檢查"),
+                    UIElementRef(ref_id="@a", role="Edit", automation_id="txtAssessment", name="臨床評估"),
+                    UIElementRef(ref_id="@p", role="Edit", automation_id="txtPlan", name="治療計畫"),
+                    UIElementRef(ref_id="@icd", role="Edit", automation_id="txtICD10", name="診斷碼"),
+                    UIElementRef(ref_id="@order", role="Edit", automation_id="txtOrder", name="醫令"),
+                    UIElementRef(ref_id="@med", role="Edit", automation_id="txtMed", name="藥令"),
+                ]
+                return refs
+            if action == "set_value":
+                driver_store[kw["ref_id"]] = kw["value"]
+                return None
+            if action == "get_value":
+                return driver_store.get(kw["ref_id"], "")
+            return None
+
+        soap = dict(SOAP_OK)
+        soap["icd10"] = "J02.9"
+        soap["icd10_code"] = "J02.9"
+        soap["orders"] = [{"name": "CBC", "code": "24232-5"}]
+        soap["meds"] = [{"name": "Acetaminophen", "dose": "500mg TID"}]
+        job = _make_job(soap=soap)
+        automator = HISPushAutomator(runner=AgentDesktopRunner(driver=driver))
+        http = MockHttpClient(pending_jobs=[job])
+        agent = WindowsAgent(config=_config(), automator=automator, http_client=http)
+        res = agent.run_once()
+        assert res["status"] == "success"
+        written = set(driver_store)
+        assert written == {"@s", "@o", "@a", "@p"}
+        # content_hash 不受診斷/醫令/藥令影響
+        assert compute_soap_content_hash(soap) == compute_soap_content_hash(SOAP_OK)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A7 Agent 層日誌不含 SOAP 內文
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestAgentLogSafety:
+    def test_agent_logs_exclude_soap_text(self, caplog):
+        caplog.set_level(logging.DEBUG)
+        http = MockHttpClient(pending_jobs=[_make_job(soap=SOAP_SENTINEL)])
+        agent = WindowsAgent(config=_config(), automator=FakeAutomator(), http_client=http)
+        res = agent.run_once()
+        assert res["status"] == "success"
+        for record in caplog.records:
+            msg = record.getMessage()
+            assert "SENTINEL-ZZQ7-COMPLAINT-SYMPTOMS" not in msg, f"日誌洩露 S 欄：{msg[:120]}"
+            assert "SENTINEL-ZZQ7-PATIENT-IDENTIFIER" not in msg, f"日誌洩露 O 欄：{msg[:120]}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A5 離線／重啟：租約回收與斷點續作
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestCrashRecovery:
+    def _seed_draft(self, store: CaseStore, case_id: str) -> None:
+        store.create(case_id=case_id, kind="monthly", case_seq="01", payload={"batch": "BATCH-29"}, actor="test")
+        d = store.create_soap_draft(case_id=case_id, soap=SOAP_OK, state=STATE_VALIDATED)
+        d = store.update_soap_draft_state(d.draft_id, STATE_APPROVED)
+        store.update_soap_draft_state(d.draft_id, STATE_QUEUED)
+
+    def test_claimed_job_reclaimed_after_lease_timeout(self, tmp_path):
+        db_file = str(tmp_path / "cases.sqlite3")
+        store = CaseStore(db_path=db_file)
+        case_id = "CASE-29-CRASH"
+        self._seed_draft(store, case_id)
+        job = enqueue_job(
+            store,
+            s_type_code="HIS_PUSH",
+            target_id=case_id,
+            actor="dr-29",
+            extra_payload={
+                "draft_id": "d-1",
+                "case_id": case_id,
+                "order_code": "E5002C",
+                "version": 1,
+                "content_hash": compute_soap_content_hash(SOAP_OK),
+                "soap": SOAP_OK,
+                "visit_date": "2026-11-09",
+            },
+        )
+        job_id = job["job_id"]
+
+        # Agent #1 領走任務（PENDING→SENDING）後當機，未回報結果
+        agent1 = WindowsAgent(config=_config(), automator=FakeAutomator(), http_client=StoreHttpClient(store))
+        assert agent1.claim_job(job_id) is True
+        j = get_job(store, job_id)
+        assert j["status"] == "SENDING"
+        assert j.get("lease_started_at")
+
+        # 租約未過期前不可回收
+        assert reclaim_expired(store, now=datetime.now(UTC)) == 0
+        assert get_job(store, job_id)["status"] == "SENDING"
+
+        # 租約過期 → 回收回 PENDING
+        expired = reclaim_expired(store, now=datetime.now(UTC) + timedelta(seconds=DEFAULT_LEASE_TIMEOUT_SEC + 1))
+        assert expired == 1
+        assert get_job(store, job_id)["status"] == "PENDING"
+
+    def test_agent_restart_after_server_restart_picks_job_back_up(self, tmp_path):
+        """server 重啟（全新 CaseStore 實體）後，新 Agent 重啟可繼續處理。"""
+        db_file = str(tmp_path / "cases.sqlite3")
+        store = CaseStore(db_path=db_file)
+        case_id = "CASE-29-RESTART"
+        self._seed_draft(store, case_id)
+        job = enqueue_job(
+            store,
+            s_type_code="HIS_PUSH",
+            target_id=case_id,
+            actor="dr-29",
+            extra_payload={
+                "draft_id": "d-2",
+                "case_id": case_id,
+                "order_code": "E5002C",
+                "version": 1,
+                "content_hash": compute_soap_content_hash(SOAP_OK),
+                "soap": SOAP_OK,
+                "visit_date": "2026-11-09",
+            },
+        )
+        job_id = job["job_id"]
+
+        # Agent 當機在 SENDING（租約過期）
+        agent1 = WindowsAgent(config=_config(), automator=FakeAutomator(), http_client=StoreHttpClient(store))
+        agent1.claim_job(job_id)
+        reclaim_expired(store, now=datetime.now(UTC) + timedelta(seconds=DEFAULT_LEASE_TIMEOUT_SEC + 1))
+
+        # Server 重啟：全新 CaseStore 連線
+        store2 = CaseStore(db_path=db_file)
+        assert get_job(store2, job_id)["status"] == "PENDING"
+
+        # Agent 重啟：全新實體，輪詢 → 領回 → 寫入 → 回報 success
+        agent2 = WindowsAgent(
+            config=_config(agent_id="agent-29-restart"),
+            automator=FakeAutomator(),
+            http_client=StoreHttpClient(store2),
+        )
+        res = agent2.run_once()
+        assert res is not None
+        assert res["status"] == "success"
+        j2 = get_job(store2, job_id)
+        assert j2["status"] == "SUCCESS"
+        assert (j2.get("local_id") or "").startswith("PUSH-")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# §8.5 寫回同步（server 側）：job 狀態 → draft 狀態機
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestServerSync:
+    def _approved_job(self, env, case_id: str, soap: dict) -> tuple[str, str]:
+        """建立 draft（validated→approved→queued）並經 API 核准，回傳 (draft_id, job_id)。"""
+        env.store.create(case_id=case_id, kind="monthly", case_seq="01", payload={"batch": "BATCH-29"}, actor="test")
+        d = env.store.create_soap_draft(case_id=case_id, soap=soap, state=STATE_VALIDATED)
+        res = env.client.post(
+            f"/api/soap/drafts/{d.draft_id}/approve",
+            json={"content_hash": d.content_hash},
+            headers=KEY,
+        )
+        assert res.status_code == 200, res.get_json()
+        return d.draft_id, res.get_json()["job"]["job_id"]
+
+    def test_success_report_marks_draft_pushed(self, env):
+        draft_id, job_id = self._approved_job(env, "CASE-29-SYNC-1", SOAP_OK)
+        res = env.client.post(
+            f"/api/bridge/jobs/{job_id}/status",
+            json={"status": "SENDING", "expected_status": "PENDING"},
+            headers=KEY,
+        )
+        assert res.status_code == 200
+        res = env.client.post(
+            f"/api/bridge/jobs/{job_id}/status",
+            json={"status": "SUCCESS", "expected_status": "SENDING"},
+            headers=KEY,
+        )
+        assert res.status_code == 200
+        d = env.store.get_soap_draft(draft_id)
+        assert d.state == STATE_PUSHED
+        assert d.pushed_at is not None
+        assert d.agent_id == "clinic_a"  # valid-key-123 → clinic_a
+
+    def test_failed_report_marks_draft_failed_with_reason(self, env):
+        draft_id, job_id = self._approved_job(env, "CASE-29-SYNC-2", SOAP_OK)
+        env.client.post(
+            f"/api/bridge/jobs/{job_id}/status",
+            json={"status": "SENDING", "expected_status": "PENDING"},
+            headers=KEY,
+        )
+        res = env.client.post(
+            f"/api/bridge/jobs/{job_id}/status",
+            json={"status": "FAILED", "expected_status": "SENDING", "reason": "readback_mismatch"},
+            headers=KEY,
+        )
+        assert res.status_code == 200
+        d = env.store.get_soap_draft(draft_id)
+        assert d.state == STATE_FAILED
+        assert d.failure_reason == "readback_mismatch"
+        # failed 可重試：回到 queued 再次送寫（§4 狀態機）
+        d = env.store.update_soap_draft_state(d.draft_id, STATE_QUEUED)
+        assert d.state == STATE_QUEUED

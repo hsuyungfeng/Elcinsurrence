@@ -13,11 +13,27 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from config.settings import CASES_DB_PATH
 from elc_audit_engine.case_store import db as case_db
+from elc_audit_engine.case_store.soap_draft_states import (
+    ALL_DRAFT_STATES,
+    STATE_APPROVED,
+    STATE_DRAFT,
+    STATE_FAILED,
+    STATE_PUSHED,
+    STATE_QUALITY_FAILED,
+    STATE_QUEUED,
+    STATE_REJECTED,
+    STATE_VALIDATED,
+    TERMINAL_DRAFT_STATES,
+    UnknownDraftStateError,
+    assert_draft_transition_allowed,
+    compute_soap_content_hash,
+)
 from elc_audit_engine.case_store.states import (
     ALL_STATES,
     STATE_IMPORTED,
@@ -55,6 +71,31 @@ class TransitionRecord:
     reason: str | None
     actor: str | None
     created_at: str
+
+
+@dataclass(frozen=True)
+class SoapDraftRecord:
+    """對應 `soap_drafts` 表一列（Phase 29）。"""
+
+    draft_id: str
+    case_id: str
+    order_code: str | None
+    version: int
+    state: str
+    soap: dict
+    content_hash: str
+    quality_score: int | None
+    quality_issues: list[dict]
+    comparison: dict | None
+    reviewer_id: str | None
+    review_decision: str | None
+    review_reason: str | None
+    reviewed_at: str | None
+    pushed_at: str | None
+    agent_id: str | None
+    failure_reason: str | None
+    created_at: str
+    updated_at: str
 
 
 class CaseStoreError(Exception):
@@ -115,6 +156,36 @@ def _row_to_transition_record(row: sqlite3.Row) -> TransitionRecord:
         reason=row["reason"],
         actor=row["actor"],
         created_at=row["created_at"],
+    )
+
+
+def _row_to_soap_draft_record(row: sqlite3.Row) -> SoapDraftRecord:
+    soap_json = row["soap_json"]
+    soap = json.loads(soap_json) if soap_json is not None else {}
+    issues_raw = row["quality_issues_json"]
+    issues = json.loads(issues_raw) if issues_raw is not None else []
+    comp_raw = row["comparison_json"]
+    comp = json.loads(comp_raw) if comp_raw is not None else None
+    return SoapDraftRecord(
+        draft_id=row["draft_id"],
+        case_id=row["case_id"],
+        order_code=row["order_code"],
+        version=row["version"],
+        state=row["state"],
+        soap=soap,
+        content_hash=row["content_hash"],
+        quality_score=row["quality_score"],
+        quality_issues=issues,
+        comparison=comp,
+        reviewer_id=row["reviewer_id"],
+        review_decision=row["review_decision"],
+        review_reason=row["review_reason"],
+        reviewed_at=row["reviewed_at"],
+        pushed_at=row["pushed_at"],
+        agent_id=row["agent_id"],
+        failure_reason=row["failure_reason"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
     )
 
 
@@ -659,5 +730,327 @@ class CaseStore:
             deleted = cur.rowcount
             conn.commit()
             return deleted
+        finally:
+            conn.close()
+
+    # ------------------------------------------------------------------
+    # Phase 29: SOAP 草稿、審核與 Windows Agent 心跳
+    # ------------------------------------------------------------------
+
+    def create_soap_draft(
+        self,
+        *,
+        case_id: str,
+        soap: dict,
+        order_code: str | None = None,
+        state: str = STATE_DRAFT,
+        quality_score: int | None = None,
+        quality_issues: list[dict] | None = None,
+        comparison: dict | None = None,
+        draft_id: str | None = None,
+    ) -> SoapDraftRecord:
+        """建立一筆新 SOAP 草稿（單一交易內寫入草稿與初始歷史）。"""
+        if state not in ALL_DRAFT_STATES:
+            raise UnknownDraftStateError(state)
+        d_id = draft_id or uuid.uuid4().hex
+        now = _now_iso()
+        content_hash = compute_soap_content_hash(soap)
+        soap_json = json.dumps(soap, ensure_ascii=False)
+        issues_json = json.dumps(quality_issues or [], ensure_ascii=False)
+        comp_json = json.dumps(comparison, ensure_ascii=False) if comparison is not None else None
+
+        conn = self._connect()
+        try:
+            with conn:
+                conn.execute(
+                    "INSERT INTO soap_drafts ("
+                    "draft_id, case_id, order_code, version, state, soap_json, content_hash, "
+                    "quality_score, quality_issues_json, comparison_json, created_at, updated_at"
+                    ") VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        d_id,
+                        case_id,
+                        order_code,
+                        state,
+                        soap_json,
+                        content_hash,
+                        quality_score,
+                        issues_json,
+                        comp_json,
+                        now,
+                        now,
+                    ),
+                )
+                conn.execute(
+                    "INSERT INTO soap_draft_history ("
+                    "draft_id, version, state, soap_json, content_hash, reviewer_id, review_decision, review_reason, created_at"
+                    ") VALUES (?, 1, ?, ?, ?, NULL, 'create', NULL, ?)",
+                    (d_id, state, soap_json, content_hash, now),
+                )
+        finally:
+            conn.close()
+
+        return self.get_soap_draft(d_id)
+
+    def get_soap_draft(self, draft_id: str) -> SoapDraftRecord:
+        """依 draft_id 讀取草稿；查無紀錄拋 CaseNotFoundError。"""
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT * FROM soap_drafts WHERE draft_id = ?",
+                (draft_id,),
+            ).fetchone()
+            if row is None:
+                raise CaseNotFoundError(f"查無 SOAP 草稿：{draft_id}")
+            return _row_to_soap_draft_record(row)
+        finally:
+            conn.close()
+
+    def list_soap_drafts(
+        self,
+        *,
+        case_id: str | None = None,
+        state: str | None = None,
+        limit: int = 100,
+    ) -> list[SoapDraftRecord]:
+        """查詢 SOAP 草稿列表。"""
+        sql = "SELECT * FROM soap_drafts"
+        params: list[Any] = []
+        clauses: list[str] = []
+        if case_id is not None:
+            clauses.append("case_id = ?")
+            params.append(case_id)
+        if state is not None:
+            clauses.append("state = ?")
+            params.append(state)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+
+        conn = self._connect()
+        try:
+            rows = conn.execute(sql, tuple(params)).fetchall()
+            return [_row_to_soap_draft_record(r) for r in rows]
+        finally:
+            conn.close()
+
+    def update_soap_draft_state(
+        self,
+        draft_id: str,
+        to_state: str,
+        *,
+        reviewer_id: str | None = None,
+        decision: str | None = None,
+        reason: str | None = None,
+        agent_id: str | None = None,
+        failure_reason: str | None = None,
+    ) -> SoapDraftRecord:
+        """更新草稿狀態（原子交易檢查顯式狀態轉換與寫入歷史）。"""
+        conn = self._connect()
+        try:
+            with conn:
+                row = conn.execute(
+                    "SELECT * FROM soap_drafts WHERE draft_id = ?",
+                    (draft_id,),
+                ).fetchone()
+                if row is None:
+                    raise CaseNotFoundError(f"查無 SOAP 草稿：{draft_id}")
+                current = _row_to_soap_draft_record(row)
+
+                assert_draft_transition_allowed(current.state, to_state)
+
+                now = _now_iso()
+                pushed_at = now if to_state == STATE_PUSHED else current.pushed_at
+                reviewed_at = (
+                    now
+                    if to_state in (STATE_APPROVED, STATE_REJECTED)
+                    else current.reviewed_at
+                )
+                eff_reviewer = reviewer_id or current.reviewer_id
+                eff_decision = decision or (
+                    "approved"
+                    if to_state == STATE_APPROVED
+                    else ("rejected" if to_state == STATE_REJECTED else current.review_decision)
+                )
+                eff_reason = reason or current.review_reason
+                eff_agent = agent_id or current.agent_id
+                eff_failure = failure_reason or (reason if to_state == STATE_FAILED else current.failure_reason)
+
+                conn.execute(
+                    "UPDATE soap_drafts SET "
+                    "state = ?, reviewer_id = ?, review_decision = ?, review_reason = ?, "
+                    "reviewed_at = ?, pushed_at = ?, agent_id = ?, failure_reason = ?, updated_at = ? "
+                    "WHERE draft_id = ?",
+                    (
+                        to_state,
+                        eff_reviewer,
+                        eff_decision,
+                        eff_reason,
+                        reviewed_at,
+                        pushed_at,
+                        eff_agent,
+                        eff_failure,
+                        now,
+                        draft_id,
+                    ),
+                )
+                conn.execute(
+                    "INSERT INTO soap_draft_history ("
+                    "draft_id, version, state, soap_json, content_hash, reviewer_id, review_decision, review_reason, created_at"
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        draft_id,
+                        current.version,
+                        to_state,
+                        row["soap_json"],
+                        current.content_hash,
+                        eff_reviewer,
+                        eff_decision,
+                        eff_reason,
+                        now,
+                    ),
+                )
+        finally:
+            conn.close()
+
+        return self.get_soap_draft(draft_id)
+
+    def edit_soap_draft(
+        self,
+        draft_id: str,
+        new_soap: dict,
+        *,
+        reviewer_id: str | None = None,
+        quality_score: int | None = None,
+        quality_issues: list[dict] | None = None,
+        comparison: dict | None = None,
+        is_quality_pass: bool = True,
+    ) -> SoapDraftRecord:
+        """醫師編修草稿：版本遞增、重新計算雜湊，狀態重回 validated（若品質檢核通過）或 quality_failed。"""
+        conn = self._connect()
+        try:
+            with conn:
+                row = conn.execute(
+                    "SELECT * FROM soap_drafts WHERE draft_id = ?",
+                    (draft_id,),
+                ).fetchone()
+                if row is None:
+                    raise CaseNotFoundError(f"查無 SOAP 草稿：{draft_id}")
+                current = _row_to_soap_draft_record(row)
+
+                target_state = STATE_VALIDATED if is_quality_pass else STATE_QUALITY_FAILED
+                assert_draft_transition_allowed(current.state, target_state)
+
+                new_version = current.version + 1
+                new_hash = compute_soap_content_hash(new_soap)
+                now = _now_iso()
+                soap_json = json.dumps(new_soap, ensure_ascii=False)
+                issues_json = json.dumps(quality_issues or [], ensure_ascii=False)
+                comp_json = json.dumps(comparison, ensure_ascii=False) if comparison is not None else None
+
+                conn.execute(
+                    "UPDATE soap_drafts SET "
+                    "version = ?, state = ?, soap_json = ?, content_hash = ?, "
+                    "quality_score = ?, quality_issues_json = ?, comparison_json = ?, "
+                    "reviewer_id = ?, review_decision = 'edit', updated_at = ? "
+                    "WHERE draft_id = ?",
+                    (
+                        new_version,
+                        target_state,
+                        soap_json,
+                        new_hash,
+                        quality_score,
+                        issues_json,
+                        comp_json,
+                        reviewer_id or current.reviewer_id,
+                        now,
+                        draft_id,
+                    ),
+                )
+                conn.execute(
+                    "INSERT INTO soap_draft_history ("
+                    "draft_id, version, state, soap_json, content_hash, reviewer_id, review_decision, review_reason, created_at"
+                    ") VALUES (?, ?, ?, ?, ?, ?, 'edit', NULL, ?)",
+                    (
+                        draft_id,
+                        new_version,
+                        target_state,
+                        soap_json,
+                        new_hash,
+                        reviewer_id or current.reviewer_id,
+                        now,
+                    ),
+                )
+        finally:
+            conn.close()
+
+        return self.get_soap_draft(draft_id)
+
+    def find_pushed_soap_draft(self, case_id: str, content_hash: str) -> SoapDraftRecord | None:
+        """依 case_id 與 content_hash 檢查是否曾成功 pushed（冪等防重寫入）。"""
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT * FROM soap_drafts WHERE case_id = ? AND content_hash = ? AND state = ? LIMIT 1",
+                (case_id, content_hash, STATE_PUSHED),
+            ).fetchone()
+            if row is None:
+                return None
+            return _row_to_soap_draft_record(row)
+        finally:
+            conn.close()
+
+    def record_agent_heartbeat(
+        self,
+        agent_id: str,
+        *,
+        version: str = "",
+        his_status: str = "",
+        client_timestamp: str = "",
+    ) -> None:
+        """紀錄 Windows Agent 心跳。"""
+        now = _now_iso()
+        conn = self._connect()
+        try:
+            with conn:
+                conn.execute(
+                    "INSERT INTO agent_heartbeats ("
+                    "agent_id, version, his_status, client_timestamp, last_heartbeat_at"
+                    ") VALUES (?, ?, ?, ?, ?) "
+                    "ON CONFLICT(agent_id) DO UPDATE SET "
+                    "version = excluded.version, "
+                    "his_status = excluded.his_status, "
+                    "client_timestamp = excluded.client_timestamp, "
+                    "last_heartbeat_at = excluded.last_heartbeat_at",
+                    (agent_id, version, his_status, client_timestamp, now),
+                )
+        finally:
+            conn.close()
+
+    def list_agent_heartbeats(self) -> list[dict[str, Any]]:
+        """列出所有 Agent 心跳，並計算 is_online（30 分鐘無心跳標記離線）。"""
+        conn = self._connect()
+        now = datetime.now(UTC)
+        try:
+            rows = conn.execute(
+                "SELECT * FROM agent_heartbeats ORDER BY last_heartbeat_at DESC"
+            ).fetchall()
+            results: list[dict[str, Any]] = []
+            for r in rows:
+                last_dt = datetime.fromisoformat(r["last_heartbeat_at"])
+                diff_sec = (now - last_dt).total_seconds()
+                is_online = diff_sec < 1800  # 30 mins
+                results.append(
+                    {
+                        "agent_id": r["agent_id"],
+                        "version": r["version"],
+                        "his_status": r["his_status"],
+                        "client_timestamp": r["client_timestamp"],
+                        "last_heartbeat_at": r["last_heartbeat_at"],
+                        "is_online": is_online,
+                    }
+                )
+            return results
         finally:
             conn.close()

@@ -26,6 +26,9 @@ DEFAULT_HIS_PROFILES: Dict[str, Any] = {
     "vision": {
         "vendor_name": "展望醫療資訊系統 (Vision HIS)",
         "exe_names": ["VisionHIS.exe", "VisionMain.exe"],
+        "calibrated": False,
+        "calibrated_at": None,
+        "calibrated_by": None,
         "fields": {
             "soap_s": {"automation_id": "txtSubjective", "name": "主訴", "role": "Edit"},
             "soap_o": {"automation_id": "txtObjective", "name": "客觀檢查", "role": "Edit"},
@@ -37,6 +40,9 @@ DEFAULT_HIS_PROFILES: Dict[str, Any] = {
     "yaosheng": {
         "vendor_name": "耀聖醫療資訊系統 (Yaosheng HIS)",
         "exe_names": ["YaoShengClinic.exe", "YaoMain.exe"],
+        "calibrated": False,
+        "calibrated_at": None,
+        "calibrated_by": None,
         "fields": {
             "soap_s": {"automation_id": "Edit_S", "name": "S", "role": "Edit"},
             "soap_o": {"automation_id": "Edit_O", "name": "O", "role": "Edit"},
@@ -48,6 +54,9 @@ DEFAULT_HIS_PROFILES: Dict[str, Any] = {
     "minger": {
         "vendor_name": "佲格門診系統 (Minger HIS)",
         "exe_names": ["MingerClinic.exe"],
+        "calibrated": False,
+        "calibrated_at": None,
+        "calibrated_by": None,
         "fields": {
             "soap_s": {"automation_id": "txtS", "name": "S", "role": "Edit"},
             "soap_o": {"automation_id": "txtO", "name": "O", "role": "Edit"},
@@ -59,6 +68,9 @@ DEFAULT_HIS_PROFILES: Dict[str, Any] = {
     "chihshi": {
         "vendor_name": "志氏醫療系統 (Chihshi HIS)",
         "exe_names": ["ChihShiEMR.exe"],
+        "calibrated": False,
+        "calibrated_at": None,
+        "calibrated_by": None,
         "fields": {
             "soap_s": {"automation_id": "RichEdit_S", "name": "主訴紀錄", "role": "Document"},
             "soap_o": {"automation_id": "RichEdit_O", "name": "檢查數據", "role": "Document"},
@@ -219,32 +231,38 @@ class HISPushAutomator:
         app_name: str,
         case_payload: Dict[str, Any],
         max_retries: int = 2,
+        write_soap_only: bool = False,
     ) -> Dict[str, Any]:
-        """Execute Observe–Act–Verify loop to push S/O/A/P and ICD-10 into HIS.
+        """Execute Observe–Act–Verify loop to push S/O/A/P into HIS.
 
-        Returns summary dictionary with per-field write results.
+        When write_soap_only=True (Phase 29 §8.9 standard), only S/O/A/P are written;
+        diagnoses, orders, and medications are advisory only and never written to HIS.
         """
         soap = case_payload.get("soap") or {}
         if isinstance(soap, dict):
-            s_val = soap.get("subjective") or case_payload.get("soap_s") or ""
-            o_val = soap.get("objective") or case_payload.get("soap_o") or ""
-            a_val = soap.get("assessment") or case_payload.get("soap_a") or ""
-            p_val = soap.get("plan") or case_payload.get("soap_p") or ""
+            s_val = soap.get("s") or soap.get("subjective") or case_payload.get("soap_s") or ""
+            o_val = soap.get("o") or soap.get("objective") or case_payload.get("soap_o") or ""
+            a_val = soap.get("a") or soap.get("assessment") or case_payload.get("soap_a") or ""
+            p_val = soap.get("p") or soap.get("plan") or case_payload.get("soap_p") or ""
         else:
             s_val = case_payload.get("soap_s") or ""
             o_val = case_payload.get("soap_o") or ""
             a_val = case_payload.get("soap_a") or ""
             p_val = case_payload.get("soap_p") or ""
 
-        icd_val = case_payload.get("icd10_code") or case_payload.get("icd10") or ""
-
         target_values = {
             "soap_s": s_val,
             "soap_o": o_val,
             "soap_a": a_val,
             "soap_p": p_val,
-            "icd10": icd_val,
         }
+
+        # 依 29-DESIGN.md §8.9：只寫 S/O/A/P；非 write_soap_only 時才寫入 icd10（維持舊測試相容）
+        eff_write_soap_only = write_soap_only or case_payload.get("write_soap_only", False)
+        if not eff_write_soap_only:
+            icd_val = case_payload.get("icd10_code") or case_payload.get("icd10") or ""
+            if icd_val:
+                target_values["icd10"] = icd_val
 
         results: Dict[str, WriteResult] = {}
         fallback_copy_card: Dict[str, str] = {}

@@ -15,6 +15,7 @@ from elc_audit_engine.auth import (
     AuthConfigError,
     AuthenticationError,
     load_api_keys,
+    resolve_agent_caller,
     resolve_caller,
 )
 
@@ -22,6 +23,15 @@ from elc_audit_engine.auth import (
 # 這份清單只決定「寫不寫審計」，與是否強制認證無關——業務端點即使
 # 免強制 API Key，仍接觸病歷資料，審計軌跡不可因此消失。
 AUDIT_EXEMPT_ENDPOINTS = frozenset({"misc.index", "misc.health", "static", "misc.get_facility"})
+
+# Agent 專用權限端點清單（Phase 29 §7.3）：Agent 金鑰僅限存取心跳與橋接任務相關端點。
+AGENT_ALLOWED_ENDPOINTS = frozenset({
+    "agent_bridge.agent_heartbeat",
+    "agent_bridge.get_agent_status",
+    "bridge.list_pending_jobs",
+    "bridge.report_bridge_job_status",
+    "bridge.get_bridge_job",
+})
 
 # 認證豁免清單：**僅決定認證是否強制，不得沿用來判斷審計**——兩份清單刻意
 # 分開（歷史教訓：曾共用一份清單，導致免認證的業務端點連審計日誌都被一併
@@ -150,6 +160,18 @@ def register_security(app: Flask) -> None:
             return None
         if request.endpoint is None:
             return None  # 未匹配路由（404）交給 HTTPException handler
+
+        # 優先檢查是否為 Windows Agent 金鑰（Phase 29 §7.3）
+        agent_keys = current_app.config.get("ELC_AGENT_KEYS", {})
+        if presented_key and agent_keys:
+            agent_id = resolve_agent_caller(presented_key, agent_keys)
+            if agent_id is not None:
+                if request.endpoint not in AGENT_ALLOWED_ENDPOINTS:
+                    return jsonify({"status": "error", "message": "Agent 金鑰權限不足，僅能呼叫心跳與 HIS_PUSH 相關端點"}), 403
+                g.caller_id = agent_id
+                g.is_agent = True
+                return None
+
         g.caller_id = resolve_caller(presented_key, keys)
         return None
 
