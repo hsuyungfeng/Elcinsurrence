@@ -19,7 +19,7 @@ def test_load_llama_config_returns_locked_values():
     """load_llama_config() 應回傳含 D2 鎖定值的 dict（非佔位值）。"""
     cfg = settings.load_llama_config()
     assert cfg["inference"]["n_ctx"] == 32768
-    assert cfg["model"]["name"] == "Ornith-1.0-9B"
+    assert cfg["model"]["name"] == "Qwen3.8-27B-FP8"
 
 
 def test_load_llama_config_missing_file_raises(monkeypatch):

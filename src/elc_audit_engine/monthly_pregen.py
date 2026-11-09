@@ -20,6 +20,7 @@ from elc_audit_engine.comparator.soap_advice import (
     validate_soap_quality,
 )
 from elc_audit_engine.monthly_audit import (
+    STATUS_NO_MARKERS,
     STATUS_RESTRICTION,
     BatchAudit,
     OrderFinding,
@@ -57,15 +58,15 @@ def is_pathology_code(code: str) -> bool:
 
 
 def is_pregen_target(finding: OrderFinding) -> bool:
-    """需要範例病歷範本的醫令：處置／手術高價醫令，或有給付限制（restriction_present）的醫令。
+    """需要範例病歷範本的醫令：點數 > 350 **且** 有給付規定原文。
 
-    排除診療費（001 開頭）與病理檢查；給付限制醫令不受點數與藥品門檻影響。
+    「有規定原文」指規則狀態為 restriction_present 或 no_restriction_markers（規則存在且有條文）；
+    no_text、not_found、undetermined 皆不生成（不憑空生成規定）。排除診療費（001）與病理檢查。
     """
-    if is_excluded_order_code(finding.code):
+    if is_excluded_order_code(finding.code) or is_pathology_code(finding.code):
         return False
-    if finding.rule_status == STATUS_RESTRICTION and not is_pathology_code(finding.code):
-        return True
-    return is_procedure_finding(finding)
+    has_rule_text = finding.rule_status in (STATUS_RESTRICTION, STATUS_NO_MARKERS)
+    return POINTS_FLAG in finding.flags and has_rule_text
 
 
 def is_procedure_finding(finding: OrderFinding) -> bool:

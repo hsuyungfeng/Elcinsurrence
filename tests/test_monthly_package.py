@@ -10,9 +10,12 @@ import json
 import zipfile
 from types import SimpleNamespace
 
+import sqlite3
+
 import pytest
 
 from config import settings
+from elc_audit_engine.rule_repository.db import SCHEMA_DRUG, SCHEMA_PAYMENT, SCHEMA_RULE_MAPPING
 from elc_audit_engine.monthly_audit import audit_batch
 from elc_audit_engine.monthly_package import (
     build_batch_package,
@@ -61,6 +64,21 @@ def _sample_zip(t2: str | None = FAC) -> bytes:
         ],
         t2=t2,
     )
+
+
+@pytest.fixture
+def rules_db(tmp_path) -> str:
+    """合成規則庫：TST1 具規定原文（點數 > 350 時成為範本目標）。"""
+    path = str(tmp_path / "rules.sqlite3")
+    conn = sqlite3.connect(path)
+    conn.execute(SCHEMA_PAYMENT)
+    conn.execute(SCHEMA_DRUG)
+    conn.execute(SCHEMA_RULE_MAPPING)
+    conn.execute("INSERT INTO payment_rules VALUES (?,?,?,?,?)",
+                 ("TST1", "測試項目", "限外傷使用，需檢附病歷。", "2023-01-01", "2910-12-31"))
+    conn.commit()
+    conn.close()
+    return path
 
 
 @pytest.fixture
@@ -173,8 +191,8 @@ def test_package_requires_confirmed_facility_profile(make_api_app, tmp_path, mon
     assert body["confirmed"] is False
 
 
-def test_package_after_confirmation_returns_zip_with_report_and_case_docs(make_api_app, facility_config):
-    client = make_api_app().test_client()
+def test_package_after_confirmation_returns_zip_with_report_and_case_docs(make_api_app, facility_config, rules_db):
+    client = make_api_app(ELC_RULES_DB_PATH=rules_db).test_client()
     _upload(client, _sample_zip(FAC))
     # 首次確認院所資料（診所表單）
     confirm = client.post(
@@ -205,14 +223,14 @@ def test_package_after_confirmation_returns_zip_with_report_and_case_docs(make_a
     assert any("無處置／手術高價醫令" in text for text in docs.values())
 
 
-def test_package_uses_cached_template_for_case_without_soap(make_api_app, facility_config):
-    app = make_api_app()
+def test_package_uses_cached_template_for_case_without_soap(make_api_app, facility_config, rules_db):
+    app = make_api_app(ELC_RULES_DB_PATH=rules_db)
     store = app.extensions["elc"].case_store
     client = app.test_client()
     _upload(client, _sample_zip(FAC))
 
     # 找出含處置醫令之案件的主診斷，並寫入一筆快取範本（模擬已預生成）
-    audit = audit_batch(store, BATCH, persist=False)
+    audit = audit_batch(store, BATCH, rules_db_path=rules_db, persist=False)
     target = next(c for c in audit.cases if any(f.code == "TST1" for f in c.findings))
     dx = target.primary_diagnosis or ""
     if not dx:
@@ -295,9 +313,14 @@ def test_pregen_target_covers_payment_restricted_orders():
             flags=tuple(flags), rule_status=status,
         )
 
-    # 給付限制醫令即使點數不高也須有範本
-    assert is_pregen_target(_f("RESTR1", status=STATUS_RESTRICTION)) is True
-    # 一般醫令（無限制、無高價旗標）不產生範本目標
-    assert is_pregen_target(_f("PLAIN1", status="no_restriction_markers")) is False
-    # 診療費（001 開頭）排除
-    assert is_pregen_target(_f("001123C", status=STATUS_RESTRICTION)) is False
+    # 點數 > 350 且有給付規定原文 → 目標
+    assert is_pregen_target(_f("RESTR1", status=STATUS_RESTRICTION, flags=("points_over_350",))) is True
+    assert is_pregen_target(_f("NOMARK1", status="no_restriction_markers", flags=("points_over_350",))) is True
+    # 點數未超過 350 → 非目標（即使有給付限制）
+    assert is_pregen_target(_f("LOWPT1", status=STATUS_RESTRICTION)) is False
+    # 有點數但無規定原文（no_text／not_found）→ 非目標，不憑空生成
+    assert is_pregen_target(_f("NOTXT1", status="no_text", flags=("points_over_350",))) is False
+    assert is_pregen_target(_f("NOTFD1", status="not_found", flags=("points_over_350",))) is False
+    # 診療費（001 開頭）與病理檢查排除
+    assert is_pregen_target(_f("001123C", status=STATUS_RESTRICTION, flags=("points_over_350",))) is False
+    assert is_pregen_target(_f("25003C", status=STATUS_RESTRICTION, flags=("points_over_350",))) is False

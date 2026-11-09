@@ -31,27 +31,22 @@ from elc_audit_engine.rule_repository.models import RuleResult, not_found
 KEY = {"X-API-Key": "valid-key-123"}
 BATCH = "MONTHLY-202307"
 
-# 總字元數須落在 500–1000（見 comparator/soap_advice.py 與 LLM 系統提示）；
-# 舊版固定樣本僅約 330 字元，於 phase-18 加入總長檢核後即不合格，故擴充樣本。
+# 總字元數須落在 200–500（目標 200–400；見 comparator/soap_advice.py 與 LLM 系統提示）。
 GOOD_SOAP = {
     "s": (
-        "Patient reports painful nail bed injury of the right index finger after a machine accident "
-        "at the workshop about two hours before arrival. Pain is rated 6 out of 10 and worse with "
-        "movement. No prior injury to the same digit. Tetanus status reviewed and documented as up to date."
+        "Painful nail bed injury of the right index finger after a machine accident. "
+        "Pain rated 6 out of 10."
     ),
     "o": (
-        "Nail bed laceration about 1.5 cm with partial nail plate avulsion over the right index finger. "
-        "Capillary refill is brisk and neurovascular status is intact distally. No active bleeding after "
-        "compression. Surrounding soft tissue shows mild swelling without signs of infection."
+        "Nail bed laceration about 1.5 cm with partial nail plate avulsion. "
+        "Neurovascular status intact distally. No active bleeding."
     ),
     "a": (
-        "Traumatic nail bed injury with nail plate avulsion of the right index finger (S61.2). "
-        "No open fracture of the distal phalanx on initial assessment."
+        "Traumatic nail bed injury with nail plate avulsion (S61.2)."
     ),
     "p": (
-        "Nail bed repair under digital block with absorbable sutures; nail plate reposition and splinting "
-        "applied. Wound care instructions given, including daily dressing change and elevation. Oral "
-        "analgesics prescribed. Follow-up in one week for wound check and suture assessment."
+        "Nail bed repair under digital block; nail plate reposition; wound care instructions given; "
+        "follow-up in one week."
     ),
 }
 GOOD_REPLY = {"status": "success", "comparison": "中文比對說明", "recommended_soap": GOOD_SOAP,
@@ -205,7 +200,7 @@ def test_report_embeds_general_template_for_specific_diagnosis(store):
     loaded = load_templates(store, batch)
     assert loaded[("PROC1", "S61.2")] == GOOD_SOAP
     html = render_batch_report_html(batch, templates=loaded)
-    assert "S: Patient reports" in html
+    assert "S: Painful nail bed injury" in html
 
 
 def test_his_soap_enhance_serves_cached_template_without_llm(make_api_app, monkeypatch):
@@ -226,7 +221,7 @@ def test_his_soap_enhance_serves_cached_template_without_llm(make_api_app, monke
     assert res.status_code == 200
     assert data["status"] == "success" and data["from_cache"] is True
     assert data["template_scope"] == "general"
-    assert "S: Patient reports" in data["example_soap_template"]
+    assert "S: Painful nail bed injury" in data["example_soap_template"]
     assert calls == []  # 命中快取，不呼叫 LLM
 
 
@@ -376,7 +371,7 @@ def test_report_embeds_cached_template_with_copy_and_editable_text(store):
     templates = {("PROC1", "S61.2"): GOOD_SOAP}
     html = render_batch_report_html(batch, templates=templates)
     assert '<details class="soap-example">' in html
-    assert "<textarea" in html and "S: Patient reports" in html
+    assert "<textarea" in html and "S: Painful nail bed injury" in html
     assert 'onclick="copySoap(this)"' in html
     assert "function copySoap" in html  # 內嵌複製腳本
 
@@ -547,7 +542,7 @@ def test_pathology_excluded_from_targets_and_report_even_if_template_stored(stor
     assert [t[0] for t in procedure_targets(batch)] == ["PROC1"]
     store.put_soap_template("25003C", "S61.2", GOOD_SOAP, source="llm_validated", quality_score=95)
     html = render_batch_report_html(batch, templates=load_templates(store, batch))
-    assert "S: Patient reports" not in html  # 病理項目即使有快取也不輸出
+    assert "S: Painful nail bed injury" not in html  # 病理項目即使有快取也不輸出
     assert 'class="soap-example"' not in html
 
 
