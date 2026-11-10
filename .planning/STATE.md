@@ -72,9 +72,9 @@ None. Conflict detection found zero BLOCKER-severity issues and zero competing-v
 
 ## Session Continuity
 
-Last session: 2026-10-31T01:41:29.265Z
-Stopped at: context exhaustion at 75% (2026-10-31)
-Resume file: None
+Last session: 2026-11-09T17:45:54+08:00
+Stopped at: Session resumed via /gsd-resume-work; 實際進度以 Phase 29 handoff 為準（main@5650d06，feat/phase-29-soap-his-writeback@c2aef83 待合併）
+Resume file: .planning/HANDOFF.json (paused), .planning/phases/29-soap-review-his-writeback/.continue-here.md
 
 ## Current Position
 

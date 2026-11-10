@@ -170,6 +170,26 @@ SCHEMA_AGENT_HEARTBEATS = (
     ")"
 )
 
+# soap_recording_sessions：SoapVoice 錄音接收冪等登記表（Phase 30）
+SCHEMA_SOAP_RECORDING_SESSIONS = (
+    "CREATE TABLE IF NOT EXISTS soap_recording_sessions ("
+    "session_id TEXT PRIMARY KEY, "
+    "draft_id TEXT NOT NULL, "
+    "caller TEXT, "
+    "created_at TEXT NOT NULL"
+    ")"
+)
+
+# soap_settings：全域與診所層 SOAP 設定鍵值表（Phase 30：自動接入開關等）
+SCHEMA_SOAP_SETTINGS = (
+    "CREATE TABLE IF NOT EXISTS soap_settings ("
+    "key TEXT PRIMARY KEY, "
+    "value TEXT NOT NULL, "
+    "updated_at TEXT NOT NULL, "
+    "updated_by TEXT"
+    ")"
+)
+
 
 def get_connection(db_path: str) -> sqlite3.Connection:
     """建立（或開啟）SQLite 連線，回傳前確保父目錄存在。
@@ -208,6 +228,8 @@ def init_schema(db_path: str) -> None:
         conn.execute(SCHEMA_SOAP_DRAFT_HISTORY)
         conn.execute(SCHEMA_INDEX_SOAP_DRAFT_HIST)
         conn.execute(SCHEMA_AGENT_HEARTBEATS)
+        conn.execute(SCHEMA_SOAP_RECORDING_SESSIONS)
+        conn.execute(SCHEMA_SOAP_SETTINGS)
         conn.commit()
     finally:
         conn.close()

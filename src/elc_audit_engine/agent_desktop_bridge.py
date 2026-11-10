@@ -110,6 +110,30 @@ class WriteResult:
     retries: int = 0
 
 
+def _run_agent_desktop(cmd: list[str], timeout: float = 30.0) -> subprocess.CompletedProcess[str]:
+    """Run agent-desktop subprocess with Windows console suppression, UTF-8 safety, and timeout."""
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    executable_name = cmd[0] if cmd else "agent-desktop"
+    try:
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            stdin=subprocess.DEVNULL,
+            timeout=timeout,
+            creationflags=creationflags,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise AgentDesktopError(
+            f"{executable_name} timed out after {timeout} seconds"
+        ) from exc
+    except Exception as exc:
+        raise AgentDesktopError(
+            f"{executable_name} execution error: {type(exc).__name__}"
+        ) from exc
+
+
 class AgentDesktopRunner:
     """Interface to agent-desktop CLI / FFI."""
 
@@ -127,8 +151,12 @@ class AgentDesktopRunner:
             return self._mock_driver("snapshot", app_name=app_name)
 
         cmd = [self.executable_path, "snapshot", "--app", app_name, "-i", "--json"]
+        res = _run_agent_desktop(cmd)
+        if res.returncode != 0:
+            raise AgentDesktopError(
+                f"{self.executable_path} snapshot failed with returncode {res.returncode}"
+            )
         try:
-            res = subprocess.run(cmd, capture_output=True, text=True, check=True)
             data = json.loads(res.stdout)
             elements = []
             for item in data.get("elements", []):
@@ -143,7 +171,9 @@ class AgentDesktopRunner:
                 )
             return elements
         except Exception as exc:
-            raise AgentDesktopError(f"agent-desktop snapshot failed: {exc}") from exc
+            raise AgentDesktopError(
+                f"{self.executable_path} snapshot failed to parse JSON"
+            ) from exc
 
     def set_value(self, ref_id: str, value: str) -> None:
         """Tier 1: UIA ValuePattern write."""
@@ -151,11 +181,13 @@ class AgentDesktopRunner:
             return self._mock_driver("set_value", ref_id=ref_id, value=value)
 
         cmd = [self.executable_path, "set-value", ref_id, value]
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = _run_agent_desktop(cmd)
         if res.returncode != 0:
-            if "STALE_REF" in res.stderr:
+            if "STALE_REF" in (res.stderr or ""):
                 raise StaleRefError(f"Element {ref_id} is stale")
-            raise AgentDesktopError(f"set-value failed: {res.stderr}")
+            raise AgentDesktopError(
+                f"{self.executable_path} set-value failed with returncode {res.returncode}"
+            )
 
     def get_value(self, ref_id: str) -> str:
         """Read back value for verification."""
@@ -163,12 +195,14 @@ class AgentDesktopRunner:
             return self._mock_driver("get_value", ref_id=ref_id)
 
         cmd = [self.executable_path, "get-value", ref_id]
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = _run_agent_desktop(cmd)
         if res.returncode != 0:
-            if "STALE_REF" in res.stderr:
+            if "STALE_REF" in (res.stderr or ""):
                 raise StaleRefError(f"Element {ref_id} is stale")
-            raise AgentDesktopError(f"get-value failed: {res.stderr}")
-        return res.stdout.strip()
+            raise AgentDesktopError(
+                f"{self.executable_path} get-value failed with returncode {res.returncode}"
+            )
+        return (res.stdout or "").strip()
 
     def set_clipboard_and_paste(self, ref_id: str, value: str) -> None:
         """Tier 2: Focus + Clipboard Paste."""
@@ -176,9 +210,11 @@ class AgentDesktopRunner:
             return self._mock_driver("paste", ref_id=ref_id, value=value)
 
         cmd = [self.executable_path, "paste-to", ref_id, value]
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        res = _run_agent_desktop(cmd)
         if res.returncode != 0:
-            raise AgentDesktopError(f"paste-to failed: {res.stderr}")
+            raise AgentDesktopError(
+                f"{self.executable_path} paste-to failed with returncode {res.returncode}"
+            )
 
 
 class HISPushAutomator:
@@ -211,15 +247,29 @@ class HISPushAutomator:
             target_role = rule.get("role", "")
 
             best_elem = None
-            for elem in elements:
-                if target_role and elem.role != target_role:
-                    continue
-                if target_id and elem.automation_id == target_id:
-                    best_elem = elem
-                    break
-                if target_name and target_name in elem.name:
-                    best_elem = elem
-                    break
+            # Round 1: Exact match on automation_id (and role if specified)
+            if target_id:
+                for elem in elements:
+                    if target_role and elem.role != target_role:
+                        continue
+                    if elem.automation_id == target_id:
+                        best_elem = elem
+                        break
+            # Round 2: Only when automation_id is empty, match exact name (casefold)
+            elif target_name:
+                target_name_cf = target_name.casefold()
+                candidates = []
+                for elem in elements:
+                    if target_role and elem.role != target_role:
+                        continue
+                    if elem.name and elem.name.casefold() == target_name_cf:
+                        candidates.append(elem)
+                if len(candidates) == 1:
+                    best_elem = candidates[0]
+                else:
+                    # Ambiguous (>1 candidates) or 0 candidates: leave best_elem None
+                    best_elem = None
+
             if best_elem:
                 matched[field_key] = best_elem
 

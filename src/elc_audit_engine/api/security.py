@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 
 from flask import Flask, current_app, g, jsonify, request
@@ -124,6 +125,26 @@ def _host_allowed(allowed: frozenset[str]) -> bool:
     return host in allowed or hostname in allowed
 
 
+_RFC1918_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+)
+
+
+def _is_private_ip(ip_str: str | None) -> bool:
+    """判斷 IP 是否為 127.0.0.1 或 RFC 1918 私有 IP 段（Phase 30 O3）。"""
+    if not ip_str:
+        return False
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        if ip.is_loopback:
+            return True
+        return any(ip in net for net in _RFC1918_NETWORKS)
+    except ValueError:
+        return False
+
+
 def register_security(app: Flask) -> None:
     @app.before_request
     def _enforce_host_and_api_key():
@@ -149,6 +170,30 @@ def register_security(app: Flask) -> None:
                 fac_code = get_facility_code()
                 g.caller_id = f"clinic_{fac_code}" if fac_code else "tester"
             return None
+
+        # Phase 30 O3: 錄音接收端點 POST /api/soap/recordings
+        # 僅對來源為私有 IP 段（10/8、172.16/12、192.168/16、127.0.0.1）的請求免 key；
+        # 其他來源仍需 key。Agent 金鑰無論來源一律回傳 403。
+        if request.endpoint == "soap_recording.receive_recording":
+            agent_keys = current_app.config.get("ELC_AGENT_KEYS", {})
+            if presented_key and agent_keys:
+                agent_id = resolve_agent_caller(presented_key, agent_keys)
+                if agent_id is not None:
+                    return jsonify({"status": "error", "message": "Agent 金鑰權限不足，僅能呼叫心跳與 HIS_PUSH 相關端點"}), 403
+
+            if _is_private_ip(request.remote_addr):
+                if presented_key:
+                    try:
+                        g.caller_id = resolve_caller(presented_key, keys)
+                    except AuthenticationError:
+                        pass
+                if not getattr(g, "caller_id", None):
+                    g.caller_id = f"soapvoice-lan:{request.remote_addr}"
+                return None
+            # 非私有 IP：強制檢驗 API key
+            g.caller_id = resolve_caller(presented_key, keys)
+            return None
+
         if request.endpoint in AUTH_EXEMPT_ENDPOINTS:
             # 免強制認證，但呼叫方帶了合法 key 時解析 caller_id，讓審計日誌不必然
             # 落成 anonymous（key 錯誤或缺失靜默忽略——這裡不強制擋）。

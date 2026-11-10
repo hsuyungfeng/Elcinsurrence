@@ -32,7 +32,7 @@ def index():
 @bp.route("/api/health", methods=["GET"])
 def health():
     """健康檢查（供 HIS 與監控探測，豁免 API key，不含任何案件資料）。"""
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok", "service": "elc-audit-engine"})
 
 
 @bp.route("/api/facility", methods=["GET"])

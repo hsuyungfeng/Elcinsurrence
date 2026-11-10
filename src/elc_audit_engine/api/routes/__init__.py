@@ -11,7 +11,9 @@ from .monthly import bp as monthly_bp
 from .printing import bp as printing_bp
 from .rules import bp as rules_bp
 from .sampling import bp as sampling_bp
+from .soap_recording import bp as soap_recording_bp
 from .soap_review import bp as soap_review_bp
+from .soap_review_queue import bp as soap_review_queue_bp
 from .vault import bp as vault_bp
 
 ALL_BLUEPRINTS = (
@@ -28,4 +30,6 @@ ALL_BLUEPRINTS = (
     emr_packaging_bp,
     soap_review_bp,
     agent_bridge_bp,
+    soap_recording_bp,
+    soap_review_queue_bp,
 )

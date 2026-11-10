@@ -15,9 +15,10 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 
 from elc_audit_engine import audit_log
 from elc_audit_engine.bridge_queue import enqueue_job
@@ -56,6 +57,44 @@ def _draft_or_404(draft_id: str):
         raise ApiError(f"查無 SOAP 草稿：{draft_id}", status=404)
 
 
+def _create_draft_record(
+    store,
+    *,
+    case_id: str,
+    soap: dict,
+    order_code: str | None = None,
+    primary_diagnosis: str | None = None,
+) -> SoapDraftRecord:
+    """共用的建立 SOAP 草稿並執行品質檢核與標準範本比對之核心邏輯。"""
+    # 品質檢核
+    q_res = validate_soap_quality(soap)
+    initial_state = STATE_VALIDATED if q_res.get("pass") else STATE_QUALITY_FAILED
+
+    # 標準範本比對（advisory，來源為現有 soap_templates，見 29-DESIGN.md §5, §11）
+    comparison: dict[str, Any] | None = None
+    if order_code:
+        primary_dx = primary_diagnosis or ""
+        if not primary_dx:
+            try:
+                case = store.get(case_id)
+                primary_dx = case.primary_diagnosis if case and getattr(case, "primary_diagnosis", None) else ""
+            except Exception:
+                primary_dx = ""
+        tmpl = store.get_soap_template(order_code, primary_dx)
+        if tmpl and tmpl.get("soap"):
+            comparison = compare_soap_with_template(soap, tmpl["soap"])
+
+    return store.create_soap_draft(
+        case_id=case_id,
+        order_code=order_code,
+        soap=soap,
+        state=initial_state,
+        quality_score=q_res.get("quality_score"),
+        quality_issues=q_res.get("issues"),
+        comparison=comparison,
+    )
+
+
 @bp.route("/api/soap/drafts", methods=["POST"])
 def create_draft():
     """建立新 SOAP 草稿並自動執行品質檢核與標準範本比對。"""
@@ -69,28 +108,11 @@ def create_draft():
     order_code = data.get("order_code")
 
     store = case_store()
-
-    # 品質檢核
-    q_res = validate_soap_quality(soap)
-    initial_state = STATE_VALIDATED if q_res.get("pass") else STATE_QUALITY_FAILED
-
-    # 標準範本比對（advisory，來源為現有 soap_templates，見 29-DESIGN.md §5, §11）
-    comparison: dict[str, Any] | None = None
-    if order_code:
-        case = store.get(case_id)
-        primary_dx = case.primary_diagnosis if case and getattr(case, "primary_diagnosis", None) else ""
-        tmpl = store.get_soap_template(order_code, primary_dx)
-        if tmpl and tmpl.get("soap"):
-            comparison = compare_soap_with_template(soap, tmpl["soap"])
-
-    draft = store.create_soap_draft(
+    draft = _create_draft_record(
+        store,
         case_id=case_id,
-        order_code=order_code,
         soap=soap,
-        state=initial_state,
-        quality_score=q_res.get("quality_score"),
-        quality_issues=q_res.get("issues"),
-        comparison=comparison,
+        order_code=order_code,
     )
 
     # 審計紀錄（不記錄 SOAP 內文）
@@ -105,6 +127,9 @@ def create_draft():
     except Exception as exc:
         current_app.logger.warning("寫入審計日誌失敗：%s", exc)
 
+    # 自動接入判定（D-30-04）
+    draft = _maybe_auto_accept(store, draft, caller_id() or "anonymous")
+
     return jsonify({"status": "success", "draft": _draft_to_dict(draft)}), 201
 
 
@@ -115,14 +140,17 @@ def get_draft(draft_id: str):
     return jsonify({"status": "success", "draft": _draft_to_dict(draft)})
 
 
-@bp.route("/api/soap/drafts/<draft_id>/approve", methods=["POST"])
-def approve_draft(draft_id: str):
-    """醫師審核核准：核對 content_hash、執行冪等檢查，成功後排入 HIS_PUSH 任務。"""
-    data = _json_object()
-    draft = _draft_or_404(draft_id)
-
+def _approve_draft_record(
+    store,
+    *,
+    draft,
+    reviewer_id: str,
+    presented_hash: str,
+    is_auto: bool = False,
+    request_path: str = "/api/soap/drafts/approve",
+) -> tuple[dict, int]:
+    """核心核准邏輯：content_hash 檢核、冪等檢查、狀態推進與 HIS_PUSH 排程。"""
     # 1. 驗證 content_hash（防止審核舊版）
-    presented_hash = data.get("content_hash")
     if not presented_hash or presented_hash != draft.content_hash:
         raise ApiError(
             "審核失敗：content_hash 與目前草稿版本不符（草稿可能已被更新或已被編修）",
@@ -136,27 +164,22 @@ def approve_draft(draft_id: str):
             status=409,
         )
 
-    eff_reviewer = str(data.get("reviewer_id") or caller_id() or "unknown_reviewer")
-    store = case_store()
-
     # 3. 冪等檢查（§8.6）：同一 case_id 與 content_hash 若已 pushed，不重複寫入
     already_pushed = store.find_pushed_soap_draft(draft.case_id, draft.content_hash)
     if already_pushed is not None:
-        return jsonify(
-            {
-                "status": "already_pushed",
-                "message": "同一案件與內容先前已成功寫入 HIS，略過重複寫入",
-                "draft_id": draft.draft_id,
-                "pushed_draft_id": already_pushed.draft_id,
-            }
-        ), 200
+        return {
+            "status": "already_pushed",
+            "message": "同一案件與內容先前已成功寫入 HIS，略過重複寫入",
+            "draft_id": draft.draft_id,
+            "pushed_draft_id": already_pushed.draft_id,
+        }, 200
 
     # 4. 狀態轉換：validated/failed -> approved -> queued
     try:
         draft = store.update_soap_draft_state(
-            draft_id,
+            draft.draft_id,
             STATE_APPROVED,
-            reviewer_id=eff_reviewer,
+            reviewer_id=reviewer_id,
             decision="approved",
         )
     except IllegalDraftTransitionError as exc:
@@ -167,7 +190,7 @@ def approve_draft(draft_id: str):
         store,
         s_type_code="HIS_PUSH",
         target_id=draft.case_id,
-        actor=eff_reviewer,
+        actor=reviewer_id,
         extra_payload={
             "draft_id": draft.draft_id,
             "case_id": draft.case_id,
@@ -179,17 +202,18 @@ def approve_draft(draft_id: str):
     )
 
     # 標記為 queued
-    draft = store.update_soap_draft_state(draft_id, STATE_QUEUED)
+    draft = store.update_soap_draft_state(draft.draft_id, STATE_QUEUED)
 
     # 審計紀錄（絕不記錄 SOAP 內文）
+    action_name = "soap_auto_accept_approve" if is_auto else "soap_review_approve"
     try:
         audit_log.record_access(
-            caller_id=eff_reviewer,
+            caller_id=reviewer_id,
             method="POST",
-            path=request.path,
+            path=request_path,
             status=200,
             detail={
-                "action": "soap_review_approve",
+                "action": action_name,
                 "draft_id": draft.draft_id,
                 "content_hash": draft.content_hash,
             },
@@ -197,7 +221,109 @@ def approve_draft(draft_id: str):
     except Exception as exc:
         current_app.logger.warning("寫入審計日誌失敗：%s", exc)
 
-    return jsonify({"status": "success", "draft": _draft_to_dict(draft), "job": job}), 200
+    return {"status": "success", "draft": _draft_to_dict(draft), "job": job}, 200
+
+
+def _maybe_auto_accept(store, draft, caller: str) -> Any:
+    """自動接入判定（D-30-04）：開關為 ON 且草稿通過品質檢核時自動核准並排入 HIS_PUSH。"""
+    is_enabled = store.get_setting("auto_accept_enabled", "false") == "true"
+    if not is_enabled:
+        return draft
+    if draft.state != STATE_VALIDATED:
+        return draft
+
+    auto_reviewer = f"auto-accept:{caller}"
+    res, _ = _approve_draft_record(
+        store,
+        draft=draft,
+        reviewer_id=auto_reviewer,
+        presented_hash=draft.content_hash,
+        is_auto=True,
+        request_path="/api/soap/recordings",
+    )
+    return store.get_soap_draft(draft.draft_id)
+
+
+VALID_AUTO_ACCEPT_REASONS = frozenset({"DEFAULT", "CLINIC_POLICY"})
+
+
+@bp.route("/api/soap/settings/auto-accept", methods=["GET"])
+def get_auto_accept_setting():
+    """取得自動接入設定（預設為 false，D-30-03）。"""
+    store = case_store()
+    enabled = store.get_setting("auto_accept_enabled", "false") == "true"
+    return jsonify({"status": "success", "enabled": enabled}), 200
+
+
+@bp.route("/api/soap/settings/auto-accept", methods=["PUT"])
+def update_auto_accept_setting():
+    """切換自動接入開關（D-30-04）。需非 Agent 金鑰，且寫入審計紀錄。"""
+    if getattr(g, "is_agent", False):
+        raise ApiError("Agent 金鑰權限不足，無法變更設定", status=403)
+
+    cur_caller = caller_id() or "anonymous"
+    admin_callers = os.getenv("ELC_SOAP_ADMIN_CALLERS", "").strip()
+    if admin_callers:
+        allowed = {c.strip() for c in admin_callers.split(",") if c.strip()}
+        if cur_caller not in allowed:
+            raise ApiError(f"呼叫方 '{cur_caller}' 無權限變更自動接入設定", status=403)
+
+    data = _json_object()
+    if "enabled" not in data:
+        raise ApiError("缺少 enabled 欄位", status=400)
+    new_enabled = bool(data["enabled"])
+
+    reason_code = str(data.get("reason_code") or "").strip()
+    if reason_code not in VALID_AUTO_ACCEPT_REASONS:
+        raise ApiError(
+            f"無效的 reason_code，僅支援 {', '.join(sorted(VALID_AUTO_ACCEPT_REASONS))}",
+            status=400,
+        )
+
+    store = case_store()
+    old_enabled = store.get_setting("auto_accept_enabled", "false") == "true"
+    store.set_setting("auto_accept_enabled", "true" if new_enabled else "false", updated_by=cur_caller)
+
+    # 審計紀錄（每次切換必記，不含 SOAP 或病患識別）
+    try:
+        audit_log.record_access(
+            caller_id=cur_caller,
+            method="PUT",
+            path=request.path,
+            status=200,
+            detail={
+                "action": "soap_auto_accept_toggle",
+                "old": old_enabled,
+                "new": new_enabled,
+                "changed": (old_enabled != new_enabled),
+                "reason_code": reason_code,
+                "caller": cur_caller,
+            },
+        )
+    except Exception as exc:
+        current_app.logger.warning("寫入審計日誌失敗：%s", exc)
+
+    return jsonify({"status": "success", "enabled": new_enabled}), 200
+
+
+@bp.route("/api/soap/drafts/<draft_id>/approve", methods=["POST"])
+def approve_draft(draft_id: str):
+    """醫師審核核准：核對 content_hash、執行冪等檢查，成功後排入 HIS_PUSH 任務。"""
+    data = _json_object()
+    draft = _draft_or_404(draft_id)
+
+    eff_reviewer = str(data.get("reviewer_id") or caller_id() or "unknown_reviewer")
+    presented_hash = str(data.get("content_hash") or "")
+    store = case_store()
+    res, code = _approve_draft_record(
+        store,
+        draft=draft,
+        reviewer_id=eff_reviewer,
+        presented_hash=presented_hash,
+        is_auto=False,
+        request_path=request.path,
+    )
+    return jsonify(res), code
 
 
 @bp.route("/api/soap/batches/<batch_id>/approve", methods=["POST"])

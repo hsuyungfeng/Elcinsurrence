@@ -1,0 +1,16 @@
+{
+  "_schema_version": 1,
+  "_assumptions": ["O2", "O3"],
+  "session_id": "sess_soapvoice_20261109_001",
+  "visit_date": "2026-11-09",
+  "patient_ref": "P123456789",
+  "case_id": "CASE-20261109-001",
+  "order_code": "28016C",
+  "soap": {
+    "s": "Patient reports persistent dry cough and rhinorrhea for 3 days.",
+    "o": "Chest clear on auscultation, throat mildly injected, no fever.",
+    "a": "J06.9 Acute upper respiratory infection, unspecified.",
+    "p": "Prescribed symptomatic relief medication, advised adequate hydration."
+  },
+  "soap_txt": "[S]\nPatient reports persistent dry cough and rhinorrhea for 3 days.\n[O]\nChest clear on auscultation, throat mildly injected, no fever.\n[A]\nJ06.9 Acute upper respiratory infection, unspecified.\n[P]\nPrescribed symptomatic relief medication, advised adequate hydration."
+}

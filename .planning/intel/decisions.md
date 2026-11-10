@@ -9,7 +9,7 @@ Phase 2: 包成 doctor-toolbox HIS 模組。
 source: progress.md §一 D1
 
 ## D2 — LLM 引擎
-llama.cpp server（localhost:8080），Ornith-1.0-9B Q6_K_XL，n_ctx 32768，OpenAI 相容 API。病歷個資不出本機。
+llama.cpp server（localhost:8080），Ornith-1.0-9B Q6_K_XL，n_ctx 32768，OpenAI 相容 API。病歷個資預設不出本機。**（2026-11-10 修訂：唯一例外為 D14 所定的加密夜間備份。）**
 source: progress.md §一 D2
 Elaborated by: docs/plans/2026-07-29-elc-audit-engine-design.md §2 (config/llama_config.json 模式)
 
@@ -60,7 +60,7 @@ source: progress.md §一 D11
 Elaborated by: docs/plans/2026-07-29-elc-audit-engine-design.md §7-8
 
 ## D12 — 自我學習與分享
-三回饋訊號：逐條審狀態（採用率→prompt改進）、標記不符事實（自動長大的金標準測試集）、申復結果（終極ground truth）。成功案例入 ChromaDB 案例庫作 few-shot 範例；累積後走 LoRA（prepare_lora_data.py 路徑現成）。兩級隱私：含病歷永留本機；rule_mapping/論述骨架/統計可經 doctor-toolbox 跨診所分享。
+三回饋訊號：逐條審狀態（採用率→prompt改進）、標記不符事實（自動長大的金標準測試集）、申復結果（終極ground truth）。成功案例入 ChromaDB 案例庫作 few-shot 範例；累積後走 LoRA（prepare_lora_data.py 路徑現成）。兩級隱私（**2026-11-10 修訂**）：病歷雲端僅存 D14 加密備份，伺服器不持有金鑰；rule_mapping/論述骨架/統計可經 doctor-toolbox 跨診所分享。
 source: progress.md §一 D12
 
 ---
@@ -88,3 +88,20 @@ source: progress.md §三
 2. 條文層（PageIndex）: 語料 officialdocument/審查注意事項/*.doc(x)；rule_mapping 預編譯快取 (醫令代碼,科別,文件版本)→[條文位置,條文全文]
 3. 輔助層（ChromaDB）: 自由文字/類似案例查詢
 Elaborated by: docs/plans/2026-07-29-elc-audit-engine-design.md §3.1-3.3 (adds: metadata 檢索以就醫科別 d8 過濾; rule_mapping 更新與 DrtoolBox /medicalorderupdate 流程銜接)
+
+---
+
+## D14 — 雲端備份政策（2026-11-10 新增，修訂 D2、D12）
+- 預設模式：本機模式（病歷與 SOAP 留在本機，維持醫師既有 HIS 習慣）。雲端只接收加密備份與無病患識別的校正結構；選用網頁版（DrToolbox 全雲端）不作為預設，須待法律確認與資料處理合約後由診所自行選擇。
+- 範圍：local server 產生的病歷、SOAP、審核軌跡、校正設定；由 local server 夜間（預設 02:00）事後上傳。
+- 加密：客戶端 AES-256-GCM 加密；每診所金鑰在本機產生並保存，雲端只存密文。金鑰遺失即不可還原，須有離線備份金鑰。
+- 權限分離（2026-11-10 補充）：下載權限與解密金鑰分離。雲端以診所 local server 憑證控制下載；解密金鑰只存在本機，雲端永不持有。
+- 離線金鑰匯出：診所可將解密金鑰匯出為離線檔（加密、由醫師保管），金鑰遺失時以離線檔還原。
+- 還原流程：不依賴正在運作的 local server；提供獨立還原工具，可在無 local server 的機器上以離線金鑰還原。
+- 授權：每台 local server 以診所專用、可撤銷的備份憑證上傳，僅能寫入本診所命名空間。
+- 稽核：每次上傳寫審計紀錄（時間、筆數、雜湊），不含內容。
+- 失效容忍：上傳失敗不影響看診，下次重試。
+- 最小化：只備份必要欄位；不含病患識別的校正結構可不加密，但仍需授權。
+- 合規：上傳前須完成個資法與醫療法確認；本決定不構成法律意見。
+source: 使用者決定 2026-11-10；修訂 D2、D12
+

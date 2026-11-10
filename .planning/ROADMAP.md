@@ -103,6 +103,14 @@ Full phase details, success criteria, and requirements: [`milestones/v1.1-ROADMA
 
 - [ ] Phase 10: VPN／實機串接（0/1 plans）— 雲端病歷 Provider、NHI_EIIAPI wrapper、Local Gateway 七元件。阻塞於外部依賴，不計入 v1.0 範圍。
 
+### Phase 30: Windows 執行檔、錄音→SOAP 審核與 HIS 首次校正
+
+**Depends on:** Phase 29（SOAP 審核＋HIS 回寫，分支 `feat/phase-29-soap-his-writeback`，尚未合併）
+**Mode:** standard
+**Context:** `.planning/phases/30-windows-exe-soap-review-calibration/30-CONTEXT.md`
+
+- [ ] Phase 30: Windows 執行檔、錄音→SOAP 審核與 HIS 首次校正（0/0 plans）— 解壓即用的 agent-desktop 執行檔（自動尋找區網 local server）；SoapVoice 錄音完成後跳出 SOAP 審核視窗，醫師修改後寫入 HIS（可選自動接入或每案先審查，預設每案先審查）；HIS 歷史介面首次使用校正（列出 SOAP 校正項逐項人工確認，診斷碼／醫令／藥令僅顯示建議）。
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |

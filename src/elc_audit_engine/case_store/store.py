@@ -17,7 +17,10 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from config.settings import CASES_DB_PATH
+try:
+    from config.settings import CASES_DB_PATH
+except ImportError:
+    CASES_DB_PATH = "data/db/cases.sqlite3"
 from elc_audit_engine.case_store import db as case_db
 from elc_audit_engine.case_store.soap_draft_states import (
     ALL_DRAFT_STATES,
@@ -1052,5 +1055,74 @@ class CaseStore:
                     }
                 )
             return results
+        finally:
+            conn.close()
+
+    def get_recording_session(self, session_id: str) -> dict | None:
+        """Lookup recording session by session_id for idempotency (Phase 30)."""
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT session_id, draft_id, caller, created_at FROM soap_recording_sessions WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            return dict(row)
+        finally:
+            conn.close()
+
+    def put_recording_session(self, session_id: str, draft_id: str, caller: str | None = None) -> None:
+        """Record recording session mapping (session_id -> draft_id) (Phase 30)."""
+        now = _now_iso()
+        conn = self._connect()
+        try:
+            with conn:
+                conn.execute(
+                    "INSERT INTO soap_recording_sessions (session_id, draft_id, caller, created_at) VALUES (?, ?, ?, ?)",
+                    (session_id, draft_id, caller, now),
+                )
+        finally:
+            conn.close()
+
+    def get_setting(self, key: str, default: str | None = None) -> str | None:
+        """Read a configuration value from soap_settings (Phase 30)."""
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT value FROM soap_settings WHERE key = ?",
+                (key,),
+            ).fetchone()
+            if row is None:
+                return default
+            return row["value"]
+        finally:
+            conn.close()
+
+    def list_soap_drafts_by_state(self, state: str, limit: int = 50) -> list[SoapDraftRecord]:
+        """Query soap_drafts by state ordered by created_at ASC (Phase 30)."""
+        conn = self._connect()
+        try:
+            cur = conn.execute(
+                "SELECT * FROM soap_drafts WHERE state = ? ORDER BY created_at ASC LIMIT ?",
+                (state, max(1, min(limit, 50))),
+            )
+            rows = cur.fetchall()
+            return [_row_to_soap_draft_record(r) for r in rows]
+        finally:
+            conn.close()
+
+    def set_setting(self, key: str, value: str, updated_by: str | None = None) -> None:
+        """Upsert a configuration value into soap_settings (Phase 30)."""
+        now = _now_iso()
+        conn = self._connect()
+        try:
+            with conn:
+                conn.execute(
+                    "INSERT INTO soap_settings (key, value, updated_at, updated_by) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(key) DO UPDATE SET "
+                    "value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by",
+                    (key, value, now, updated_by),
+                )
         finally:
             conn.close()

@@ -52,7 +52,7 @@ source: progress.md §二 (LOCKED)
 | # | Decision |
 |---|---|
 | D1 | Two-phase roadmap: standalone engine (Phase 1) → doctor-toolbox HIS module (Phase 2) |
-| D2 | LLM engine: llama.cpp server (localhost:8080), Ornith-1.0-9B Q6_K_XL, n_ctx 32768, OpenAI-compatible API. Patient data never leaves the machine. |
+| D2 | LLM engine: llama.cpp server (localhost:8080), Ornith-1.0-9B Q6_K_XL, n_ctx 32768, OpenAI-compatible API. Patient data never leaves the machine **（2026-11-10 修訂：病患資料預設不離開本機；唯一例外為 D14 所定的加密夜間備份）**。|
 | D3 | Reinforcement + appeal generation share one comparison pipeline; only output differs |
 | D4 | Tech stack reuse from `~/Desktop/DrtoolboxLocalServer`: Python + uv, Flask, python-docx, pandas, pageindex, SQLite |
 | D5 | Reinforcement report integrates ~6 months of cloud medical records via a Provider interface; local-file Provider substitutes when cloud is unavailable |
@@ -62,8 +62,9 @@ source: progress.md §二 (LOCKED)
 | D9 | Physician review: line-by-line (採用/編輯後採用/略過/標記不符事實) + final full-draft edit pass; full audit trail JSON retained |
 | D10 | Appeal structure: 4 assembled sections (案情摘要/醫療必要性/規則依據/病歷佐證), independently generated, trimmed ④→② first if >2000 chars, P6 hard-coded to 0 when not appealing |
 | D11 | Layered failure degradation (LLM timeout → manual-review flag, doesn't block case) + 5-tier test strategy |
-| D12 | Self-learning feedback loop: adoption-rate + hallucination-flag + appeal-outcome signals feed prompt/LoRA improvement; two-tier privacy (record data stays local; rule_mapping/argument skeletons/stats may be shared cross-clinic via doctor-toolbox) |
+| D12 | Self-learning feedback loop: adoption-rate + hallucination-flag + appeal-outcome signals feed prompt/LoRA improvement; two-tier privacy (record data stays local; rule_mapping/argument skeletons/stats may be shared cross-clinic via doctor-toolbox) | **（2026-11-10 修訂見 D14：病歷雲端僅存加密備份，伺服器不持有金鑰）**
 | D13 | (v1.1) Evidence-packet attachment lookup must key off `case.case_seq`, not `case_id` — the two are distinct, independently-populated columns in `CaseRecord`, and `attachment_store` writes exclusively to the `case_seq` keyspace. Found via milestone audit cross-phase integration check, fixed same-day (`3f7f097`). ✓ Good — codified as regression test. |
+| D14 | （2026-11-10 新增）雲端備份政策：local server 夜間事後上傳加密備份（AES-256-GCM，客戶端加密，每診所金鑰存於本機、雲端僅存密文，金鑰遺失即不可還原）；每台 local server 以診所專用、可撤銷的備份憑證上傳，僅能寫入本診所命名空間；每次上傳寫審計紀錄（時間、筆數、雜湊，不含內容）；上傳失敗不影響看診、下次重試。上傳前須完成個資法與醫療法確認（本決定不構成法律意見）。 | **（2026-11-10 補充：下載權限與解密金鑰分離，金鑰只在本機；離線金鑰匯出；還原不依賴 local server。預設為本機模式，雲端僅接收加密備份與校正結構；網頁版 DrToolbox 全雲端為選用，待法律確認後由診所自行選擇。）**
 
 source: progress.md §一 (D1-D12, LOCKED); v1.1-MILESTONE-AUDIT.md (D13)
 

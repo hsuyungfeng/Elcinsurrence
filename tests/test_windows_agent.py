@@ -14,6 +14,12 @@ from elc_audit_engine.agent_desktop_bridge import (
     WriteResult,
 )
 from elc_audit_engine.case_store.soap_draft_states import compute_soap_content_hash
+from elc_audit_engine.his_calibration import (
+    CalibrationItem,
+    CalibrationProfile,
+    CalibrationStore,
+    new_machine_id,
+)
 
 
 class MockHttpClient:
@@ -42,9 +48,17 @@ class MockHttpClient:
 
 
 class FakeAutomator:
-    def __init__(self, override_readback: Optional[Dict[str, str]] = None, raise_exc: Optional[Exception] = None):
+    def __init__(
+        self,
+        override_readback: Optional[Dict[str, str]] = None,
+        raise_exc: Optional[Exception] = None,
+        profiles: Optional[Dict[str, Any]] = None,
+    ):
         self.override_readback = override_readback
         self.raise_exc = raise_exc
+        self.profiles = (
+            profiles if profiles is not None else {"vision": {"calibrated": True}}
+        )
         self.calls: List[Dict[str, Any]] = []
 
     def push_case_to_his(
@@ -165,8 +179,8 @@ def test_windows_agent_uncalibrated_profile_rejected():
         http_client=http_mock,
         allow_uncalibrated=True,
     )
-    res = agent.run_once()
-    assert res is not None
+    # 領取前即被閘門擋下；execute_job 仍需獨立拒絕寫入（縱深防禦）
+    res = agent.execute_job({"job_id": "J1", "payload": {}})
     assert res["status"] == "failed"
     assert res["reason"] == "uncalibrated_profile"
 
@@ -212,6 +226,18 @@ def test_windows_agent_writes_only_soap_never_icd10():
         return None
 
     real_automator.runner.set_mock_driver(mock_driver)
+    real_automator.profiles = {
+        "vision": {
+            "calibrated": True,
+            "fields": {
+                "soap_s": {"automation_id": "txtSubjective", "name": "主訴", "role": "Edit"},
+                "soap_o": {"automation_id": "txtObjective", "name": "客觀檢查", "role": "Edit"},
+                "soap_a": {"automation_id": "txtAssessment", "name": "臨床評估", "role": "Edit"},
+                "soap_p": {"automation_id": "txtPlan", "name": "治療計畫", "role": "Edit"},
+                "icd10": {"automation_id": "txtICD10", "name": "主診斷碼", "role": "Edit"},
+            },
+        }
+    }
     config = AgentConfig(
         server_url="http://localhost:5000",
         agent_id="agent-desk-01",
@@ -222,6 +248,7 @@ def test_windows_agent_writes_only_soap_never_icd10():
         config=config,
         automator=real_automator,
         http_client=http_mock,
+        current_patient_getter=lambda: "CASE-SOAP-ONLY",
     )
     res = agent.run_once()
     assert res is not None
@@ -277,7 +304,12 @@ def test_windows_agent_readback_mismatch():
         agent_key="key_agent_123",
         calibrated=True,
     )
-    agent = WindowsAgent(config=config, automator=automator, http_client=http_mock)
+    agent = WindowsAgent(
+        config=config,
+        automator=automator,
+        http_client=http_mock,
+        current_patient_getter=lambda: "CASE-WIN-01",
+    )
     res = agent.run_once()
     assert res is not None
     assert res["status"] == "failed"
@@ -299,7 +331,12 @@ def test_windows_agent_ui_error():
         agent_key="key_agent_123",
         calibrated=True,
     )
-    agent = WindowsAgent(config=config, automator=automator, http_client=http_mock)
+    agent = WindowsAgent(
+        config=config,
+        automator=automator,
+        http_client=http_mock,
+        current_patient_getter=lambda: "CASE-WIN-01",
+    )
     res = agent.run_once()
     assert res is not None
     assert res["status"] == "failed"
@@ -323,10 +360,319 @@ def test_windows_agent_phi_log_safety(caplog):
         agent_key="key_agent_123",
         calibrated=True,
     )
-    agent = WindowsAgent(config=config, automator=automator, http_client=http_mock)
+    agent = WindowsAgent(
+        config=config,
+        automator=automator,
+        http_client=http_mock,
+        current_patient_getter=lambda: "CASE-WIN-01",
+    )
     res = agent.run_once()
     assert res["status"] == "success"
 
     # Verify secret_text is NEVER recorded in logs
     for record in caplog.records:
         assert secret_text not in record.getMessage()
+
+
+# --- Phase 30 Plan 01 Task 1: Calibration Gate & Fail-Closed Patient Tests ---
+
+def test_windows_agent_config_true_profile_false_fails_execute():
+    """Test 1: config.calibrated=True 且 profile.calibrated=False 時，execute_job 不寫入，reason 為 uncalibrated_profile"""
+    sample_job = _make_sample_job()
+    http_mock = MockHttpClient(pending_jobs=[sample_job])
+    automator = FakeAutomator(profiles={"vision": {"calibrated": False}})
+
+    config = AgentConfig(
+        server_url="http://localhost:5000",
+        agent_id="agent-desk-01",
+        agent_key="key_agent_123",
+        calibrated=True,
+    )
+    # allow_uncalibrated=True lets agent start, but execute_job must still reject
+    agent = WindowsAgent(
+        config=config,
+        automator=automator,
+        http_client=http_mock,
+        allow_uncalibrated=True,
+        current_patient_getter=lambda: "CASE-WIN-01",
+    )
+    # 領取前即被閘門擋下；execute_job 仍需獨立拒絕寫入（縱深防禦）
+    res = agent.execute_job({"job_id": "J1", "payload": {}})
+    assert res["status"] == "failed"
+    assert res["reason"] == "uncalibrated_profile"
+    assert len(automator.calls) == 0
+
+
+def test_windows_agent_config_false_profile_true_startup_raises():
+    """Test 2: config.calibrated=False 且 profile.calibrated=True 時，validate_startup_calibration 拋出 UncalibratedVendorProfileError"""
+    automator = FakeAutomator(profiles={"vision": {"calibrated": True}})
+    config = AgentConfig(
+        server_url="http://localhost:5000",
+        agent_id="agent-desk-01",
+        agent_key="key_agent_123",
+        calibrated=False,
+    )
+    with pytest.raises(UncalibratedVendorProfileError):
+        WindowsAgent(config=config, automator=automator, http_client=MockHttpClient())
+
+
+def test_windows_agent_both_calibrated_success():
+    """Test 3: 兩者皆 True 且 getter 回傳與 job case_id 相同的病患，寫入成功"""
+    sample_job = _make_sample_job()
+    http_mock = MockHttpClient(pending_jobs=[sample_job])
+    automator = FakeAutomator(profiles={"vision": {"calibrated": True}})
+    config = AgentConfig(
+        server_url="http://localhost:5000",
+        agent_id="agent-desk-01",
+        agent_key="key_agent_123",
+        calibrated=True,
+    )
+    agent = WindowsAgent(
+        config=config,
+        automator=automator,
+        http_client=http_mock,
+        current_patient_getter=lambda: "CASE-WIN-01",
+    )
+    res = agent.run_once()
+    assert res is not None
+    assert res["status"] == "success"
+    assert len(automator.calls) == 1
+
+
+def test_windows_agent_patient_getter_none_fail_closed():
+    """Test 4: current_patient_getter 為 None 時，execute_job 不寫入，reason 為 patient_check_unavailable"""
+    sample_job = _make_sample_job()
+    http_mock = MockHttpClient(pending_jobs=[sample_job])
+    automator = FakeAutomator(profiles={"vision": {"calibrated": True}})
+    config = AgentConfig(
+        server_url="http://localhost:5000",
+        agent_id="agent-desk-01",
+        agent_key="key_agent_123",
+        calibrated=True,
+    )
+    agent = WindowsAgent(
+        config=config,
+        automator=automator,
+        http_client=http_mock,
+        current_patient_getter=None,
+    )
+    res = agent.run_once()
+    assert res is not None
+    assert res["status"] == "failed"
+    assert res["reason"] == "patient_check_unavailable"
+    assert len(automator.calls) == 0
+
+
+def test_windows_agent_patient_getter_empty_or_error_fail_closed():
+    """Test 5: getter 回傳 None、空字串或拋出例外時，不寫入"""
+    sample_job = _make_sample_job()
+    config = AgentConfig(
+        server_url="http://localhost:5000",
+        agent_id="agent-desk-01",
+        agent_key="key_agent_123",
+        calibrated=True,
+    )
+
+    # Empty string
+    http_mock1 = MockHttpClient(pending_jobs=[sample_job])
+    automator1 = FakeAutomator(profiles={"vision": {"calibrated": True}})
+    agent1 = WindowsAgent(config=config, automator=automator1, http_client=http_mock1, current_patient_getter=lambda: "")
+    res1 = agent1.run_once()
+    assert res1["status"] == "failed"
+    assert res1["reason"] == "patient_check_unavailable"
+    assert len(automator1.calls) == 0
+
+    # Returns None
+    http_mock2 = MockHttpClient(pending_jobs=[sample_job])
+    automator2 = FakeAutomator(profiles={"vision": {"calibrated": True}})
+    agent2 = WindowsAgent(config=config, automator=automator2, http_client=http_mock2, current_patient_getter=lambda: None)
+    res2 = agent2.run_once()
+    assert res2["status"] == "failed"
+    assert res2["reason"] == "patient_check_unavailable"
+    assert len(automator2.calls) == 0
+
+    # Raises Exception
+    def _raising_getter():
+        raise RuntimeError("UIA inaccessible")
+
+    http_mock3 = MockHttpClient(pending_jobs=[sample_job])
+    automator3 = FakeAutomator(profiles={"vision": {"calibrated": True}})
+    agent3 = WindowsAgent(config=config, automator=automator3, http_client=http_mock3, current_patient_getter=_raising_getter)
+    res3 = agent3.run_once()
+    assert res3["status"] == "failed"
+    assert res3["reason"] == "patient_check_unavailable"
+    assert len(automator3.calls) == 0
+
+
+def _build_ready_profile(vendor_key: str, machine_id: str) -> CalibrationProfile:
+    items = [
+        CalibrationItem(item_key="soap_s.input", section="S", kind="writable", status="confirmed", confirmed={"automation_id": "txtSubjective"}),
+        CalibrationItem(item_key="soap_o.input", section="O", kind="writable", status="confirmed", confirmed={"automation_id": "txtObjective"}),
+        CalibrationItem(item_key="soap_a.input", section="A", kind="writable", status="confirmed", confirmed={"automation_id": "txtAssessment"}),
+        CalibrationItem(item_key="soap_p.input", section="P", kind="writable", status="confirmed", confirmed={"automation_id": "txtPlan"}),
+        CalibrationItem(item_key="patient_id.check", section="PATIENT_ID", kind="identity_check", status="confirmed", confirmed={"automation_id": "txtPatientId"}),
+        CalibrationItem(item_key="save_button.action", section="SAVE_BUTTON", kind="save_action", status="confirmed", confirmed={"automation_id": "btnSave"}),
+    ]
+    return CalibrationProfile(
+        vendor_key=vendor_key,
+        machine_id=machine_id,
+        items=items,
+        readback_test_passed=True,
+    )
+
+
+def test_windows_agent_gate_task2_test1_no_profile_fails(tmp_path):
+    """Test 1: 無校正檔（store.load 回傳 None）時 _writeback_allowed 為 False，execute_job 回報 uncalibrated_profile，不呼叫寫入"""
+    store = CalibrationStore(base_dir=tmp_path)
+    machine_id = new_machine_id()
+    config = AgentConfig(
+        server_url="http://localhost:5000",
+        agent_id="agent-01",
+        agent_key="key-01",
+        calibrated=True,
+    )
+    automator = FakeAutomator()
+    http_mock = MockHttpClient()
+    agent = WindowsAgent(
+        config=config,
+        automator=automator,
+        http_client=http_mock,
+        current_patient_getter=lambda: "CASE-WIN-01",
+        calibration_store=store,
+        machine_id=machine_id,
+        allow_uncalibrated=True,
+    )
+    assert agent._writeback_allowed() is False
+    res = agent.execute_job(_make_sample_job())
+    assert res["status"] == "failed"
+    assert res["reason"] == "uncalibrated_profile"
+    assert len(automator.calls) == 0
+
+
+def test_windows_agent_gate_task2_test2_unready_profile_fails(tmp_path):
+    """Test 2: 校正檔存在但 is_ready 為 False 時，同上"""
+    store = CalibrationStore(base_dir=tmp_path)
+    machine_id = new_machine_id()
+    # Profile exists but readback_test_passed=False
+    prof = _build_ready_profile("vision", machine_id)
+    prof.readback_test_passed = False
+    store.save(prof)
+
+    config = AgentConfig(
+        server_url="http://localhost:5000",
+        agent_id="agent-01",
+        agent_key="key-01",
+        calibrated=True,
+    )
+    automator = FakeAutomator()
+    http_mock = MockHttpClient()
+    agent = WindowsAgent(
+        config=config,
+        automator=automator,
+        http_client=http_mock,
+        current_patient_getter=lambda: "CASE-WIN-01",
+        calibration_store=store,
+        machine_id=machine_id,
+        allow_uncalibrated=True,
+    )
+    assert agent._writeback_allowed() is False
+    res = agent.execute_job(_make_sample_job())
+    assert res["status"] == "failed"
+    assert res["reason"] == "uncalibrated_profile"
+    assert len(automator.calls) == 0
+
+
+def test_windows_agent_gate_task2_test3_ready_profile_and_config_calibrated_success(tmp_path):
+    """Test 3: 校正檔 ready 且 config.calibrated=True 時允許寫入"""
+    store = CalibrationStore(base_dir=tmp_path)
+    machine_id = new_machine_id()
+    prof = _build_ready_profile("vision", machine_id)
+    store.save(prof)
+
+    config = AgentConfig(
+        server_url="http://localhost:5000",
+        agent_id="agent-01",
+        agent_key="key-01",
+        calibrated=True,
+    )
+    automator = FakeAutomator()
+    http_mock = MockHttpClient()
+    agent = WindowsAgent(
+        config=config,
+        automator=automator,
+        http_client=http_mock,
+        current_patient_getter=lambda: "CASE-WIN-01",
+        calibration_store=store,
+        machine_id=machine_id,
+    )
+    assert agent._writeback_allowed() is True
+    res = agent.execute_job(_make_sample_job())
+    assert res["status"] == "success"
+    assert len(automator.calls) == 1
+
+
+def test_windows_agent_gate_task2_test4_ready_profile_but_config_uncalibrated_rejected(tmp_path):
+    """Test 4: 校正檔 ready 但 config.calibrated=False 時仍拒絕（AND）"""
+    store = CalibrationStore(base_dir=tmp_path)
+    machine_id = new_machine_id()
+    prof = _build_ready_profile("vision", machine_id)
+    store.save(prof)
+
+    config = AgentConfig(
+        server_url="http://localhost:5000",
+        agent_id="agent-01",
+        agent_key="key-01",
+        calibrated=False,
+    )
+    automator = FakeAutomator()
+    http_mock = MockHttpClient()
+    agent = WindowsAgent(
+        config=config,
+        automator=automator,
+        http_client=http_mock,
+        current_patient_getter=lambda: "CASE-WIN-01",
+        calibration_store=store,
+        machine_id=machine_id,
+        allow_uncalibrated=True,
+    )
+    assert agent._writeback_allowed() is False
+    res = agent.execute_job(_make_sample_job())
+    assert res["status"] == "failed"
+    assert res["reason"] == "uncalibrated_profile"
+    assert len(automator.calls) == 0
+
+
+def test_windows_agent_gate_task2_test5_allow_uncalibrated_only_affects_startup(tmp_path):
+    """Test 5: allow_uncalibrated=True 只影響 validate_startup_calibration，execute_job 仍拒絕未 ready 的寫入"""
+    store = CalibrationStore(base_dir=tmp_path)
+    machine_id = new_machine_id()
+    # Unready profile
+    prof = _build_ready_profile("vision", machine_id)
+    prof.readback_test_passed = False
+    store.save(prof)
+
+    config = AgentConfig(
+        server_url="http://localhost:5000",
+        agent_id="agent-01",
+        agent_key="key-01",
+        calibrated=True,
+    )
+    automator = FakeAutomator()
+    http_mock = MockHttpClient()
+    # Startup succeeds due to allow_uncalibrated=True
+    agent = WindowsAgent(
+        config=config,
+        automator=automator,
+        http_client=http_mock,
+        current_patient_getter=lambda: "CASE-WIN-01",
+        calibration_store=store,
+        machine_id=machine_id,
+        allow_uncalibrated=True,
+    )
+    # But execute_job still rejects uncalibrated profile
+    res = agent.execute_job(_make_sample_job())
+    assert res["status"] == "failed"
+    assert res["reason"] == "uncalibrated_profile"
+    assert len(automator.calls) == 0
+
+

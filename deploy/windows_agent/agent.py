@@ -34,6 +34,7 @@ from elc_audit_engine.case_store.soap_draft_states import (
     canonical_soap_text,
     compute_soap_content_hash,
 )
+from elc_audit_engine.his_calibration import CalibrationStore, is_ready
 
 logger = logging.getLogger("windows_agent")
 
@@ -107,6 +108,8 @@ class WindowsAgent:
         http_client: Any = None,
         current_patient_getter: Optional[Callable[[], Optional[str]]] = None,
         allow_uncalibrated: bool = False,
+        calibration_store: Optional[CalibrationStore] = None,
+        machine_id: Optional[str] = None,
     ):
         self.config = config
         self.automator = automator or HISPushAutomator(runner=AgentDesktopRunner())
@@ -116,36 +119,55 @@ class WindowsAgent:
         )
         self.current_patient_getter = current_patient_getter
         self.allow_uncalibrated = allow_uncalibrated
+        self.calibration_store = calibration_store
+        self.machine_id = machine_id
         self._last_heartbeat_time = 0.0
 
         # §7.4: Agent 啟動時檢查並拒絕未校準的廠商設定
         self.validate_startup_calibration()
 
+    def _is_profile_calibrated(self) -> bool:
+        """Check if the selected vendor profile is marked calibrated (legacy fallback)."""
+        if hasattr(self.automator, "profiles") and isinstance(self.automator.profiles, dict):
+            prof = self.automator.profiles.get(self.config.vendor_key)
+            if isinstance(prof, dict):
+                return bool(prof.get("calibrated", False))
+        return False
+
+    def _writeback_allowed(self) -> bool:
+        """Unified calibration gate: both config.calibrated AND calibration profile readiness must be True (§7.4, D-30-11)."""
+        if not self.config.calibrated:
+            return False
+
+        if self.calibration_store is not None:
+            prof = self.calibration_store.load(self.config.vendor_key, self.machine_id or "")
+            return bool(prof and is_ready(prof))
+
+        # Legacy fallback when calibration_store is not injected (e.g. Phase 29 tests):
+        # NOTE: profile.calibrated is retained for backwards-compatibility, but production agents
+        # must use CalibrationStore and is_ready check.
+        return self._is_profile_calibrated()
+
     def validate_startup_calibration(self) -> None:
         """Validate vendor profile calibration at agent startup (§7.4)."""
-        is_calibrated = self.config.calibrated
-        if not is_calibrated and hasattr(self.automator, "profiles"):
-            prof = self.automator.profiles.get(self.config.vendor_key)
-            if prof and prof.get("calibrated"):
-                is_calibrated = True
-
-        if not is_calibrated and not self.allow_uncalibrated:
+        if not self._writeback_allowed() and not self.allow_uncalibrated:
             raise UncalibratedVendorProfileError(
                 f"HIS 廠商設定檔 '{self.config.vendor_key}' 尚未於現場完成校準，"
                 f"依 29-DESIGN.md §7.4 規範禁止啟動並執行正式寫入。"
-                f"如為測試環境，請顯式設定 allow_uncalibrated=True 或 config.calibrated=True。"
+                f"如為測試環境，請顯式設定 allow_uncalibrated=True。"
             )
 
     def send_heartbeat(self) -> bool:
         """Report agent heartbeat to the central server."""
+        calibrated = self._writeback_allowed()
         payload = {
             "agent_id": self.config.agent_id,
             "version": self.config.version,
             "his_vendor": self.config.vendor_key,
-            "his_status": "READY",
+            "his_status": "READY" if calibrated else "STANDBY",
             "meta": {
                 "app_name": self.config.app_name,
-                "calibrated": self.config.calibrated,
+                "calibrated": calibrated,
             },
         }
         status, data = self.http_client.request("POST", "/api/agent/heartbeat", payload)
@@ -210,25 +232,48 @@ class WindowsAgent:
             expected_hash,
         )
 
-        # 1. Check vendor calibration (§7.4)
-        if not self.config.calibrated:
+        # 1. Check vendor calibration (§7.4, D-30-11)
+        if not self._writeback_allowed():
             reason = "uncalibrated_profile"
-            logger.error("Vendor profile %s is not calibrated! Rejecting writeback.", self.config.vendor_key)
+            logger.error(
+                "Vendor profile %s is not calibrated! Rejecting writeback for job_id=%s",
+                self.config.vendor_key,
+                job_id,
+            )
             self.report_job_status(job_id, "FAILED", failure_reason=reason)
             return {"status": "failed", "job_id": job_id, "reason": reason}
 
-        # 2. Patient match verification (§8.2)
-        if self.current_patient_getter is not None:
+        # 2. Patient match verification (§8.2, fail-closed)
+        if self.current_patient_getter is None:
+            reason = "patient_check_unavailable"
+            logger.error("current_patient_getter is not configured (fail-closed) for job_id=%s", job_id)
+            self.report_job_status(job_id, "FAILED", failure_reason=reason)
+            return {"status": "failed", "job_id": job_id, "reason": reason}
+
+        try:
             active_case_id = self.current_patient_getter()
-            if active_case_id and active_case_id != case_id:
-                reason = "patient_mismatch"
-                logger.error(
-                    "Patient mismatch! Expected case_id=%s, currently active in HIS=%s",
-                    case_id,
-                    active_case_id,
-                )
-                self.report_job_status(job_id, "FAILED", failure_reason=reason)
-                return {"status": "failed", "job_id": job_id, "reason": reason}
+        except Exception as exc:
+            reason = "patient_check_unavailable"
+            logger.error("current_patient_getter error for job_id=%s: %s", job_id, type(exc).__name__)
+            self.report_job_status(job_id, "FAILED", failure_reason=reason)
+            return {"status": "failed", "job_id": job_id, "reason": reason}
+
+        if not active_case_id or not str(active_case_id).strip():
+            reason = "patient_check_unavailable"
+            logger.error("Active patient in HIS is empty (fail-closed) for job_id=%s", job_id)
+            self.report_job_status(job_id, "FAILED", failure_reason=reason)
+            return {"status": "failed", "job_id": job_id, "reason": reason}
+
+        if active_case_id != case_id:
+            reason = "patient_mismatch"
+            logger.error(
+                "Patient mismatch for job_id=%s! Expected length=%d, active length=%d",
+                job_id,
+                len(case_id),
+                len(active_case_id),
+            )
+            self.report_job_status(job_id, "FAILED", failure_reason=reason)
+            return {"status": "failed", "job_id": job_id, "reason": reason}
 
         # 3. Write via Automator (§8.3, §8.9 只寫 S/O/A/P)
         try:
@@ -282,6 +327,11 @@ class WindowsAgent:
         now = time.time()
         if now - self._last_heartbeat_time >= self.config.heartbeat_interval:
             self.send_heartbeat()
+
+        # 待命（未校正）時不領取 HIS_PUSH 任務：領取後才拒絕會把排隊中的任務標成 FAILED，
+        # 校正完成後就永久遺失。任務留在伺服器佇列，等 READY 後再由正常流程處理。
+        if not self._writeback_allowed():
+            return None
 
         jobs = self.poll_pending_jobs()
         if not jobs:

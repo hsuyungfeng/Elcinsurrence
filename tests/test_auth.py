@@ -247,7 +247,10 @@ def test_index_no_key_returns_200(app_client):
 def test_health_no_key_returns_200(app_client):
     r = app_client.get("/api/health")
     assert r.status_code == 200
-    assert r.get_json() == {"status": "ok"}
+    body = r.get_json()
+    # Phase 30 (30-03)：健康端點新增 service 身分欄位供區網探索，核心契約仍是 status=ok
+    assert body["status"] == "ok"
+    assert body["service"] == "elc-audit-engine"
 
 
 def test_audit_log_records_correct_caller_id(app_client, tmp_path, monkeypatch):

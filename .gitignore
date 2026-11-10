@@ -58,3 +58,8 @@ data/evidence_vault/
 *.sqlite3
 data/*.sqlite3
 data/db/*.sqlite3
+
+# Windows 打包產物（內含 clinic 金鑰，禁止提交）
+ElcAgent-win64*.zip
+ElcAgent-win64*.sha256
+TOTFA.zip
