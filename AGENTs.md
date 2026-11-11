@@ -118,6 +118,17 @@ When operating within the Herdr terminal workspace manager (`HERDR_ENV=1`), task
 
 ---
 
+## 5b. Windows Probe (MockHIS) Invariants
+
+Applies to `deploy/windows_agent/mock_his/`. These were learned the hard way on WinBoat (2026-11-11):
+
+1. **MockHIS must expose native controls.** Tkinter children are invisible to UI Automation (the snapshot only shows the title bar). Keep the Win32 EDIT/STATIC implementation; do not revert to Tkinter.
+2. **Snapshot shape (agent-desktop 2.6).** Parse `data.tree` recursively; refs are `ref_id`; text fields appear as role `textfield`, and their `name` is the field label. There is no `get-value` command: read with `get <REF> --property value` and parse `data.value`. Write with `set-value`.
+3. **Launch with `pythonw`.** A `python.exe` console window also matches `--app python` and triggers `AMBIGUOUS_TARGET`.
+4. **Fail closed.** The probe acts only on windows whose title contains `MockHIS`. Do not widen this without an explicit request.
+5. **`--test-vendor` is for demo-data test VMs only.** Never ship it in a handoff bundle, and never run it against a real HIS.
+6. **Handoff bundles** must not contain `JHISX/`, `*.mdb`, or any patient-related data. Keep the SHA-256 in the operator guide in sync with the zip.
+
 ## 6. Deployment & Service Stability (systemd)
 
 The production server is a **systemd user service** (not a manual terminal process).

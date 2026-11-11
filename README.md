@@ -635,6 +635,19 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 
 測試以 `create_app(..., case_store=CaseStore(tmp), migrate_legacy=False)` 建立隔離實例（見 `tests/conftest.py` 的 `make_api_app`），不再 monkeypatch 模組全域變數。
 
+## 🪟 Windows 端 MockHIS 校正探針（Phase 30-09）
+
+位於 `deploy/windows_agent/mock_his/`，用來在 Windows 測試機上驗證「寫入 → 讀回 → 比對」流程，全程只使用假資料（`TEST-*`）。
+
+- **`mock_his.py`**：替身視窗（標題含「MockHIS」）。客戶區使用 Win32 原生 EDIT／STATIC 控制項，**不可改回 Tkinter**（Tkinter 不會被 UI 自動化讀取）。
+- **`probe_readback_check.py`**：探針，依 agent-desktop 2.6 的快照格式（`data.tree`、`ref_id`、角色 `textfield`）定位「主訴 (S)」欄位，以 `set-value` 寫入、`get <REF> --property value` 讀回並比對 SHA-256。找不到 MockHIS 視窗即中止（fail-closed）。
+- **`handoff/`**：交接給他人的壓縮包與操作說明（含 SHA-256 校驗碼）。不含任何病患資料庫。
+- **測試**：`uv run pytest tests/test_phase30_probe_detection.py tests/test_phase30_probe_mock.py`
+
+> `--test-vendor <關鍵字>` 會允許對真實廠商視窗寫入，**僅限示範資料的測試機**，不得放入交接包。
+
+---
+
 ## 📂 專案架構文件參考
 - **全景架構升級計畫**：[`plan-v5.md`](plan-v5.md)（深度整合 SoapVoice、Agent-Desktop 與 WebBrain）
 - **開發進度與里程碑**：[`progress.md`](progress.md)
