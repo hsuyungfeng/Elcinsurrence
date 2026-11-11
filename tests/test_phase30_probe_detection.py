@@ -26,3 +26,7 @@ def test_real_his_snapshot_without_mock_marker_is_rejected():
 
 def test_non_json_snapshot_without_title_is_rejected():
     assert probe.has_mock_evidence("not json", []) is False
+
+
+def test_test_vendor_mode_is_off_by_default():
+    assert probe.TEST_VENDOR_TITLE is None

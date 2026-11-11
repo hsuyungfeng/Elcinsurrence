@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 MOCK_HIS_TITLE_KEYWORD = "MockHIS"
+TEST_VENDOR_TITLE: Optional[str] = None  # 預設關閉；僅 --test-vendor 指定時啟用
 
 
 def find_window_titles_win32() -> list[str]:
@@ -129,13 +130,17 @@ def run_probe_check(custom_path: Optional[str] = None) -> bool:
 
     # 只掃描 MockHIS 相關程序（python 執行替身）；不掃描 VisionHIS，避免讀取真實 HIS 內容。
     app_candidates = ["python", "MockHIS"]
+    if TEST_VENDOR_TITLE:
+        # 測試模式（僅示範資料、僅測試機）：額外允許指定標題關鍵字的視窗
+        app_candidates.append(TEST_VENDOR_TITLE)
     snapshot_data: Optional[Dict[str, Any]] = None
     matched_app: Optional[str] = None
     window_titles = find_window_titles_win32()
 
     for app in app_candidates:
         ret, stdout, stderr = execute_agent_desktop_cmd(ad_path, ["snapshot", "--app", app, "-i", "--json"])
-        if ret == 0 and stdout and has_mock_evidence(stdout, window_titles):
+        vendor_ok = bool(TEST_VENDOR_TITLE) and any(TEST_VENDOR_TITLE in t for t in window_titles)
+        if ret == 0 and stdout and (has_mock_evidence(stdout, window_titles) or vendor_ok):
             snapshot_data = json.loads(stdout)
             matched_app = app
             break
@@ -226,7 +231,17 @@ def run_probe_check(custom_path: Optional[str] = None) -> bool:
 
 
 def main() -> None:
-    custom_ad = sys.argv[1] if len(sys.argv) > 1 else None
+    global TEST_VENDOR_TITLE
+    args = sys.argv[1:]
+    if "--test-vendor" in args:
+        i = args.index("--test-vendor")
+        if i + 1 >= len(args):
+            print("[FAIL] --test-vendor 需要視窗標題關鍵字")
+            sys.exit(2)
+        TEST_VENDOR_TITLE = args[i + 1]
+        print(f"[WARN] 測試模式：允許標題含「{TEST_VENDOR_TITLE}」的視窗（僅限測試機與示範資料）")
+        del args[i:i + 2]
+    custom_ad = args[0] if args else None
     passed = run_probe_check(custom_path=custom_ad)
     sys.exit(0 if passed else 1)
 
