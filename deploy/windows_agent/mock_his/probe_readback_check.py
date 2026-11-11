@@ -52,6 +52,32 @@ def find_window_titles_win32() -> list[str]:
     return titles
 
 
+def _flatten_snapshot(snapshot_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """把 agent-desktop 快照轉成扁平元素清單（name/role/ref）。
+
+    agent-desktop 2.6 的格式為 data.tree 巢狀結構，參照欄位為 ref_id；
+    舊格式為頂層 elements，參照欄位為 ref。兩者都接受。
+    """
+    if isinstance(snapshot_data.get("elements"), list):
+        return snapshot_data["elements"]
+    flat: List[Dict[str, Any]] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if "role" in node:
+                flat.append({
+                    "name": node.get("name", ""),
+                    "role": node.get("role", ""),
+                    "ref": node.get("ref_id") or node.get("ref", ""),
+                    "automation_id": (node.get("native_id") or {}).get("value", ""),
+                })
+            for child in node.get("children", []) or []:
+                walk(child)
+
+    walk((snapshot_data.get("data") or {}).get("tree") or {})
+    return flat
+
+
 def has_mock_evidence(snapshot_text: str, window_titles: list[str]) -> bool:
     """是否有 MockHIS 證據：Win32 視窗標題，或快照（任何層級的字串值）含 MockHIS。"""
     if any(MOCK_HIS_TITLE_KEYWORD in t for t in window_titles):
@@ -129,7 +155,8 @@ def run_probe_check(custom_path: Optional[str] = None) -> bool:
     print(f"[CHECK] 尋找標題含 '{MOCK_HIS_TITLE_KEYWORD}' 的視窗快照...")
 
     # 只掃描 MockHIS 相關程序（python 執行替身）；不掃描 VisionHIS，避免讀取真實 HIS 內容。
-    app_candidates = ["python", "MockHIS"]
+    # MockHIS 以 pythonw 啟動時程序名為 pythonw.exe；以 python 啟動則為 python.exe
+    app_candidates = ["pythonw", "python", "MockHIS"]
     if TEST_VENDOR_TITLE:
         # 測試模式（僅示範資料、僅測試機）：額外允許指定標題關鍵字的視窗
         app_candidates.append(TEST_VENDOR_TITLE)
@@ -138,7 +165,7 @@ def run_probe_check(custom_path: Optional[str] = None) -> bool:
     window_titles = find_window_titles_win32()
 
     for app in app_candidates:
-        ret, stdout, stderr = execute_agent_desktop_cmd(ad_path, ["snapshot", "--app", app, "-i", "--json"])
+        ret, stdout, stderr = execute_agent_desktop_cmd(ad_path, ["snapshot", "--app", app, "-i"])  # agent-desktop 2.6 不接受 --json；輸出本身即為 JSON
         vendor_ok = bool(TEST_VENDOR_TITLE) and any(TEST_VENDOR_TITLE in t for t in window_titles)
         if ret == 0 and stdout and (has_mock_evidence(stdout, window_titles) or vendor_ok):
             snapshot_data = json.loads(stdout)
@@ -155,7 +182,7 @@ def run_probe_check(custom_path: Optional[str] = None) -> bool:
     print(f"[OK] 成功鎖定測試替身視窗 (app={matched_app})，安全確認通過。")
 
     # 3. 定位目標測試欄位（優先鎖定 soap_s 或 '主訴 (S)'）
-    elements = snapshot_data.get("elements", [])
+    elements = _flatten_snapshot(snapshot_data)
     target_ref: Optional[str] = None
     target_name: Optional[str] = None
 
@@ -169,10 +196,11 @@ def run_probe_check(custom_path: Optional[str] = None) -> bool:
             target_name = name or automation_id
             break
 
-    # 若未精確匹配名稱，選取第一個 Edit 控制項
+    # 若未精確匹配名稱，選取第一個文字輸入控制項
+    # agent-desktop 2.6 將原生 EDIT 標為 "textfield"（見 2026-11-11 診斷輸出）
     if not target_ref:
         for el in elements:
-            if el.get("role") in ("Edit", "Text"):
+            if el.get("role") in ("Edit", "Text", "textfield"):
                 target_ref = el.get("ref")
                 target_name = el.get("name") or el.get("automation_id") or "First Edit"
                 break
@@ -199,11 +227,15 @@ def run_probe_check(custom_path: Optional[str] = None) -> bool:
 
     # 6. 探針讀回 (get-value)
     print(f"[READ] 正在從欄位 {target_ref} 讀回值...")
-    ret, read_val, err = execute_agent_desktop_cmd(ad_path, ["get-value", target_ref])
+    # agent-desktop 2.6：`get <REF> --property value`，回傳 JSON 封包，值位於 data.value
+    ret, read_raw, err = execute_agent_desktop_cmd(ad_path, ["get", target_ref, "--property", "value"])
     if ret != 0:
-        print(f"[FAIL] 讀回探針失敗 (code {ret}): {err or out}")
+        print(f"[FAIL] 讀回探針失敗 (code {ret}): {err or read_raw}")
         return False
-
+    try:
+        read_val = str((json.loads(read_raw).get("data") or {}).get("value", ""))
+    except (ValueError, AttributeError):
+        read_val = read_raw
     actual_val = read_val.strip()
     actual_hash = hashlib.sha256(actual_val.encode("utf-8")).hexdigest()
     print(f"[READ] 讀回字串: {actual_val}")
