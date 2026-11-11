@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -25,6 +24,52 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 MOCK_HIS_TITLE_KEYWORD = "MockHIS"
+
+
+def find_window_titles_win32() -> list[str]:
+    """以 Win32 EnumWindows 列出所有頂層視窗標題（僅 Windows 有效，其他平台回傳空清單）。"""
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:
+        return []
+    if not hasattr(ctypes, "windll"):
+        return []
+    user32 = ctypes.windll.user32
+    titles: list[str] = []
+    enum_proc_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    def _callback(hwnd, _lparam):
+        length = user32.GetWindowTextLengthW(hwnd)
+        if length > 0:
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buf, length + 1)
+            titles.append(buf.value)
+        return True
+
+    user32.EnumWindows(enum_proc_type(_callback), 0)
+    return titles
+
+
+def has_mock_evidence(snapshot_text: str, window_titles: list[str]) -> bool:
+    """是否有 MockHIS 證據：Win32 視窗標題，或快照（任何層級的字串值）含 MockHIS。"""
+    if any(MOCK_HIS_TITLE_KEYWORD in t for t in window_titles):
+        return True
+    try:
+        data = json.loads(snapshot_text)
+    except (ValueError, TypeError):
+        return False
+
+    def _walk(node) -> bool:
+        if isinstance(node, dict):
+            return any(_walk(v) for v in node.values())
+        if isinstance(node, list):
+            return any(_walk(v) for v in node)
+        if isinstance(node, str):
+            return MOCK_HIS_TITLE_KEYWORD in node or "測試替身" in node
+        return False
+
+    return _walk(data)
 
 
 def find_agent_desktop_bin(custom_path: Optional[str] = None) -> Optional[Path]:
@@ -81,32 +126,19 @@ def run_probe_check(custom_path: Optional[str] = None) -> bool:
 
     # 2. 安全檢查：搜尋包含 MockHIS 的視窗，嚴防誤觸真實 HIS
     print(f"[CHECK] 尋找標題含 '{MOCK_HIS_TITLE_KEYWORD}' 的視窗快照...")
-    
-    # 嘗試以 VisionHIS 或 python 抓取快照
-    app_candidates = ["VisionHIS", "python", "MockHIS"]
+
+    # 只掃描 MockHIS 相關程序（python 執行替身）；不掃描 VisionHIS，避免讀取真實 HIS 內容。
+    app_candidates = ["python", "MockHIS"]
     snapshot_data: Optional[Dict[str, Any]] = None
     matched_app: Optional[str] = None
+    window_titles = find_window_titles_win32()
 
     for app in app_candidates:
         ret, stdout, stderr = execute_agent_desktop_cmd(ad_path, ["snapshot", "--app", app, "-i", "--json"])
-        if ret == 0 and stdout:
-            try:
-                parsed = json.loads(stdout)
-                elements = parsed.get("elements", [])
-                # 檢驗視窗標題或元件是否明確屬於 MockHIS
-                has_mock_evidence = False
-                for el in elements:
-                    name = el.get("name", "")
-                    if MOCK_HIS_TITLE_KEYWORD in name or "測試替身" in name:
-                        has_mock_evidence = True
-                        break
-                
-                if has_mock_evidence:
-                    snapshot_data = parsed
-                    matched_app = app
-                    break
-            except Exception:
-                continue
+        if ret == 0 and stdout and has_mock_evidence(stdout, window_titles):
+            snapshot_data = json.loads(stdout)
+            matched_app = app
+            break
 
     if not snapshot_data:
         print("[FAIL] 安全阻斷：未偵測到任何包含 'MockHIS' 的測試替身視窗！")
