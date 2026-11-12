@@ -2,122 +2,99 @@
 
 ## 1. 任務概述與安全原則
 
-依據 `30-09-PLAN.md`、`30-AGY-DISCUSSION.md` 以及使用者具體要求，本階段執行真實 HIS 實機探針的前置安全驗證。
-核心安全標準如下：
-1. **替身限制**：僅對測試替身 `MockHIS`（`deploy/windows_agent/mock_his/mock_his.py`）進行操作，以假資料（Dummy Data）測試。
-2. **絕對零病歷原則**：嚴禁任何針對真實 HIS 視窗、真實病歷資料庫或包含真實 PHI 的欄位進行寫入。
-3. **無副作用守則**：不執行 `git commit`、不執行 `git push`、不修改 `src/` 與 `deploy/` 中既有之任何檔案。
+依據 `30-09-PLAN.md`、`30-AGY-DISCUSSION.md` 與使用者要求，本階段以 MockHIS 測試替身驗證「寫入 → 讀回 → 雜湊比對」探針流程。
+
+安全標準：
+1. **替身限制**：僅對測試替身 `MockHIS`（`deploy/windows_agent/mock_his/mock_his.py`）操作，使用假資料。
+2. **零病歷原則**：嚴禁對真實 HIS 視窗、真實病歷或含 PHI 的欄位寫入。
+3. **Fail-Closed**：找不到標題含 `MockHIS` 的視窗時立即中止，不做任何寫入。
+4. **`--test-vendor` 例外**：預設關閉。僅限測試機與示範資料，才可額外指定標題關鍵字（例如 `志氏`）的視窗；其他視窗仍會被拒絕。
 
 ---
 
-## 2. 本機替身探針測試結果（Automated Test Suite）
+## 2. 目前結論
 
-在 Linux 開發環境建立了完整的 MockHIS 驅動替身測試：
+**Windows 端 WinBoat 實機探針已通過**（write/readback nonce 完全一致）。
+依據提交紀錄 `7c03da5`（"Verified on WinBoat: probe PASS"）與 `5ab235d`。
+
+| 項目 | 狀態 |
+|---|---|
+| Linux 端替身單元測試（`tests/test_phase30_probe_mock.py`） | 通過，4 項（2026-11-12 重新執行確認） |
+| WinBoat（Windows 11）實機探針 | **PASS**（寫入 nonce 與讀回值一致） |
+| 其他 HIS 廠商（Vision、Yaosheng、Minger、Chihshi）實機校正 | **未執行**，屬 Phase 30 後續項目，需現場廠商確認 |
+
+---
+
+## 3. 本機替身測試
+
 - **測試檔案**：`tests/test_phase30_probe_mock.py`
 - **執行指令**：
   ```bash
   ELC_ALLOW_NO_AUTH_FOR_TESTS=1 .venv/bin/pytest tests/test_phase30_probe_mock.py --no-cov
   ```
-- **測試結果**：**4 passed in 0.10s** (100% 通過)
+- **結果**：4 passed（0.08s）
 
-### 測試案例清單與驗證項目：
-1. `test_probe_write_and_readback_success_marks_passed_true`:
-   - 模擬 MockHIS `soap_s` 欄位寫入隨機產生之 Nonce（`PROBE-<UUID>`）。
-   - 讀回並計算 SHA-256 雜湊比對。
-   - 驗證 `wizard.readback_test()` 回傳 `True` 且 `profile.readback_test_passed` 成功標記為 `True`。
-   - 驗證在所有項目確認且探針通過下，`wizard.finalize()` 可順利儲存 Profile。
-2. `test_probe_readback_mismatch_marks_passed_false_and_blocks_finalize`:
-   - 模擬欄位讀回值不一致（如游標跳位、字串被截斷或為空）。
-   - 驗證 `wizard.readback_test()` 回傳 `False` 且 `profile.readback_test_passed` 保持為 `False`。
-   - 驗證呼叫 `wizard.finalize()` 時會拋出 `NotReadyError`，嚴密阻絕未經驗證之設定檔生效。
-3. `test_probe_readback_exception_handled_gracefully`:
-   - 模擬底層 UIA 例外或目標視窗異常關閉。
-   - 驗證捕捉例外後不崩潰，優雅回傳 `False`。
-4. `test_probe_nonce_hash_uniqueness_and_no_phi`:
-   - 驗證探針字串僅包含安全的前綴與英數字，絕不含有病患身分、診斷、處方等 PHI 資訊。
-   - 驗證多次產生的 Nonce 與 SHA-256 具備高度唯一性。
+測試涵蓋：
+1. 寫入與讀回一致時，`readback_test_passed` 標記為 `True`，`finalize()` 可存檔。
+2. 讀回不一致時，標記為 `False`，`finalize()` 拋出 `NotReadyError`。
+3. 底層例外（UIA 錯誤、視窗關閉）時優雅回傳 `False`，不崩潰。
+4. 探針字串只含安全前綴與英數字，多次產生的 nonce 互不相同。
 
 ---
 
-## 3. Windows 端驗證工具設計與安全防護機制
+## 4. Windows 探針工具（現況）
 
-已撰寫 Windows 端專用之驗證腳本：
-- **檔案路徑**：`deploy/windows_agent/mock_his/probe_readback_check.py`
+- **檔案**：`deploy/windows_agent/mock_his/probe_readback_check.py`
+- **安全鎖定**：
+  - 快照掃描只針對 `pythonw` / `python` / `MockHIS` 程序；不掃描 VisionHIS 等真實 HIS 程序。
+  - 必須偵測到含 `MockHIS` 的 Win32 視窗標題，或快照中含 `MockHIS` / `測試替身` 字串，才會繼續。
+- **欄位定位**：優先找「主訴」或 `soap_s` / `txtS`；找不到時退而求其次，取第一個 `Edit` / `Text` / `textfield` 控制項。
+- **寫入與讀回**（agent-desktop 2.6 格式）：
+  - 寫入：`agent-desktop set-value <REF> <nonce>`
+  - 讀回：`agent-desktop get <REF> --property value`，值位於 `data.value`
+  - 比對：字串完全相等，且 SHA-256 相等。
+- **Nonce**：每次執行產生 `PROBE-<12 位十六進位>`。
+- **執行檔搜尋順序**：指定路徑 → `deploy/windows_agent/bin/` → `dist/ElcAgent/_internal/bin/` → `C:\ElcAgent\_internal\bin\` → WinBoat 掛載路徑 → `PATH`。
 
-### 核心安全防護機制：
-1. **嚴格標題關鍵字鎖定**：
-   - 執行 `agent-desktop snapshot` 時，程式會逐一檢查視窗元素之名稱與標題。
-   - 必須明確偵測到包含 `"MockHIS"` 或 `"測試替身"` 字樣方可繼續；若僅有真實 HIS 視窗或一般系統視窗，立即觸發 **Fail-Closed** 安全中斷，拒絕執行後續任何操作。
-2. **隨機 Nonce 與雙重驗證**：
-   - 每次執行動態產生 `PROBE-<12位隨機十六進位碼>`，並計算 SHA-256 雜湊。
-   - 透過 `agent-desktop set-value` 寫入指定欄位。
-   - 透過 `agent-desktop get-value` 讀回欄位值。
-   - 雙重檢查：(1) 字串完全相等、(2) SHA-256 雜湊完全相等。
-3. **無相依獨立執行**：
-   - 支援自動搜尋 `C:\ElcAgent\_internal\bin\agent-desktop.exe` 或自訂路徑，具備完整的錯誤代碼回傳機制。
+### 與 2026-11-11 原規劃相比的修正
+- 移除不支援的 `--json` 參數（agent-desktop 2.6 的輸出本身即為 JSON）。
+- 接受角色 `textfield`（agent-desktop 2.6 將原生 EDIT 標為此角色）。
+- 快照改為解析 `data.tree` 巢狀結構，參照欄位為 `ref_id`。
+- 新增 `pythonw` 程序候選。
+- `mock_his.py` 由 Tkinter 改為原生 Win32 EDIT/STATIC 控制項；Tkinter 的子控制項對 UIA 不可見，快照只有標題列。
 
 ---
 
-## 4. Windows 實機 / WinBoat 執行步驟指南
+## 5. 交付物
 
-在 WinBoat (Windows 11) 或 Windows 測試實機上執行驗證之標準 SOP：
+- **交接壓縮檔**：`deploy/windows_agent/mock_his/handoff/MockHIS_Probe_Bundle_handoff.zip`（27.1 MB，SHA-256 `7de567fd1e657942cbbc8fe627336fd5889ef7a9147e9ca4f860f006d3725d10`）
+- **操作說明**：`deploy/windows_agent/mock_his/handoff/MockHIS_探針操作說明.md`
+- 壓縮檔內含 `run_probe.bat`，可一鍵開啟 MockHIS 並執行探針；首次執行若無 Python 3.12，會自動安裝給目前使用者。
 
-### 步驟 1：啟動 MockHIS 替身視窗
-在 Windows PowerShell 視窗中執行：
-```powershell
-# 啟動 MockHIS 測試替身（保持視窗開啟於桌面上）
-python deploy\windows_agent\mock_his\mock_his.py
-```
-> **注意**：視窗標題應為「MockHIS (測試替身 - 假資料專用)」，內部為測試用病患「TEST-P001 陳小明」。
+---
 
-### 步驟 2：執行探針寫入與讀回安全檢查
-開啟另一個 PowerShell 視窗執行：
-```powershell
-# 自動搜尋 agent-desktop.exe 並執行探針測試
-python deploy\windows_agent\mock_his\probe_readback_check.py
+## 6. 實機執行 SOP（供其他測試機重跑）
 
-# 或手動指定 agent-desktop.exe 執行檔路徑：
-python deploy\windows_agent\mock_his\probe_readback_check.py C:\ElcAgent\_internal\bin\agent-desktop.exe
-```
+1. 核對壓縮檔 SHA-256 為 `7de567fd...`，不一致則不執行。
+2. 解壓縮後雙擊 `run_probe.bat`，保持 MockHIS 視窗開啟。
+3. 複製探針完整輸出，連同 Windows 版本回報。
 
-### 步驟 3：預期輸出確認
-若驗證成功，終端機將印出：
+預期成功輸出包含：
 ```text
-============================================================
-【Phase 30-09】MockHIS 替身探針寫入與讀回安全檢測
-============================================================
-[OK] 使用 agent-desktop: C:\ElcAgent\_internal\bin\agent-desktop.exe
-[CHECK] 尋找標題含 'MockHIS' 的視窗快照...
-[OK] 成功鎖定測試替身視窗 (app=VisionHIS)，安全確認通過。
-[OK] 鎖定測試欄位: 主訴 (S) (ref=@ref/s)
-[PROBE] 產生隨機探針 Nonce: PROBE-A1B2C3D4E5F6
-[PROBE] 預期 SHA-256: 7d25...
-[WRITE] 正在將探針寫入欄位 @ref/s...
-[OK] 探針寫入成功。
-[READ] 正在從欄位 @ref/s 讀回值...
-[READ] 讀回字串: PROBE-A1B2C3D4E5F6
-[READ] 讀回 SHA-256: 7d25...
-------------------------------------------------------------
+[OK] 成功鎖定測試替身視窗 (app=...)，安全確認通過。
+[WRITE] 正在將探針寫入欄位 ...
+[READ] 讀回字串: PROBE-XXXXXXXXXXXX
 【PASS】讀寫比對完全一致！
-  - 探針寫入值: PROBE-A1B2C3D4E5F6
-  - 欄位讀回值: PROBE-A1B2C3D4E5F6
-  - 雜湊一致性: 7d25... == 7d25...
-  - 結論: readback_test_passed 驗證通過，符合 30-09 探針驗收標準。
-------------------------------------------------------------
 ```
 
-若未開啟 MockHIS 視窗，程式將自動阻斷並安全退出：
-```text
-[FAIL] 安全阻斷：未偵測到任何包含 'MockHIS' 的測試替身視窗！
-  保護原則：為避免寫入真實病歷，本工具『嚴禁』對非 MockHIS 視窗進行任何探針操作。
-```
+若視窗不存在，程式會印出 `[FAIL] 安全阻斷`，這是正常的保護機制，不是錯誤。
 
 ---
 
-## 5. 規則與檔案變更查核清單
+## 7. 規則與檔案變更查核
 
-- [x] 僅鎖定 `MockHIS` 測試替身，絕對未對任何真實 HIS 視窗或真實病歷進行寫入。
-- [x] 未執行 `git commit`、未執行 `git push`。
-- [x] 未修改 `src/` 與 `deploy/` 中既有之任何檔案（僅於 `deploy/windows_agent/mock_his/` 與 `tests/` 建立新檔案）。
-- [x] 所有探針隨機 Nonce 均為安全隨機字串，無任何 PHI 資訊。
-- [x] 相關單元測試 4 項全數通過，Phase 30 相關測試 165 項無回歸錯誤。
+- [x] 只鎖定 `MockHIS` 測試替身；未對真實 HIS 或真實病歷寫入。
+- [x] 探針 nonce 為隨機字串，不含 PHI。
+- [x] 本報告更新僅修改文件；未執行 `git commit` / `git push`。
+- [ ] **注意**：`deploy/windows_agent/mock_his/` 內的 `mock_his.py` 與 `probe_readback_check.py` 已在提交 `7c03da5` 中修改，不再是「未修改 deploy/ 既有檔案」。此為探針開發所需的變更，已於提交紀錄中說明。
+- [ ] 其他 HIS 廠商的實機校正尚未執行。
