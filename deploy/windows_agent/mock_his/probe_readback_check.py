@@ -52,6 +52,38 @@ def find_window_titles_win32() -> list[str]:
     return titles
 
 
+def find_target_windows(ad_path: Path, keywords: List[str]) -> List[Dict[str, str]]:
+    """以 agent-desktop list-windows 找出標題含任一關鍵字的視窗 (id, title)。
+
+    解析採寬鬆策略：遞迴走訪 JSON，凡同時具備 id 與標題欄位者即視為視窗。
+    無法解析或指令失敗時回傳空清單（Fail-Closed）。
+    """
+    ret, out, _err = execute_agent_desktop_cmd(ad_path, ["list-windows"])
+    if ret != 0 or not out:
+        return []
+    try:
+        data = json.loads(out)
+    except ValueError:
+        return []
+
+    found: Dict[str, Dict[str, str]] = {}
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            title = str(node.get("title") or node.get("name") or "")
+            wid = node.get("id") or node.get("window_id")
+            if wid and any(k in title for k in keywords):
+                found.setdefault(str(wid), {"id": str(wid), "title": title})
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(data)
+    return list(found.values())
+
+
 def _flatten_snapshot(snapshot_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """把 agent-desktop 快照轉成扁平元素清單（name/role/ref）。
 
@@ -154,23 +186,33 @@ def run_probe_check(custom_path: Optional[str] = None) -> bool:
     # 2. 安全檢查：搜尋包含 MockHIS 的視窗，嚴防誤觸真實 HIS
     print(f"[CHECK] 尋找標題含 '{MOCK_HIS_TITLE_KEYWORD}' 的視窗快照...")
 
-    # 只掃描 MockHIS 相關程序（python 執行替身）；不掃描 VisionHIS，避免讀取真實 HIS 內容。
-    # MockHIS 以 pythonw 啟動時程序名為 pythonw.exe；以 python 啟動則為 python.exe
-    app_candidates = ["pythonw", "python", "MockHIS"]
+    # 以 list-windows 取得標題含 MockHIS 的視窗 ID，再用 --window-id 快照。
+    # 不使用 --app：Win11 上 pythonw 會產生 IME 等無標題輔助視窗，--app 會觸發 AMBIGUOUS_TARGET。
+    keywords = [MOCK_HIS_TITLE_KEYWORD]
     if TEST_VENDOR_TITLE:
         # 測試模式（僅示範資料、僅測試機）：額外允許指定標題關鍵字的視窗
-        app_candidates.append(TEST_VENDOR_TITLE)
+        keywords.append(TEST_VENDOR_TITLE)
+    targets = find_target_windows(ad_path, keywords)
     snapshot_data: Optional[Dict[str, Any]] = None
     matched_app: Optional[str] = None
-    window_titles = find_window_titles_win32()
 
-    for app in app_candidates:
-        ret, stdout, stderr = execute_agent_desktop_cmd(ad_path, ["snapshot", "--app", app, "-i"])  # agent-desktop 2.6 不接受 --json；輸出本身即為 JSON
-        vendor_ok = bool(TEST_VENDOR_TITLE) and any(TEST_VENDOR_TITLE in t for t in window_titles)
-        if ret == 0 and stdout and (has_mock_evidence(stdout, window_titles) or vendor_ok):
-            snapshot_data = json.loads(stdout)
-            matched_app = app
-            break
+    if len(targets) == 1:
+        target = targets[0]
+        ret, stdout, stderr = execute_agent_desktop_cmd(
+            ad_path, ["snapshot", "--window-id", target["id"], "-i"]
+        )
+        if ret == 0 and stdout:
+            try:
+                snapshot_data = json.loads(stdout)
+                matched_app = f"{target['title']} (id={target['id']})"
+            except ValueError:
+                snapshot_data = None
+    elif len(targets) > 1:
+        # Fail-Closed：多個符合視窗時不猜測，直接中止
+        print(f"[FAIL] 安全阻斷：找到 {len(targets)} 個符合的視窗，無法唯一鎖定，拒絕操作。")
+        for t in targets:
+            print(f"  - id={t['id']} title={t['title']}")
+        return False
 
     if not snapshot_data:
         print("[FAIL] 安全阻斷：未偵測到任何包含 'MockHIS' 的測試替身視窗！")
