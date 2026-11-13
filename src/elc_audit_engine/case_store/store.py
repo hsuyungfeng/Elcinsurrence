@@ -99,6 +99,8 @@ class SoapDraftRecord:
     failure_reason: str | None
     created_at: str
     updated_at: str
+    his_job_id: str | None = None
+    his_machine_id: str | None = None
 
 
 class CaseStoreError(Exception):
@@ -169,6 +171,9 @@ def _row_to_soap_draft_record(row: sqlite3.Row) -> SoapDraftRecord:
     issues = json.loads(issues_raw) if issues_raw is not None else []
     comp_raw = row["comparison_json"]
     comp = json.loads(comp_raw) if comp_raw is not None else None
+    keys = row.keys() if hasattr(row, "keys") else []
+    his_job_id = row["his_job_id"] if "his_job_id" in keys else None
+    his_machine_id = row["his_machine_id"] if "his_machine_id" in keys else None
     return SoapDraftRecord(
         draft_id=row["draft_id"],
         case_id=row["case_id"],
@@ -189,7 +194,12 @@ def _row_to_soap_draft_record(row: sqlite3.Row) -> SoapDraftRecord:
         failure_reason=row["failure_reason"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        his_job_id=his_job_id,
+        his_machine_id=his_machine_id,
     )
+
+
+_UNSET_MACHINE = object()
 
 
 class CaseStore:
@@ -643,6 +653,7 @@ class CaseStore:
         s_type_code: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        machine_id: Any = _UNSET_MACHINE,
     ) -> tuple[CaseRecord, ...]:
         """地端橋接任務（kind='bridge'）的 SQL 層篩選與分頁，依 `created_at`、`case_id` 升冪。
 
@@ -657,6 +668,14 @@ class CaseStore:
         if s_type_code is not None:
             conditions.append("json_extract(payload_json, '$.s_type_code') = ?")
             params.append(s_type_code)
+        if machine_id is not _UNSET_MACHINE:
+            if machine_id is None:
+                conditions.append("json_extract(payload_json, '$.extra_payload.machine_id') IS NULL")
+            else:
+                conditions.append(
+                    "(json_extract(payload_json, '$.extra_payload.machine_id') IS NULL OR json_extract(payload_json, '$.extra_payload.machine_id') = ?)"
+                )
+                params.append(str(machine_id))
         params.extend([limit, offset])
         conn = self._connect()
         try:
@@ -848,6 +867,8 @@ class CaseStore:
         reason: str | None = None,
         agent_id: str | None = None,
         failure_reason: str | None = None,
+        his_job_id: str | None = None,
+        his_machine_id: str | None = None,
     ) -> SoapDraftRecord:
         """更新草稿狀態（原子交易檢查顯式狀態轉換與寫入歷史）。"""
         conn = self._connect()
@@ -879,25 +900,54 @@ class CaseStore:
                 eff_reason = reason or current.review_reason
                 eff_agent = agent_id or current.agent_id
                 eff_failure = failure_reason or (reason if to_state == STATE_FAILED else current.failure_reason)
+                row_keys = row.keys() if hasattr(row, "keys") else []
+                cur_his_job_id = row["his_job_id"] if "his_job_id" in row_keys else None
+                cur_his_machine_id = row["his_machine_id"] if "his_machine_id" in row_keys else None
+                eff_his_job_id = his_job_id if his_job_id is not None else cur_his_job_id
+                eff_his_machine_id = his_machine_id if his_machine_id is not None else cur_his_machine_id
 
-                conn.execute(
-                    "UPDATE soap_drafts SET "
-                    "state = ?, reviewer_id = ?, review_decision = ?, review_reason = ?, "
-                    "reviewed_at = ?, pushed_at = ?, agent_id = ?, failure_reason = ?, updated_at = ? "
-                    "WHERE draft_id = ?",
-                    (
-                        to_state,
-                        eff_reviewer,
-                        eff_decision,
-                        eff_reason,
-                        reviewed_at,
-                        pushed_at,
-                        eff_agent,
-                        eff_failure,
-                        now,
-                        draft_id,
-                    ),
-                )
+                has_his_cols = "his_job_id" in row_keys
+                if has_his_cols:
+                    conn.execute(
+                        "UPDATE soap_drafts SET "
+                        "state = ?, reviewer_id = ?, review_decision = ?, review_reason = ?, "
+                        "reviewed_at = ?, pushed_at = ?, agent_id = ?, failure_reason = ?, "
+                        "his_job_id = ?, his_machine_id = ?, updated_at = ? "
+                        "WHERE draft_id = ?",
+                        (
+                            to_state,
+                            eff_reviewer,
+                            eff_decision,
+                            eff_reason,
+                            reviewed_at,
+                            pushed_at,
+                            eff_agent,
+                            eff_failure,
+                            eff_his_job_id,
+                            eff_his_machine_id,
+                            now,
+                            draft_id,
+                        ),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE soap_drafts SET "
+                        "state = ?, reviewer_id = ?, review_decision = ?, review_reason = ?, "
+                        "reviewed_at = ?, pushed_at = ?, agent_id = ?, failure_reason = ?, updated_at = ? "
+                        "WHERE draft_id = ?",
+                        (
+                            to_state,
+                            eff_reviewer,
+                            eff_decision,
+                            eff_reason,
+                            reviewed_at,
+                            pushed_at,
+                            eff_agent,
+                            eff_failure,
+                            now,
+                            draft_id,
+                        ),
+                    )
                 conn.execute(
                     "INSERT INTO soap_draft_history ("
                     "draft_id, version, state, soap_json, content_hash, reviewer_id, review_decision, review_reason, created_at"
@@ -918,6 +968,29 @@ class CaseStore:
             conn.close()
 
         return self.get_soap_draft(draft_id)
+
+    def set_soap_draft_his_job(
+        self,
+        draft_id: str,
+        his_job_id: str,
+        his_machine_id: str | None = None,
+    ) -> bool:
+        """僅在草稿為 approved 且 his_job_id 為 NULL 時寫入 his_job_id 與 his_machine_id。"""
+        now = _now_iso()
+        conn = self._connect()
+        try:
+            with conn:
+                cur = conn.execute(
+                    "UPDATE soap_drafts SET "
+                    "his_job_id = ?, "
+                    "his_machine_id = COALESCE(?, his_machine_id), "
+                    "updated_at = ? "
+                    "WHERE draft_id = ? AND state = 'approved' AND his_job_id IS NULL",
+                    (his_job_id, his_machine_id, now, draft_id),
+                )
+                return cur.rowcount > 0
+        finally:
+            conn.close()
 
     def edit_soap_draft(
         self,

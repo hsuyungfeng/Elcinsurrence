@@ -23,7 +23,14 @@ from elc_audit_engine.auth import (
 # 審計豁免清單：靜態頁與健康檢查不含病歷存取，記錄會被探測流量淹沒。
 # 這份清單只決定「寫不寫審計」，與是否強制認證無關——業務端點即使
 # 免強制 API Key，仍接觸病歷資料，審計軌跡不可因此消失。
-AUDIT_EXEMPT_ENDPOINTS = frozenset({"misc.index", "misc.health", "static", "misc.get_facility"})
+AUDIT_EXEMPT_ENDPOINTS = frozenset({
+    "misc.index",
+    "misc.health",
+    "static",
+    "misc.get_facility",
+    "clients.monitor_page",
+    "clients.client_heartbeat",
+})
 
 # Agent 專用權限端點清單（Phase 29 §7.3）：Agent 金鑰僅限存取心跳與橋接任務相關端點。
 AGENT_ALLOWED_ENDPOINTS = frozenset({
@@ -42,7 +49,7 @@ AGENT_ALLOWED_ENDPOINTS = frozenset({
 # 端點（案件清單、附件清單、列印產出下載）與破壞性操作（刪除附件）必須帶
 # X-API-Key；其餘以單筆請求為單位、由呼叫方自帶資料的端點維持選填。
 # 申報預審端點（monthly.*）支援與其他院內系統/前端直接對接，免強制認證。
-AUTH_EXEMPT_ENDPOINTS = AUDIT_EXEMPT_ENDPOINTS | frozenset({
+AUTH_EXEMPT_ENDPOINTS = (AUDIT_EXEMPT_ENDPOINTS - {"clients.client_heartbeat"}) | frozenset({
     "sampling.audit_sampling_case",
     "sampling.import_sampling_cases",
     "sampling.import_sampling_from_monthly",

@@ -34,6 +34,7 @@ from elc_audit_engine.case_store.store import (
     DuplicateCaseError,
     MissingFailureReasonError,
     TransitionRecord,
+    _UNSET_MACHINE,
 )
 
 __all__ = [
@@ -58,4 +59,5 @@ __all__ = [
     "DuplicateCaseError",
     "CaseNotFoundError",
     "MissingFailureReasonError",
+    "_UNSET_MACHINE",
 ]

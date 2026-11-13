@@ -26,6 +26,10 @@ import re
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from elc_audit_engine.case_store import DuplicateCaseError, _UNSET_MACHINE
+
+_JOB_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+
 BRIDGE_KIND = "bridge"
 
 # 健保作業種類代號（電子抽審.md §四）與跨引擎擴展代碼。
@@ -90,6 +94,7 @@ def enqueue_job(
     actor: str | None = None,
     max_retries: int = DEFAULT_MAX_RETRIES,
     extra_payload: dict | None = None,
+    job_id: str | None = None,
 ) -> dict:
     """建立待送任務。作業代號必須為 S_TYPE_CODES 之一；target_id 不得為空；max_retries 至少為 1。"""
     if s_type_code not in S_TYPE_CODES:
@@ -99,9 +104,14 @@ def enqueue_job(
         raise BridgeValidationError("target_id 不得為空")
     if max_retries < 1:
         raise BridgeValidationError("max_retries 至少為 1")
-    job_id = uuid.uuid4().hex
+    if job_id is not None:
+        if not _JOB_ID_RE.match(job_id):
+            raise BridgeValidationError(f"不合法的 job_id 格式：{job_id!r}（須為 32 位十六進位小寫字串）")
+        eff_job_id = job_id
+    else:
+        eff_job_id = uuid.uuid4().hex
     payload = {
-        "job_id": job_id,
+        "job_id": eff_job_id,
         "s_type_code": s_type_code,
         "s_type_name": S_TYPE_CODES[s_type_code],
         "target_id": target,
@@ -117,8 +127,38 @@ def enqueue_job(
         "last_error": None,
         "extra_payload": extra_payload or {},
     }
-    store.create(case_id=job_id, kind=BRIDGE_KIND, payload=payload, actor=actor)
+    store.create(case_id=eff_job_id, kind=BRIDGE_KIND, payload=payload, actor=actor)
     return payload
+
+
+def ensure_job(
+    store,
+    *,
+    job_id: str,
+    s_type_code: str,
+    target_id: str,
+    actor: str | None = None,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    extra_payload: dict | None = None,
+) -> dict:
+    """確保指定 job_id 的任務存在（冪等）；若已存在則直接回傳既有任務。"""
+    try:
+        return get_job(store, job_id)
+    except Exception:
+        pass
+
+    try:
+        return enqueue_job(
+            store,
+            job_id=job_id,
+            s_type_code=s_type_code,
+            target_id=target_id,
+            actor=actor,
+            max_retries=max_retries,
+            extra_payload=extra_payload,
+        )
+    except DuplicateCaseError:
+        return get_job(store, job_id)
 
 
 def get_job(store, job_id: str) -> dict:
@@ -192,13 +232,17 @@ def list_pending(
     s_type_code: str | None = None,
     limit: int = 100,
     now: datetime | None = None,
+    machine_id: Any = _UNSET_MACHINE,
 ) -> list[dict]:
     """待送任務（依建立時間升冪）。先回收逾時租約，再於 SQL 層篩選。代號不合規拋 BridgeValidationError。"""
     if s_type_code is not None and s_type_code not in S_TYPE_CODES:
         raise BridgeValidationError(f"未知的作業代號：{s_type_code!r}")
     reclaim_expired(store, now=now)
     records = store.list_bridge_jobs(
-        status=STATUS_PENDING, s_type_code=s_type_code, limit=limit
+        status=STATUS_PENDING,
+        s_type_code=s_type_code,
+        limit=limit,
+        machine_id=machine_id,
     )
     return [dict(record.payload or {}) for record in records]
 
@@ -214,6 +258,7 @@ def report_status(
     actor: str | None = None,
     expected_status: str | None = None,
     now: datetime | None = None,
+    machine_id: str | None = None,
 ) -> dict:
     """地端 Agent 回報狀態。
 
@@ -222,6 +267,10 @@ def report_status(
     - 回報 FAILED 會依 retry_count／max_retries 決定重新排隊或永久失敗。
     """
     job = get_job(store, job_id)
+    expected_machine = (job.get("extra_payload") or {}).get("machine_id")
+    if expected_machine:
+        if not machine_id or machine_id != expected_machine:
+            raise BridgeConflictError(f"任務綁定機器 {expected_machine}，與回報機器 {machine_id} 不符")
     current = job["status"]
     if expected_status is not None and expected_status != current:
         raise BridgeConflictError(

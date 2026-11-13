@@ -16,12 +16,16 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import uuid
 from typing import Any
 
 from flask import Blueprint, current_app, g, jsonify, request
 
 from elc_audit_engine import audit_log
-from elc_audit_engine.bridge_queue import enqueue_job
+from elc_audit_engine.bridge_queue import ensure_job, get_job
+
+_MACHINE_ID_RE = re.compile(r"^[0-9a-zA-Z_-]{1,64}$")
 from elc_audit_engine.case_store import CaseNotFoundError
 from elc_audit_engine.case_store.soap_draft_states import (
     STATE_APPROVED,
@@ -140,6 +144,73 @@ def get_draft(draft_id: str):
     return jsonify({"status": "success", "draft": _draft_to_dict(draft)})
 
 
+def approve_and_enqueue(
+    store,
+    *,
+    draft_id: str,
+    reviewer_id: str,
+    machine_id: str | None = None,
+) -> tuple[Any, dict]:
+    """可恢復的核准核心：以固定 his_job_id 推進至 approved、排入任務、推進至 queued。"""
+    draft = store.get_soap_draft(draft_id)
+    if draft.state in (STATE_VALIDATED, STATE_FAILED):
+        new_job_id = uuid.uuid4().hex
+        try:
+            draft = store.update_soap_draft_state(
+                draft.draft_id,
+                STATE_APPROVED,
+                reviewer_id=reviewer_id,
+                decision="approved",
+                his_job_id=new_job_id,
+                his_machine_id=machine_id,
+            )
+        except IllegalDraftTransitionError as exc:
+            raise ApiError(str(exc), status=409)
+        eff_job_id = new_job_id
+    elif draft.state == STATE_APPROVED:
+        if draft.his_job_id:
+            eff_job_id = draft.his_job_id
+        else:
+            eff_job_id = uuid.uuid4().hex
+            store.set_soap_draft_his_job(draft_id, eff_job_id, machine_id)
+            draft = store.get_soap_draft(draft_id)
+    elif draft.state == STATE_QUEUED:
+        if draft.his_job_id:
+            try:
+                job = get_job(store, draft.his_job_id)
+                return draft, job
+            except Exception as err:
+                logger.warning("取得佇列中之 HIS_PUSH 任務失敗 (job_id=%s): %s", draft.his_job_id, err)
+        return draft, {}
+    else:
+        raise ApiError(
+            f"草稿狀態為 {draft.state}，不允許執行核准",
+            status=409,
+        )
+
+    job = ensure_job(
+        store,
+        job_id=eff_job_id,
+        s_type_code="HIS_PUSH",
+        target_id=draft.case_id,
+        actor=reviewer_id,
+        extra_payload={
+            "draft_id": draft.draft_id,
+            "case_id": draft.case_id,
+            "order_code": draft.order_code,
+            "version": draft.version,
+            "content_hash": draft.content_hash,
+            "soap": draft.soap,
+            "machine_id": machine_id or draft.his_machine_id,
+        },
+    )
+
+    if draft.state == STATE_APPROVED:
+        draft = store.update_soap_draft_state(draft.draft_id, STATE_QUEUED)
+
+    return draft, job
+
+
 def _approve_draft_record(
     store,
     *,
@@ -148,6 +219,7 @@ def _approve_draft_record(
     presented_hash: str,
     is_auto: bool = False,
     request_path: str = "/api/soap/drafts/approve",
+    machine_id: str | None = None,
 ) -> tuple[dict, int]:
     """核心核准邏輯：content_hash 檢核、冪等檢查、狀態推進與 HIS_PUSH 排程。"""
     # 1. 驗證 content_hash（防止審核舊版）
@@ -157,8 +229,8 @@ def _approve_draft_record(
             status=409,
         )
 
-    # 2. 狀態檢查：僅 validated 或 failed（重試）可核准
-    if draft.state not in (STATE_VALIDATED, STATE_FAILED):
+    # 2. 狀態檢查：validated、failed 或 approved（崩潰重試恢復）可核准
+    if draft.state not in (STATE_VALIDATED, STATE_FAILED, STATE_APPROVED):
         raise ApiError(
             f"草稿狀態為 {draft.state}，不允許執行核准",
             status=409,
@@ -174,35 +246,13 @@ def _approve_draft_record(
             "pushed_draft_id": already_pushed.draft_id,
         }, 200
 
-    # 4. 狀態轉換：validated/failed -> approved -> queued
-    try:
-        draft = store.update_soap_draft_state(
-            draft.draft_id,
-            STATE_APPROVED,
-            reviewer_id=reviewer_id,
-            decision="approved",
-        )
-    except IllegalDraftTransitionError as exc:
-        raise ApiError(str(exc), status=409)
-
-    # 5. 排入 HIS_PUSH bridge 任務
-    job = enqueue_job(
+    # 4. 可恢復核准與排程
+    draft, job = approve_and_enqueue(
         store,
-        s_type_code="HIS_PUSH",
-        target_id=draft.case_id,
-        actor=reviewer_id,
-        extra_payload={
-            "draft_id": draft.draft_id,
-            "case_id": draft.case_id,
-            "order_code": draft.order_code,
-            "version": draft.version,
-            "content_hash": draft.content_hash,
-            "soap": draft.soap,
-        },
+        draft_id=draft.draft_id,
+        reviewer_id=reviewer_id,
+        machine_id=machine_id,
     )
-
-    # 標記為 queued
-    draft = store.update_soap_draft_state(draft.draft_id, STATE_QUEUED)
 
     # 審計紀錄（絕不記錄 SOAP 內文）
     action_name = "soap_auto_accept_approve" if is_auto else "soap_review_approve"
@@ -309,11 +359,21 @@ def update_auto_accept_setting():
 @bp.route("/api/soap/drafts/<draft_id>/approve", methods=["POST"])
 def approve_draft(draft_id: str):
     """醫師審核核准：核對 content_hash、執行冪等檢查，成功後排入 HIS_PUSH 任務。"""
+    store = case_store()
+    from elc_audit_engine.cycles.drafts import is_cycle_bound
+    if is_cycle_bound(store, draft_id):
+        raise ApiError("此草稿屬於錄音循環，請在快捷列確認視窗存檔", status=409)
+
     data = _json_object()
     draft = _draft_or_404(draft_id)
 
     eff_reviewer = str(data.get("reviewer_id") or caller_id() or "unknown_reviewer")
     presented_hash = str(data.get("content_hash") or "")
+    machine_id = data.get("machine_id") or None
+    if machine_id:
+        if not _MACHINE_ID_RE.match(machine_id):
+            raise ApiError(f"不合法的 machine_id 格式：{machine_id!r}", status=422)
+
     store = case_store()
     res, code = _approve_draft_record(
         store,
@@ -322,6 +382,7 @@ def approve_draft(draft_id: str):
         presented_hash=presented_hash,
         is_auto=False,
         request_path=request.path,
+        machine_id=machine_id,
     )
     return jsonify(res), code
 
@@ -364,6 +425,15 @@ def approve_batch(batch_id: str):
             results.append({"draft_id": draft_id, "status": "error", "message": "草稿不存在"})
             continue
 
+        from elc_audit_engine.cycles.drafts import is_cycle_bound
+        if is_cycle_bound(store, draft_id):
+            results.append({
+                "draft_id": draft_id,
+                "status": "skipped",
+                "message": "此草稿屬於錄音循環，已略過",
+            })
+            continue
+
         if expected_hash and draft.content_hash != expected_hash:
             results.append({
                 "draft_id": draft_id,
@@ -372,7 +442,7 @@ def approve_batch(batch_id: str):
             })
             continue
 
-        if draft.state not in (STATE_VALIDATED, STATE_FAILED):
+        if draft.state not in (STATE_VALIDATED, STATE_FAILED, STATE_APPROVED):
             results.append({
                 "draft_id": draft_id,
                 "status": "skipped",
@@ -390,27 +460,11 @@ def approve_batch(batch_id: str):
             continue
 
         try:
-            store.update_soap_draft_state(
-                draft_id,
-                STATE_APPROVED,
-                reviewer_id=eff_reviewer,
-                decision="approved",
-            )
-            job = enqueue_job(
+            draft, job = approve_and_enqueue(
                 store,
-                s_type_code="HIS_PUSH",
-                target_id=draft.case_id,
-                actor=eff_reviewer,
-                extra_payload={
-                    "draft_id": draft.draft_id,
-                    "case_id": draft.case_id,
-                    "order_code": draft.order_code,
-                    "version": draft.version,
-                    "content_hash": draft.content_hash,
-                    "soap": draft.soap,
-                },
+                draft_id=draft_id,
+                reviewer_id=eff_reviewer,
             )
-            store.update_soap_draft_state(draft_id, STATE_QUEUED)
             results.append({
                 "draft_id": draft_id,
                 "status": "approved",
@@ -429,9 +483,35 @@ def approve_batch(batch_id: str):
     }), 200
 
 
+def recover_stuck_approved(store, limit: int = 50) -> int:
+    """掃描卡在 state=approved 的草稿並逐一推進恢復至 queued。"""
+    stuck = store.list_soap_drafts(state=STATE_APPROVED, limit=limit)
+    fixed_count = 0
+    for d in stuck:
+        try:
+            approve_and_enqueue(
+                store,
+                draft_id=d.draft_id,
+                reviewer_id=d.reviewer_id or "system_recovery",
+            )
+            fixed_count += 1
+        except Exception as exc:
+            logger.warning(
+                "recover_stuck_approved 失敗 [draft_id=%s, exc=%s]",
+                d.draft_id,
+                type(exc).__name__,
+            )
+    return fixed_count
+
+
 @bp.route("/api/soap/drafts/<draft_id>/edit", methods=["POST"])
 def edit_draft(draft_id: str):
     """醫師修改 S/O/A/P：版本遞增、重新檢核與比對。"""
+    store = case_store()
+    from elc_audit_engine.cycles.drafts import is_cycle_bound
+    if is_cycle_bound(store, draft_id):
+        raise ApiError("此草稿屬於錄音循環，請在快捷列確認視窗存檔", status=409)
+
     data = _json_object()
     draft = _draft_or_404(draft_id)
 

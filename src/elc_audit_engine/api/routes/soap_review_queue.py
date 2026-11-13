@@ -11,6 +11,7 @@ from flask import Blueprint, jsonify, request
 
 from elc_audit_engine.api.context import case_store
 from elc_audit_engine.case_store.soap_draft_states import STATE_VALIDATED
+from elc_audit_engine.cycles.drafts import cycle_bound_draft_ids, extract_advisory
 
 bp = Blueprint("soap_review_queue", __name__)
 
@@ -34,17 +35,13 @@ def list_pending_review():
 
     store = case_store()
     records = store.list_soap_drafts_by_state(STATE_VALIDATED, limit=limit)
+    if records:
+        bound_ids = cycle_bound_draft_ids(store, [r.draft_id for r in records])
+        records = [r for r in records if r.draft_id not in bound_ids]
 
     results = []
     for rec in records:
-        comp = rec.comparison or {}
-        icd10_suggestions = comp.get("icd10_suggestions", [])
-        order_suggestions = comp.get("order_suggestions", [])
-        med_suggestions = comp.get("med_suggestions", [])
-
-        if not icd10_suggestions and isinstance(comp.get("advice"), dict):
-            icd10_suggestions = comp.get("advice", {}).get("icd10", [])
-
+        advisory = extract_advisory(rec.comparison)
         results.append({
             "draft_id": rec.draft_id,
             "version": rec.version,
@@ -52,12 +49,7 @@ def list_pending_review():
             "patient_ref": _mask_patient_ref(rec.case_id),
             "soap": rec.soap,
             "quality_score": rec.quality_score,
-            "advisory": {
-                "icd10_suggestions": icd10_suggestions,
-                "order_suggestions": order_suggestions,
-                "med_suggestions": med_suggestions,
-                "read_only": True,
-            },
+            "advisory": advisory,
             "created_at": rec.created_at,
         })
 

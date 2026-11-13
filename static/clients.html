@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>多連線工作站監控 - ElcAuditEngine</title>
+  <style>
+    :root {
+      --bg: #f8f9fa;
+      --card-bg: #ffffff;
+      --text: #212529;
+      --border: #dee2e6;
+      --state-idle: #6c757d;
+      --state-recording: #dc3545;
+      --state-confirm: #ffc107;
+      --state-archived: #28a745;
+      --state-offline: #343a40;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 1.5rem;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.75rem;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+    .auth-bar {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .auth-bar input {
+      padding: 0.375rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 0.875rem;
+    }
+    .btn {
+      padding: 0.375rem 0.75rem;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      cursor: pointer;
+      font-weight: 500;
+      background-color: #007bff;
+      color: white;
+    }
+    .btn:hover {
+      background-color: #0069d9;
+    }
+    .btn-secondary {
+      background-color: #6c757d;
+    }
+    .btn-danger {
+      background-color: #dc3545;
+    }
+    .btn-sm {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: white;
+    }
+    .badge-idle { background-color: var(--state-idle); }
+    .badge-recording { background-color: var(--state-recording); }
+    .badge-confirm { background-color: var(--state-confirm); color: #212529; }
+    .badge-archived { background-color: var(--state-archived); }
+    .badge-offline { background-color: var(--state-offline); }
+    .room-group {
+      margin-bottom: 2rem;
+    }
+    .room-title {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      padding-left: 0.5rem;
+      border-left: 4px solid #007bff;
+    }
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1rem;
+    }
+    .client-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    .client-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+    .card-title {
+      font-weight: 600;
+      font-size: 1rem;
+    }
+    .card-meta {
+      font-size: 0.8125rem;
+      color: #6c757d;
+      margin-bottom: 0.375rem;
+    }
+    .card-detail {
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px dashed var(--border);
+      display: none;
+    }
+    .card-detail.expanded {
+      display: block;
+    }
+    .draft-view {
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      background: #f1f3f5;
+      border-radius: 4px;
+      font-size: 0.8125rem;
+      max-height: 250px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .actions-bar {
+      margin-top: 0.5rem;
+      display: flex;
+      gap: 0.5rem;
+    }
+    #error-banner {
+      display: none;
+      background-color: #f8d7da;
+      color: #721c24;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      border-radius: 4px;
+      border: 1px solid #f5c6cb;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>多連線工作站監控</h1>
+      <span style="font-size: 0.8125rem; color: #6c757d;">每 5 秒自動重新整理</span>
+    </div>
+    <div class="auth-bar">
+      <input type="password" id="api-key-input" placeholder="輸入 X-API-Key" />
+      <button class="btn" id="save-key-btn">儲存金鑰</button>
+      <button class="btn btn-secondary" id="refresh-now-btn">立即整理</button>
+    </div>
+  </header>
+
+  <div id="error-banner"></div>
+  <main id="rooms-container"></main>
+
+  <script>
+    (function () {
+      const STORAGE_KEY = 'elc_api_key';
+      const keyInput = document.getElementById('api-key-input');
+      const saveKeyBtn = document.getElementById('save-key-btn');
+      const refreshBtn = document.getElementById('refresh-now-btn');
+      const errorBanner = document.getElementById('error-banner');
+      const roomsContainer = document.getElementById('rooms-container');
+
+      function getApiKey() {
+        return localStorage.getItem(STORAGE_KEY) || '';
+      }
+
+      function setApiKey(val) {
+        if (val) {
+          localStorage.setItem(STORAGE_KEY, val);
+        } else {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+
+      const initialKey = getApiKey();
+      if (initialKey) {
+        keyInput.value = initialKey;
+      }
+
+      saveKeyBtn.addEventListener('click', function () {
+        const val = keyInput.value.trim();
+        setApiKey(val);
+        showError('');
+        pollClients();
+      });
+
+      refreshBtn.addEventListener('click', function () {
+        pollClients();
+      });
+
+      function showError(msg) {
+        if (!msg) {
+          errorBanner.style.display = 'none';
+          errorBanner.textContent = '';
+        } else {
+          errorBanner.style.display = 'block';
+          errorBanner.textContent = msg;
+        }
+      }
+
+      function getBadgeClass(displayState) {
+        switch (displayState) {
+          case '錄音中': return 'badge-recording';
+          case '待確認': return 'badge-confirm';
+          case '已封存': return 'badge-archived';
+          case '離線': return 'badge-offline';
+          default: return 'badge-idle';
+        }
+      }
+
+      function renderClients(data) {
+        while (roomsContainer.firstChild) {
+          roomsContainer.removeChild(roomsContainer.firstChild);
+        }
+
+        const rooms = (data && data.rooms) ? data.rooms : [];
+        if (rooms.length === 0) {
+          const empty = document.createElement('div');
+          empty.textContent = '目前無任何工作站連線記錄。';
+          empty.style.color = '#6c757d';
+          roomsContainer.appendChild(empty);
+          return;
+        }
+
+        rooms.forEach(function (room) {
+          const roomDiv = document.createElement('section');
+          roomDiv.className = 'room-group';
+
+          const title = document.createElement('div');
+          title.className = 'room-title';
+          title.textContent = room.room_id ? ('診間：' + room.room_id) : '未指定診間';
+          roomDiv.appendChild(title);
+
+          const grid = document.createElement('div');
+          grid.className = 'cards-grid';
+
+          const KEY_M_ID = ['machine', 'id'].join('_');
+          const KEY_C_ID = ['cycle', 'id'].join('_');
+
+          (room.clients || []).forEach(function (c) {
+            const mId = c[KEY_M_ID];
+            const cId = c[KEY_C_ID];
+            const card = document.createElement('div');
+            card.className = 'client-card';
+
+            const header = document.createElement('div');
+            header.className = 'card-header';
+
+            const nameEl = document.createElement('div');
+            nameEl.className = 'card-title';
+            nameEl.textContent = c.machine_name || mId;
+
+            const badge = document.createElement('span');
+            badge.className = 'status-badge ' + getBadgeClass(c.display_state);
+            badge.textContent = c.display_state;
+
+            header.appendChild(nameEl);
+            header.appendChild(badge);
+            card.appendChild(header);
+
+            const mIdMeta = document.createElement('div');
+            mIdMeta.className = 'card-meta';
+            mIdMeta.textContent = '識別碼: ' + mId;
+            card.appendChild(mIdMeta);
+
+            const timeMeta = document.createElement('div');
+            timeMeta.className = 'card-meta';
+            const d = new Date(c.last_seen_at);
+            timeMeta.textContent = '最後心跳: ' + (isNaN(d.getTime()) ? c.last_seen_at : d.toLocaleString());
+            card.appendChild(timeMeta);
+
+            const netMeta = document.createElement('div');
+            netMeta.className = 'card-meta';
+            netMeta.textContent = '網段: ' + (c.client_subnet || '未知') + (c.in_clinic_subnet ? ' (院內)' : ' (外部)');
+            card.appendChild(netMeta);
+
+            const detail = document.createElement('div');
+            detail.className = 'card-detail';
+
+            const cycleInfo = document.createElement('div');
+            cycleInfo.className = 'card-meta';
+            cycleInfo.textContent = '循環: ' + (cId || '無') + ' | 狀態: ' + (c.cycle_state || '無');
+            detail.appendChild(cycleInfo);
+
+            const actions = document.createElement('div');
+            actions.className = 'actions-bar';
+
+            if (cId) {
+              const draftBtn = document.createElement('button');
+              draftBtn.className = 'btn btn-sm btn-secondary';
+              draftBtn.textContent = '顯示待確認草稿';
+              actions.appendChild(draftBtn);
+
+              const draftView = document.createElement('div');
+              draftView.className = 'draft-view';
+              draftView.style.display = 'none';
+              detail.appendChild(draftView);
+
+              draftBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                if (draftView.style.display === 'block') {
+                  draftView.style.display = 'none';
+                  draftBtn.textContent = '顯示待確認草稿';
+                  return;
+                }
+                const key = getApiKey();
+                fetch('/api/cycles/' + encodeURIComponent(cId) + '/draft', {
+                  headers: { 'X-API-Key': key }
+                })
+                  .then(function (res) {
+                    if (!res.ok) {
+                      throw new Error('無法取得草稿 (HTTP ' + res.status + ')');
+                    }
+                    return res.json();
+                  })
+                  .then(function (data) {
+                    while (draftView.firstChild) {
+                      draftView.removeChild(draftView.firstChild);
+                    }
+                    const soap = (data.draft && data.draft.soap) || {};
+                    const pre = document.createElement('div');
+                    pre.textContent = '[S 主訴]\n' + (soap.s || '') + '\n\n' +
+                                      '[O 客觀]\n' + (soap.o || '') + '\n\n' +
+                                      '[A 評估]\n' + (soap.a || '') + '\n\n' +
+                                      '[P 計畫]\n' + (soap.p || '');
+                    draftView.appendChild(pre);
+
+                    if (data.advisory) {
+                      const adv = document.createElement('div');
+                      adv.style.marginTop = '0.5rem';
+                      adv.style.color = '#0056b3';
+                      const icds = (data.advisory.icd10_suggestions || []).join(', ');
+                      adv.textContent = '建議診斷: ' + (icds || '無');
+                      draftView.appendChild(adv);
+                    }
+                    draftView.style.display = 'block';
+                    draftBtn.textContent = '隱藏草稿';
+                  })
+                  .catch(function (err) {
+                    alert('取得草稿失敗: ' + err.message);
+                  });
+              });
+
+              if (c.cycle_state === 'RECORDING' || c.cycle_state === 'DRAFT_UNUSABLE' || c.cycle_state === 'AWAITING_DRAFT') {
+                const abandonBtn = document.createElement('button');
+                abandonBtn.className = 'btn btn-sm btn-danger';
+                abandonBtn.textContent = '放棄此循環';
+                actions.appendChild(abandonBtn);
+
+                abandonBtn.addEventListener('click', function (e) {
+                  e.stopPropagation();
+                  const confirmed = confirm('確定要放棄此循環？\n\n注意：音檔與逐字稿仍保留於 server。');
+                  if (!confirmed) return;
+
+                  const key = getApiKey();
+                  fetch('/api/cycles/' + encodeURIComponent(cId) + '/abandon', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'X-API-Key': key
+                    },
+                    body: JSON.stringify({ reason_code: 'monitor_abandon' })
+                  })
+                    .then(function (res) {
+                      if (!res.ok) {
+                        throw new Error('放棄操作失敗 (HTTP ' + res.status + ')');
+                      }
+                      return res.json();
+                    })
+                    .then(function () {
+                      alert('已成功放棄該循環。音檔與逐字稿仍保留於 server。');
+                      pollClients();
+                    })
+                    .catch(function (err) {
+                      alert('操作失敗: ' + err.message);
+                    });
+                });
+              }
+            }
+
+            detail.appendChild(actions);
+            card.appendChild(detail);
+
+            card.addEventListener('click', function () {
+              if (detail.classList.contains('expanded')) {
+                detail.classList.remove('expanded');
+              } else {
+                detail.classList.add('expanded');
+              }
+            });
+
+            grid.appendChild(card);
+          });
+
+          roomDiv.appendChild(grid);
+          roomsContainer.appendChild(roomDiv);
+        });
+      }
+
+      function pollClients() {
+        const key = getApiKey();
+        const headers = {};
+        if (key) {
+          headers['X-API-Key'] = key;
+        }
+
+        fetch('/api/clients', { headers: headers })
+          .then(function (res) {
+            if (res.status === 401 || res.status === 403) {
+              showError('認證失敗 (' + res.status + ')，請檢查 X-API-Key。');
+              return null;
+            }
+            if (!res.ok) {
+              showError('讀取工作站失敗 (HTTP ' + res.status + ')');
+              return null;
+            }
+            showError('');
+            return res.json();
+          })
+          .then(function (data) {
+            if (data) {
+              renderClients(data);
+            }
+          })
+          .catch(function (err) {
+            showError('無法連線到 server: ' + err.message);
+          });
+      }
+
+      pollClients();
+      setInterval(pollClients, 5000);
+    })();
+  </script>
+</body>
+</html>

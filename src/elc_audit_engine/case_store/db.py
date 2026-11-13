@@ -126,6 +126,8 @@ SCHEMA_SOAP_DRAFTS = (
     "pushed_at TEXT, "
     "agent_id TEXT, "
     "failure_reason TEXT, "
+    "his_job_id TEXT, "
+    "his_machine_id TEXT, "
     "created_at TEXT NOT NULL, "
     "updated_at TEXT NOT NULL"
     ")"
@@ -190,6 +192,90 @@ SCHEMA_SOAP_SETTINGS = (
     ")"
 )
 
+# ── Phase 31: 循環狀態機與多連線監控資料表 ─────────────────────────────
+
+SCHEMA_RECORDING_CYCLES = (
+    "CREATE TABLE IF NOT EXISTS recording_cycles ("
+    "cycle_id TEXT PRIMARY KEY, "
+    "machine_id TEXT NOT NULL, "
+    "room_id TEXT, "
+    "state TEXT NOT NULL, "
+    "command_id TEXT UNIQUE NOT NULL, "
+    "stop_command_id TEXT, "
+    "session_id TEXT UNIQUE, "
+    "draft_id TEXT, "
+    "total_chunks INTEGER, "
+    "audio_sha256 TEXT, "
+    "upload_complete INTEGER NOT NULL DEFAULT 0, "
+    "audio_path TEXT, "
+    "transcript_path TEXT, "
+    "extras_json TEXT, "
+    "last_error TEXT, "
+    "created_by TEXT, "
+    "created_at TEXT NOT NULL, "
+    "updated_at TEXT NOT NULL, "
+    "archived_at TEXT"
+    ")"
+)
+
+SCHEMA_INDEX_RECORDING_CYCLES_ACTIVE = (
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_recording_cycles_machine_active "
+    "ON recording_cycles (machine_id) "
+    "WHERE state NOT IN ('ARCHIVED', 'ABANDONED')"
+)
+
+SCHEMA_CYCLE_EVENTS = (
+    "CREATE TABLE IF NOT EXISTS cycle_events ("
+    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+    "cycle_id TEXT NOT NULL, "
+    "from_state TEXT, "
+    "to_state TEXT NOT NULL, "
+    "actor TEXT, "
+    "reason_code TEXT, "
+    "created_at TEXT NOT NULL"
+    ")"
+)
+
+SCHEMA_CYCLE_CHUNKS = (
+    "CREATE TABLE IF NOT EXISTS cycle_chunks ("
+    "cycle_id TEXT NOT NULL, "
+    "seq INTEGER NOT NULL, "
+    "sha256 TEXT NOT NULL, "
+    "size_bytes INTEGER NOT NULL, "
+    "path TEXT NOT NULL, "
+    "received_at TEXT NOT NULL, "
+    "PRIMARY KEY (cycle_id, seq)"
+    ")"
+)
+
+SCHEMA_CYCLE_CONFIRMATIONS = (
+    "CREATE TABLE IF NOT EXISTS cycle_confirmations ("
+    "cycle_id TEXT PRIMARY KEY, "
+    "draft_id TEXT NOT NULL, "
+    "version INTEGER NOT NULL, "
+    "content_hash TEXT NOT NULL, "
+    "soap_json TEXT NOT NULL, "
+    "extras_json TEXT, "
+    "reviewer_id TEXT, "
+    "confirmed_at TEXT NOT NULL"
+    ")"
+)
+
+SCHEMA_CLIENT_PRESENCE = (
+    "CREATE TABLE IF NOT EXISTS client_presence ("
+    "machine_id TEXT PRIMARY KEY, "
+    "machine_name TEXT, "
+    "room_id TEXT, "
+    "bar_state TEXT, "
+    "soapvoice_state TEXT, "
+    "chunks_pending INTEGER, "
+    "app_version TEXT, "
+    "client_subnet TEXT, "
+    "caller_id TEXT, "
+    "last_seen_at TEXT NOT NULL"
+    ")"
+)
+
 
 def get_connection(db_path: str) -> sqlite3.Connection:
     """建立（或開啟）SQLite 連線，回傳前確保父目錄存在。
@@ -230,6 +316,22 @@ def init_schema(db_path: str) -> None:
         conn.execute(SCHEMA_AGENT_HEARTBEATS)
         conn.execute(SCHEMA_SOAP_RECORDING_SESSIONS)
         conn.execute(SCHEMA_SOAP_SETTINGS)
+        conn.execute(SCHEMA_RECORDING_CYCLES)
+        conn.execute(SCHEMA_INDEX_RECORDING_CYCLES_ACTIVE)
+        conn.execute(SCHEMA_CYCLE_EVENTS)
+        conn.execute(SCHEMA_CYCLE_CHUNKS)
+        conn.execute(SCHEMA_CYCLE_CONFIRMATIONS)
+        conn.execute(SCHEMA_CLIENT_PRESENCE)
+
+        # 冪等加欄：Phase 31 his_job_id, his_machine_id
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(soap_drafts)")
+        existing_cols = {row[1] for row in cursor.fetchall()}
+        if "his_job_id" not in existing_cols:
+            conn.execute("ALTER TABLE soap_drafts ADD COLUMN his_job_id TEXT")
+        if "his_machine_id" not in existing_cols:
+            conn.execute("ALTER TABLE soap_drafts ADD COLUMN his_machine_id TEXT")
+
         conn.commit()
     finally:
         conn.close()

@@ -1,0 +1,141 @@
+{
+  "contract": "elc-p31-ipc/1",
+  "ipc": {
+    "status": {
+      "response": {
+        "contract": "elc-p31-ipc/1",
+        "state": "RECORDING",
+        "cycle_id": "0123456789abcdef0123456789abcdef",
+        "elapsed_seconds": 12.5,
+        "patient_bound": true,
+        "chunks_total": 1,
+        "chunks_acked": 0,
+        "chunks_pending": 1,
+        "draft_submitted": false,
+        "last_error": null
+      }
+    },
+    "start": {
+      "request": {
+        "command_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "cycle_id": "0123456789abcdef0123456789abcdef"
+      },
+      "response_200": {"state": "RECORDING"},
+      "response_409_busy": {"error": "busy"}
+    },
+    "stop": {
+      "request": {
+        "command_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "cycle_id": "0123456789abcdef0123456789abcdef"
+      },
+      "response_200": {"state": "UPLOADING"},
+      "response_409_cycle_mismatch": {"error": "cycle_mismatch"}
+    },
+    "archived": {
+      "request": {"cycle_id": "0123456789abcdef0123456789abcdef"},
+      "response_200": {"cycle_id": "0123456789abcdef0123456789abcdef", "cleanup_eligible": true},
+      "response_409": {"error": "not_archived_on_server"}
+    }
+  },
+  "server": {
+    "cycles_create": {
+      "request": {
+        "command_id": "cccccccccccccccccccccccccccccccc",
+        "machine_id": "3f2b8c1e-9a4d-4b7e-8c21-5d6e7f8a9b0c",
+        "room_id": "room-01"
+      },
+      "response_201": {"cycle": {"cycle_id": "0123456789abcdef0123456789abcdef", "state": "RECORDING"}}
+    },
+    "chunk_upload": {
+      "form": {"seq": 0, "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+      "response_201": {"cycle_id": "0123456789abcdef0123456789abcdef", "seq": 0, "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "duplicate": false}
+    },
+    "finalize": {
+      "request": {"total_chunks": 3, "audio_sha256": "1111111111111111111111111111111111111111111111111111111111111111"},
+      "response_200": {"cycle_id": "0123456789abcdef0123456789abcdef", "total_chunks": 3, "audio_sha256": "1111111111111111111111111111111111111111111111111111111111111111", "upload_complete": true},
+      "response_409_missing": {"error": "missing_chunks", "missing": [1]}
+    },
+    "draft_submit": {
+      "request": {
+        "session_id": "sess-demo-001",
+        "case_id": "CASE-DEMO-001",
+        "patient_ref": "PATIENT-DEMO-001",
+        "visit_date": "2026-11-12",
+        "soap": {"s": "Demo subjective.", "o": "Demo objective.", "a": "Demo assessment.", "p": "Demo plan."},
+        "transcript": "Demo transcript text.",
+        "extras": {
+          "summary_zh": "示範摘要",
+          "past_history": "示範過去病史",
+          "suggestions": {"icd10": [], "orders": [], "meds": []}
+        }
+      },
+      "response_201": {"cycle": {"cycle_id": "0123456789abcdef0123456789abcdef"}, "draft_id": "draft-demo-001", "draft_state": "validated"}
+    },
+    "cycle_draft_view": {
+      "response_200": {
+        "cycle_id": "0123456789abcdef0123456789abcdef",
+        "draft": {"draft_id": "draft-demo-001", "version": 1, "content_hash": "2222222222222222222222222222222222222222222222222222222222222222", "state": "validated", "soap": {"s": "Demo subjective.", "o": "Demo objective.", "a": "Demo assessment.", "p": "Demo plan."}, "quality_issues": []},
+        "extras": {"summary_zh": "示範摘要", "past_history": "示範過去病史"},
+        "advisory": {"icd10_suggestions": [], "order_suggestions": [], "med_suggestions": [], "read_only": true}
+      }
+    },
+    "confirm": {
+      "request": {"content_hash": "2222222222222222222222222222222222222222222222222222222222222222"},
+      "response_200": {"cycle": {"cycle_id": "0123456789abcdef0123456789abcdef", "state": "CONFIRMED"}, "draft_id": "draft-demo-001", "content_hash": "2222222222222222222222222222222222222222222222222222222222222222"}
+    },
+    "archive": {
+      "request": {"command_id": "dddddddddddddddddddddddddddddddd"},
+      "response_200": {"status": "archived"},
+      "response_202": {"status": "his_pending"},
+      "response_409": {"status": "his_failed", "reason": "demo"}
+    },
+    "heartbeat": {
+      "request": {
+        "machine_id": "3f2b8c1e-9a4d-4b7e-8c21-5d6e7f8a9b0c",
+        "machine_name": "DEMO-WS-01",
+        "room_id": "room-01",
+        "bar_state": "IDLE",
+        "soapvoice_state": "IDLE",
+        "chunks_pending": 0,
+        "app_version": "0.0.0-demo"
+      },
+      "response_200": {"status": "ok", "server_time": "2026-11-12T10:00:00+08:00", "notify": null}
+    },
+    "clients": {
+      "response_200": {
+        "rooms": [
+          {
+            "room_id": "room-01",
+            "clients": [
+              {"machine_id": "3f2b8c1e-9a4d-4b7e-8c21-5d6e7f8a9b0c", "machine_name": "DEMO-WS-01", "room_id": "room-01", "display_state": "待命", "cycle_id": null, "cycle_state": null, "last_seen_at": "2026-11-12T10:00:00+08:00", "online": true, "client_subnet": "192.168.1.0/24", "in_clinic_subnet": true}
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "cycle_states": [
+    "RECORDING",
+    "AWAITING_DRAFT",
+    "AWAITING_CONFIRM",
+    "DRAFT_UNUSABLE",
+    "CONFIRMED",
+    "ARCHIVING",
+    "ARCHIVE_FAILED",
+    "ARCHIVED",
+    "ABANDONED"
+  ],
+  "transitions": {
+    "RECORDING": ["AWAITING_DRAFT", "ABANDONED"],
+    "AWAITING_DRAFT": ["AWAITING_CONFIRM", "DRAFT_UNUSABLE", "ABANDONED"],
+    "AWAITING_CONFIRM": ["CONFIRMED", "DRAFT_UNUSABLE", "ABANDONED"],
+    "DRAFT_UNUSABLE": ["AWAITING_CONFIRM", "CONFIRMED", "ABANDONED"],
+    "CONFIRMED": ["ARCHIVING", "ARCHIVED", "ARCHIVE_FAILED"],
+    "ARCHIVING": ["ARCHIVING", "ARCHIVED", "ARCHIVE_FAILED"],
+    "ARCHIVE_FAILED": ["ARCHIVING", "ARCHIVED"],
+    "ARCHIVED": [],
+    "ABANDONED": []
+  },
+  "display_states": ["離線", "錄音中", "待確認", "已封存", "待命"],
+  "heartbeat_forbidden_keys": ["soap", "transcript", "extras", "patient_name", "patient_ref"]
+}

@@ -13,18 +13,22 @@ from elc_audit_engine.safe_paths import UnsafeIdentifierError
 class ApiError(Exception):
     """可安全回傳給前端的錯誤（訊息不含內部細節）。"""
 
-    def __init__(self, message: str, status: int = 400):
+    def __init__(self, message: str, status: int = 400, extra: dict | None = None):
         super().__init__(message)
         self.message = message
         self.status = status
+        self.extra = extra or {}
 
 
 class UploadFileError(Exception):
     """上傳檔案不合法（副檔名／大小）。"""
 
 
-def _error(message: str, status: int):
-    return jsonify({"status": "error", "message": message}), status
+def _error(message: str, status: int, extra: dict | None = None):
+    body = {"status": "error", "message": message}
+    if extra:
+        body.update(extra)
+    return jsonify(body), status
 
 
 def register_error_handlers(app: Flask) -> None:
@@ -35,7 +39,7 @@ def register_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(ApiError)
     def _handle_api_error(exc: ApiError):
-        return _error(exc.message, exc.status)
+        return _error(exc.message, exc.status, extra=exc.extra)
 
     @app.errorhandler(UnsafeIdentifierError)
     def _handle_unsafe_identifier(exc: UnsafeIdentifierError):

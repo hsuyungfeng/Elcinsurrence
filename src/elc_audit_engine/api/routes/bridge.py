@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from flask import Blueprint, jsonify, request
 
@@ -22,7 +23,9 @@ from elc_audit_engine.bridge_queue import (
     list_pending,
     report_status,
 )
-from elc_audit_engine.case_store import CaseNotFoundError
+from elc_audit_engine.case_store import CaseNotFoundError, _UNSET_MACHINE
+
+_MACHINE_ID_RE = re.compile(r"^[0-9a-zA-Z_-]{1,64}$")
 
 from ..context import caller_id, case_store
 from ..errors import ApiError
@@ -66,8 +69,18 @@ def create_bridge_job():
 def list_pending_jobs():
     """地端 Agent 輪詢：回傳 PENDING 任務（含 download_path，Agent 以 API Key 下載）。"""
     s_type_code = request.args.get("sTypeCode") or None
+    machine_id = request.args.get("machine_id") or None
+    if machine_id:
+        if not _MACHINE_ID_RE.match(machine_id):
+            raise ApiError(f"不合法的 machine_id 格式：{machine_id!r}", status=422)
+
+    if s_type_code == "HIS_PUSH":
+        target_machine = machine_id if machine_id else None
+    else:
+        target_machine = _UNSET_MACHINE
+
     try:
-        jobs = list_pending(case_store(), s_type_code=s_type_code)
+        jobs = list_pending(case_store(), s_type_code=s_type_code, machine_id=target_machine)
     except BridgeValidationError as exc:
         raise ApiError(str(exc), status=422)
     return jsonify({"status": "success", "count": len(jobs), "jobs": jobs})
@@ -83,6 +96,16 @@ def report_bridge_job_status(job_id: str):
     data = _json_object()
     current = _job_or_404(job_id)
     new_status = str(data.get("status") or "")
+    req_machine_id = data.get("machine_id")
+
+    # Phase 31 D-31-37：在同步草稿前先驗證 machine_id，不符直接 409
+    job_machine_id = (current.get("extra_payload") or {}).get("machine_id")
+    if job_machine_id:
+        if not req_machine_id or req_machine_id != job_machine_id:
+            raise ApiError(
+                f"任務已綁定機器 {job_machine_id}，與請求機器 {req_machine_id} 不符",
+                status=409,
+            )
 
     # Phase 29 §8.5：HIS_PUSH 任務的草稿狀態須先於佇列回報同步。
     # 同步失敗時不標記任務成功（回 500），讓 Agent 重送；不得靜默吞掉例外（P1-1）。
@@ -102,6 +125,7 @@ def report_bridge_job_status(job_id: str):
             nhi_status=data.get("NHI_Query") or data.get("nhi_status") or None,
             actor=caller_id(),
             expected_status=data.get("expected_status") or None,
+            machine_id=req_machine_id,
         )
     except BridgeConflictError as exc:
         raise ApiError(str(exc), status=409)
