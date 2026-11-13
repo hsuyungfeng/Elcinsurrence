@@ -111,6 +111,14 @@ Full phase details, success criteria, and requirements: [`milestones/v1.1-ROADMA
 
 - [ ] Phase 30: Windows 執行檔、錄音→SOAP 審核與 HIS 首次校正（0/0 plans）— 解壓即用的 agent-desktop 執行檔（自動尋找區網 local server）；SoapVoice 錄音完成後跳出 SOAP 審核視窗，醫師修改後寫入 HIS（可選自動接入或每案先審查，預設每案先審查）；HIS 歷史介面首次使用校正（列出 SOAP 校正項逐項人工確認，診斷碼／醫令／藥令僅顯示建議）。
 
+### Phase 31: Windows 客戶端紅綠黃燈快捷列與多連線監控
+
+**Depends on:** Phase 30（Windows 執行檔、SOAP 審核 API、HIS 回寫）
+**Mode:** standard
+**Context:** `.planning/phases/31-windows-client-traffic-light-bar-multi-session/31-CONTEXT.md`
+
+- [ ] Phase 31: Windows 客戶端紅綠黃燈快捷列與多連線監控（0/0 plans）— 客戶端安裝後常駐右下角、置頂的小型快捷列（紅＝開始錄音、綠＝結束、黃＝確認並存檔進入下一循環）；錄音由 SoapVoice 執行（D-30-01）；server 端跳出 SOAP 確認視窗；server 端介面可同時看見多個連線的客戶端與工作階段。
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
