@@ -70,6 +70,7 @@ class ReviewClient:
         base_url: str,
         operator_key: str,
         http: Any = None,
+        machine_id: Optional[str] = None,
     ):
         if not operator_key or not str(operator_key).strip():
             raise ValueError("operator_key must not be empty")
@@ -77,6 +78,7 @@ class ReviewClient:
         self.base_url = base_url.rstrip("/")
         self.operator_key = operator_key
         self.http = http or DefaultReviewHttp(operator_key)
+        self.machine_id = machine_id
 
     def list_pending(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Fetch drafts in validated state waiting for physician review."""
@@ -96,7 +98,9 @@ class ReviewClient:
     def approve(self, draft_id: str, content_hash: str) -> Dict[str, Any]:
         """Physician approves draft to queue for HIS push."""
         logger.info("Approving draft_id=%s with content_hash=%s", draft_id, content_hash)
-        body = {"content_hash": content_hash}
+        body: Dict[str, Any] = {"content_hash": content_hash}
+        if self.machine_id:
+            body["machine_id"] = self.machine_id
         status, data = self.http.request(self.base_url, "POST", f"/api/soap/drafts/{draft_id}/approve", json_body=body)
 
         if status == 409:

@@ -1,0 +1,63 @@
+"""Phase 31: Windows 客戶端紅綠黃燈快捷列套件 (deploy.windows_agent.traffic_bar)."""
+
+from deploy.windows_agent.traffic_bar.bar_position import (
+    clamp_position,
+    default_position,
+)
+from deploy.windows_agent.traffic_bar.bar_state import (
+    ALL_BAR_STATES,
+    ENABLED,
+    STATE_AWAITING_CONFIRM,
+    STATE_AWAITING_DRAFT,
+    STATE_ARCHIVE_FAILED,
+    STATE_ARCHIVING,
+    STATE_CONFIRMED,
+    STATE_DRAFT_UNUSABLE,
+    STATE_ERROR,
+    STATE_IDLE,
+    STATE_INTERRUPTED,
+    STATE_RECORDING,
+    STATE_SERVER_OFFLINE,
+    STATE_SOAPVOICE_OFFLINE,
+    STATE_STARTING,
+    STATE_STOPPING,
+    STATE_UPLOADING,
+    on_press,
+    project,
+    status_text,
+)
+from deploy.windows_agent.traffic_bar.bar_window import (
+    BarViewModel,
+    TrafficBarWindow,
+    build_view_model,
+    run_traffic_bar,
+)
+
+__all__ = [
+    "ALL_BAR_STATES",
+    "ENABLED",
+    "BarViewModel",
+    "TrafficBarWindow",
+    "build_view_model",
+    "run_traffic_bar",
+    "clamp_position",
+    "default_position",
+    "STATE_AWAITING_CONFIRM",
+    "STATE_AWAITING_DRAFT",
+    "STATE_ARCHIVE_FAILED",
+    "STATE_ARCHIVING",
+    "STATE_CONFIRMED",
+    "STATE_DRAFT_UNUSABLE",
+    "STATE_ERROR",
+    "STATE_IDLE",
+    "STATE_INTERRUPTED",
+    "STATE_RECORDING",
+    "STATE_SERVER_OFFLINE",
+    "STATE_SOAPVOICE_OFFLINE",
+    "STATE_STARTING",
+    "STATE_STOPPING",
+    "STATE_UPLOADING",
+    "on_press",
+    "project",
+    "status_text",
+]

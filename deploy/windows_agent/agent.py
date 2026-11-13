@@ -179,9 +179,11 @@ class WindowsAgent:
 
     def poll_pending_jobs(self) -> List[Dict[str, Any]]:
         """Fetch pending HIS_PUSH jobs from bridge queue."""
-        status, data = self.http_client.request(
-            "GET", "/api/bridge/jobs/pending?sTypeCode=HIS_PUSH"
-        )
+        if self.machine_id:
+            path = f"/api/bridge/jobs/pending?sTypeCode=HIS_PUSH&machine_id={urllib.parse.quote(self.machine_id)}"
+        else:
+            path = "/api/bridge/jobs/pending?sTypeCode=HIS_PUSH"
+        status, data = self.http_client.request("GET", path)
         if status == 200:
             return data.get("jobs", [])
         logger.warning("Polling failed with HTTP %d: %s", status, data.get("message"))
@@ -189,10 +191,13 @@ class WindowsAgent:
 
     def claim_job(self, job_id: str) -> bool:
         """Attempt to claim job with CAS (PENDING -> SENDING)."""
+        body: Dict[str, Any] = {"status": "SENDING", "expected_status": "PENDING"}
+        if self.machine_id:
+            body["machine_id"] = self.machine_id
         status, _ = self.http_client.request(
             "POST",
             f"/api/bridge/jobs/{job_id}/status",
-            {"status": "SENDING", "expected_status": "PENDING"},
+            body,
         )
         return status == 200
 
@@ -209,6 +214,8 @@ class WindowsAgent:
         }
         if failure_reason:
             body["reason"] = failure_reason
+        if self.machine_id:
+            body["machine_id"] = self.machine_id
 
         http_status, _ = self.http_client.request(
             "POST",
