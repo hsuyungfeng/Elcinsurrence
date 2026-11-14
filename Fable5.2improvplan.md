@@ -215,3 +215,70 @@
 - 未開啟瀏覽器實際操作工作台；字級與按鈕的判斷來自原始碼統計。
 - 未檢視 SoapVoice 客戶端在 Windows 上的打包方式。
 - 訪客網段是否隔離屬現場網路設定，無法由程式碼得知。
+
+---
+
+## 七、執行進度（2026-11-14）
+
+> 分支：`plan/fable52-improvement-plan`（計畫本身已提交於 `76d8452`）。
+> 實作改動尚未提交，待確認後再 commit。
+
+### 7.1 已完成（第一期：A 全部、B1、B2、C1）
+
+| 項目 | 狀態 | 實作位置 |
+|---|---|---|
+| A1–A2 來源位址信任，無金鑰 | ✅ | `src/elc_audit_engine/lan_trust.py`（新）、`api/security.py`（重寫） |
+| A3 審計記錄 `lan:<IP>` | ✅ | `lan_trust.caller_id_for`；`auth.py` 已刪除 |
+| A4 跨站寫入防護（Origin／Sec-Fetch-Site） | ✅ | `lan_trust.is_cross_site_request` |
+| A5 Host 形式檢查，取代 `ELC_ALLOWED_HOSTS` | ✅ | `lan_trust.is_allowed_host`（防 DNS rebinding） |
+| A6 移除頁面金鑰介面與客戶端金鑰 | ✅ | `index.html`、`clients.html`、`agent.py`、`review_client.py`、`traffic_bar/server_client.py`、`main.py` |
+| A7 移除 `DISABLE_AUTH` 旁路、院所代碼即金鑰 | ✅ | `security.py`、`api/app.py` |
+| A8 不保留金鑰模式 | ✅ | `auth.py` 刪除；`test_auth.py`、`test_facility_auth.py` 刪除 |
+| 額外：移除 `ELC_SOAP_ADMIN_CALLERS` | ✅ | 以 key 為基礎的白名單改用 `lan:<IP>` 後會靜默鎖死所有人，故一併移除 |
+| B1 快捷列接進執行檔 | ✅（程式層） | `main.py`（預設啟動快捷列，HIS 輪詢移至 daemon 執行緒）；`ElcAgent.spec` 補上 `traffic_bar` hiddenimports |
+| B2 無主控台 | ✅（程式層） | `ElcAgent.spec` `console=False`；`say()` 取代 `print`；日誌寫入 `%LOCALAPPDATA%\ElcAgent\logs\agent.log`；移除 `input()` |
+| C1 移除寫死的 `192.168.68.118` | ✅ | `main.py` |
+| 主機設定 | ✅ | `deploy/elc-audit-engine.env.example`、`.env.example`、`deploy/README.md` §三、`gunicorn.conf.py` 註解 |
+
+### 7.2 驗證結果（實際執行，非推論）
+
+- 測試：`tests/` **1536 passed**（基準 1502，新增 `test_lan_trust.py` 49、`test_lan_trust_api.py` 17、`test_agent_bar_launch.py` 12，其餘為既有測試改寫）；`doc/tests` **138 passed**。
+- 失敗基準更正：先前以 `-x` 執行，會提前中止而誤報；乾淨基準（`git stash --include-untracked`）為 **1502 passed、0 failed**。
+- Lint：`ruff check .` 維持 **241 errors**（基準 242，未新增）。
+- 線上服務：已以無金鑰設定重啟 `elc-audit-engine.service`；區網 `200`、Host 偽造 `400`、跨站寫入 `403`。自動偵測信任網段為 `192.168.68.0/24`。
+
+### 7.3 未完成（需要後續 phase）
+
+| 項目 | 狀態／進度 |
+|---|---|
+| B1/B2 實際 PyInstaller 建置與 `ElcAgent-win64.zip` 更新、SHA256 | 本環境為 Linux，無法建置 Windows 執行檔；spec 改動已於 32-14 完整更新，並以靜態測試驗證 |
+| F1 Windows 實機驗證（Phase 31 的 8 項＋30-09 探針） | 測試規格就緒，移交 32-24 整合驗收 |
+| B3 Inno Setup 單一安裝檔、B4 SoapVoice 併入、B5 系統匣、B6 三步精靈、B7 免 JSON 校正、B8 按鈕文字、B10 修正驗收清單 | ✅ **已於 Phase 32 完成**（Plans 32-05, 32-11, 32-12, 32-14, 32-17, 32-19） |
+| C2 UDP 廣播、C3 位址自動復原、C4 health 帶院所資訊、C6 多網卡選路 | ✅ **已於 Phase 32 完成**（Plans 32-06, 32-07, 32-11） |
+| D1 `install.sh`、D2 網頁初次設定、D3 狀態頁、D4 自動備份、D5 深度健康檢查、D6 客戶端雙軌保留清理 | ✅ **已於 Phase 32 完成**（Plans 32-08, 32-09, 32-10, 32-13, 32-15） |
+| E1–E9 醫師模式工作台、E8 拆檔、白話按鈕、步驟引導、CSP 收緊 | ✅ **已於 Phase 32 完成**（Plans 32-16, 32-18, 32-20, 32-21, 32-22） |
+| F2 醫師一頁說明、F6 核對舊 `codeimproveplan.md` P0（全數確認結案） | ✅ **已於 Phase 32 完成**（Plan 32-23：產出 `CLINIC_QUICKSTART_DOCTOR.md` 與 `CLINIC_DEPLOYMENT_GUIDE.md`） |
+| B9 自動更新、C5 離線佇列 | 保留為未來維護演進需求 |
+
+### 7.4 本次改動的風險提醒
+
+- **Tk 與執行緒**：快捷列佔用主執行緒，HIS 寫入輪詢改為 daemon 執行緒。已處理 Ctrl+C 落點改變的問題，但尚未在 Windows 上實測 UIA 與 Tk 共存（對應 F1）。
+- **CI 目前已紅**：`ruff check .` 在改動前就有 242 個既有錯誤，CI 的 lint 步驟本來就會失敗，與本次改動無關，但需另行清理。
+- **執行期設定檔**：`config/facility.json` 有未提交的執行期修改，依交接檔規定不提交。
+- **無法由程式碼得知**：訪客 Wi-Fi 是否真的隔離，需現場確認。
+
+### 7.5 策展審查（execurator）發現與處置
+
+| # | 發現 | 處置 |
+|---|---|---|
+| 1 | 同機反向代理會讓外部請求變成 `127.0.0.1`，loopback 被無條件信任 | ✅ **已修**：帶 `X-Forwarded-For`／`Forwarded`／`X-Real-IP` 的請求一律 403（fail closed），新增測試 |
+| 2 | 自動偵測網段硬編碼 `/24`；診所若分 VLAN 或遮罩非 /24，診間電腦會被 403 | ⏳ 待決：建議安裝精靈顯示偵測結果並要求確認；或必須明示 `ELC_TRUSTED_SUBNETS` |
+| 3 | 自動偵測以 `10.255.255.255` 選路由，若預設路由經健保 VPN（10.x）會選錯介面 | ⏳ 待決：改為列舉實體網卡，或安裝時綁定網卡名稱 |
+| 4 | GET 讀取病歷與錄音端點不受 CSRF 檢查；區網內任何裝置都能批次讀取 | ⏳ 待決：這是「院內信任」設計的已知取捨；若要收緊，需補診間會話或 cycle 綁定。至少可加上「跨站 GET 一律拒絕」（`Sec-Fetch-Site: cross-site`） |
+| 5 | `PUT /api/soap/settings/auto-accept` 與 `POST/PUT /api/facility` 任何院內裝置可改 | ⏳ 待決：這兩項是我移除 `ELC_SOAP_ADMIN_CALLERS` 後的實際風險，建議限定為伺服器本機或加簡單的管理 PIN |
+| 6 | 保存期限衝突：客戶端 3 個月 vs Phase 31 既有 2GB FIFO 上限 | ⏳ 待決：需裁示優先順序（時間或容量），此為 D6 的前提 |
+| 7 | SoapVoice 本機 IPC `control_token` 與「不保留金鑰」 | 📝 釐清：A8 只針對**伺服器 API 金鑰**；本機 IPC token 只在 127.0.0.1 使用，兩者不衝突，保留 |
+| 8 | 單一安裝檔 B4：SoapVoice 依賴 PyTorch／Whisper 等，體積數 GB，與 ElcAgent 打包規格差距大 | ⏳ 待決：B4 的體積與發版綁定需先評估（可考慮 SoapVoice 另裝但由 ElcAgent 看管） |
+| 9 | `/api/monthly/.../email` 收件人收緊 | ✅ 已在 Phase 31 前即停用（`monthly email` 端點回 403，既有測試覆蓋） |
+
+> 策展報告中「auth.py／DISABLE_AUTH／static 金鑰面板仍存在」等項目已於本次實作中移除，屬於審查時的舊狀態，不再列為待辦。

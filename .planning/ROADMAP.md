@@ -144,7 +144,19 @@ Full phase details, success criteria, and requirements: [`milestones/v1.1-ROADMA
 ## Out of Roadmap Scope
 
 The following material from 電子抽審.md is background/context only and is NOT part of any phase's engineering scope:
+
 - FHIR/HL7 mapping tables (constraints.md C12)
 - DICOM/PDF/XML file packaging and sTypeCode upload protocol details (constraints.md C9, C10)
 - 院所行政前置申請作業 (VPN 權限開通、紙本替代方案申請) — operational/administrative, not engineering
 - UML/ER research appendix material — background reference for eventual Phase 9 design
+
+### Phase 32: 院內免驗證客戶端一體化與醫師上手（承接 Fable5.2improvplan.md 第七節未完成項目）
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 31
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd:plan-phase 32 to break down)
