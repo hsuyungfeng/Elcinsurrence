@@ -213,3 +213,82 @@ def test_describe_trust_lists_subnets():
 
 def test_describe_trust_loopback_only():
     assert "僅本機" in describe_trust([])
+
+
+# ── 介面列舉與實際遮罩偵測（D-32-16 & D-32-17） ────────────────
+
+import json
+from elc_audit_engine.lan_trust import is_cross_site_read, list_candidate_interfaces
+
+
+def test_list_candidate_interfaces_single_24():
+    mock_ip_data = [
+        {"ifname": "lo", "flags": ["LOOPBACK"], "addr_info": [{"local": "127.0.0.1", "prefixlen": 8}]},
+        {"ifname": "eth0", "flags": ["BROADCAST", "MULTICAST"], "addr_info": [{"local": "192.168.1.15", "prefixlen": 24}]},
+    ]
+    candidates = list_candidate_interfaces(ip_json_provider=lambda: json.dumps(mock_ip_data))
+    assert len(candidates) == 1
+    assert candidates[0]["name"] == "eth0"
+    assert candidates[0]["address"] == "192.168.1.15"
+    assert candidates[0]["prefixlen"] == 24
+    assert candidates[0]["network"] == "192.168.1.0/24"
+
+
+def test_list_candidate_interfaces_actual_mask_23():
+    mock_ip_data = [
+        {"ifname": "enp3s0", "flags": [], "addr_info": [{"local": "10.0.4.50", "prefixlen": 23}]},
+    ]
+    candidates = list_candidate_interfaces(ip_json_provider=lambda: json.dumps(mock_ip_data))
+    assert len(candidates) == 1
+    assert candidates[0]["prefixlen"] == 23
+    assert candidates[0]["network"] == "10.0.4.0/23"
+
+
+def test_list_candidate_interfaces_excludes_vpn_and_virtual():
+    mock_ip_data = [
+        {"ifname": "eth0", "flags": [], "addr_info": [{"local": "192.168.1.10", "prefixlen": 24}]},
+        {"ifname": "tun0", "flags": [], "addr_info": [{"local": "10.8.0.5", "prefixlen": 24}]},
+        {"ifname": "docker0", "flags": [], "addr_info": [{"local": "172.17.0.1", "prefixlen": 16}]},
+        {"ifname": "wg0", "flags": [], "addr_info": [{"local": "10.0.99.1", "prefixlen": 24}]},
+    ]
+    candidates = list_candidate_interfaces(ip_json_provider=lambda: json.dumps(mock_ip_data))
+    assert len(candidates) == 1
+    assert candidates[0]["name"] == "eth0"
+
+
+def test_detect_local_subnets_uses_actual_mask():
+    mock_ip_data = [
+        {"ifname": "eth0", "flags": [], "addr_info": [{"local": "192.168.2.100", "prefixlen": 23}]},
+    ]
+    nets = detect_local_subnets(interfaces_provider=lambda: json.dumps(mock_ip_data))
+    assert nets == [ipaddress.ip_network("192.168.2.0/23")]
+
+
+def test_detect_local_subnets_multiple_candidates_fails_closed_without_env(monkeypatch):
+    monkeypatch.delenv("ELC_TRUSTED_INTERFACE", raising=False)
+    mock_ip_data = [
+        {"ifname": "eth0", "flags": [], "addr_info": [{"local": "192.168.1.10", "prefixlen": 24}]},
+        {"ifname": "eth1", "flags": [], "addr_info": [{"local": "192.168.2.10", "prefixlen": 24}]},
+    ]
+    # D-32-17: 多候選未指定時退回 loopback
+    nets = detect_local_subnets(interfaces_provider=lambda: json.dumps(mock_ip_data))
+    assert nets == []
+
+
+def test_detect_local_subnets_multiple_candidates_selects_env_interface(monkeypatch):
+    monkeypatch.setenv("ELC_TRUSTED_INTERFACE", "eth1")
+    mock_ip_data = [
+        {"ifname": "eth0", "flags": [], "addr_info": [{"local": "192.168.1.10", "prefixlen": 24}]},
+        {"ifname": "eth1", "flags": [], "addr_info": [{"local": "192.168.2.10", "prefixlen": 24}]},
+    ]
+    nets = detect_local_subnets(interfaces_provider=lambda: json.dumps(mock_ip_data))
+    assert nets == [ipaddress.ip_network("192.168.2.0/24")]
+
+
+def test_is_cross_site_read():
+    assert is_cross_site_read("GET", "cross-site") is True
+    assert is_cross_site_read("HEAD", "cross-site") is True
+    assert is_cross_site_read("GET", "same-origin") is False
+    assert is_cross_site_read("GET", "none") is False
+    assert is_cross_site_read("GET", None) is False
+    assert is_cross_site_read("POST", "cross-site") is False

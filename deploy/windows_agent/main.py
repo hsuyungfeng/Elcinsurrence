@@ -47,6 +47,72 @@ from elc_audit_engine.his_calibration import (
 
 logger = logging.getLogger("windows_agent.main")
 
+_SINGLE_INSTANCE_MUTEX = None
+
+
+def _ensure_single_instance() -> None:
+    """Windows 具名 Mutex 強制單一實例。若已存在，提示並結束。"""
+    global _SINGLE_INSTANCE_MUTEX
+    if sys.platform != "win32":
+        return
+
+    import ctypes
+
+    ERROR_ALREADY_EXISTS = 183
+    kernel32 = ctypes.windll.kernel32
+    mutex_name = "ElcAgentSingleInstance"
+    mutex = kernel32.CreateMutexW(None, False, mutex_name)
+    last_err = kernel32.GetLastError()
+    if last_err == ERROR_ALREADY_EXISTS:
+        _notify_already_running()
+        sys.exit(0)
+    _SINGLE_INSTANCE_MUTEX = mutex
+
+
+def _notify_already_running() -> None:
+    """彈出提示視窗提醒醫師已有實例在運行。"""
+    msg = "ElcAgent 已經在運行中。\n請檢查右下角系統匣圖示或工作列快捷列。"
+    logger.info("偵測到重複實例，程式退出。")
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showinfo("ElcAgent 已在運行", msg)
+        root.destroy()
+    except Exception:
+        if sys.stderr is not None:
+            print(msg, file=sys.stderr)
+
+
+def _check_or_run_first_setup(
+    settings: AgentSettings,
+    cfg_path: Optional[Path],
+    flow_factory: Optional[Callable[[], Any]] = None,
+    wizard_runner: Optional[Callable[[Any], Any]] = None,
+) -> Optional[AgentSettings]:
+    """若設定檔缺少 facility_code 或 room_id，喚起首次啟動精靈（32-17 B6）。"""
+    if settings.facility_code and settings.room_id:
+        return settings
+
+    from deploy.windows_agent.first_run_wizard import FirstRunFlow, run_first_run_wizard
+
+    flow = flow_factory() if flow_factory else FirstRunFlow()
+    runner = wizard_runner or run_first_run_wizard
+    res = runner(flow)
+    if res is None:
+        logger.info("使用者取消首次設定精靈，結束程式。")
+        return None
+
+    settings.last_server_url = res.server_url
+    settings.facility_code = res.facility_code
+    settings.room_id = res.room_id
+    settings.vendor_key = res.vendor_key
+    save_settings(cfg_path, settings)
+    logger.info("首次啟動精靈設定已成功儲存至 %s", cfg_path)
+    return settings
+
 
 def default_log_path() -> Path:
     """診斷日誌路徑（Phase 32-A／B2：無主控台後的唯一輸出去向）。"""
@@ -297,8 +363,15 @@ def main(
     startup_flow_override: Optional[Callable[[AgentSettings], Optional[str]]] = None,
     agent_factory: Optional[Callable[..., Any]] = None,
     sleep_fn: Optional[Callable[[float], None]] = None,
+    ensure_single_instance_fn: Optional[Callable[[], None]] = None,
+    first_run_launcher: Optional[Callable[[AgentSettings, Optional[Path]], Optional[AgentSettings]]] = None,
 ) -> int:
     """Main CLI entry point for Windows Agent."""
+    if ensure_single_instance_fn:
+        ensure_single_instance_fn()
+    elif settings_override is None:
+        _ensure_single_instance()
+
     parser = argparse.ArgumentParser(description="Elcinsurrence Windows Agent")
     parser.add_argument("--selftest", action="store_true", help="執行本機自我檢查並退出")
     parser.add_argument("--check-connection", action="store_true", help="只檢查與伺服器的連線與認證後結束（不校正、不讀取畫面）")
@@ -330,6 +403,20 @@ def main(
             store=store,
             custom_agent_desktop_bin=args.agent_desktop_bin,
         )
+
+    # First Run Wizard check (B6)
+    if not args.check_connection and not args.calibrate:
+        if not settings.facility_code or not settings.room_id:
+            if first_run_launcher is not None:
+                updated = first_run_launcher(settings, cfg_path)
+                if updated is None:
+                    return 0
+                settings = updated
+            elif startup_flow_override is None and agent_factory is None:
+                updated = _check_or_run_first_setup(settings, cfg_path)
+                if updated is None:
+                    return 0
+                settings = updated
 
     # Handle --check-connection：只做連線與認證，不啟動校正、不讀取畫面
     if args.check_connection:
@@ -492,15 +579,42 @@ def _launch_traffic_bar(
     settings: AgentSettings,
     server_url: str,
     cfg_path: Optional[Path],
+    supervisor_factory: Optional[Callable[..., Any]] = None,
+    tray_launcher: Optional[Callable[..., Any]] = None,
 ) -> None:
     """組裝快捷列的相依元件並進入 Tk 主迴圈（阻塞至醫師關閉視窗）。"""
+    import atexit
+    import queue
     from deploy.windows_agent.traffic_bar.controller import BarController
     from deploy.windows_agent.traffic_bar.server_client import CycleServerClient
     from deploy.windows_agent.traffic_bar.soapvoice_client import SoapVoiceControlClient
     from deploy.windows_agent.traffic_bar import run_traffic_bar
+    from deploy.windows_agent.supervisor import SoapVoiceSupervisor, default_soapvoice_exe_path
+    from deploy.windows_agent.tray import TrayController, start_tray
 
     sv_client = SoapVoiceControlClient(port=settings.soapvoice_control_port)
     server_client = CycleServerClient(base_url=server_url)
+
+    # 1. Supervisor 看管 SoapVoice (B4)
+    sv_exe = settings.soapvoice_exe_path or default_soapvoice_exe_path()
+    supervisor: Optional[SoapVoiceSupervisor] = None
+    if supervisor_factory:
+        supervisor = supervisor_factory()
+        if supervisor:
+            supervisor.start()
+    elif sv_exe and Path(sv_exe).exists():
+        try:
+            supervisor = SoapVoiceSupervisor(
+                exe_path=str(sv_exe),
+                port=settings.soapvoice_control_port,
+            )
+            supervisor.start()
+            logger.info("SoapVoice Supervisor 已啟動並看管：%s", sv_exe)
+        except Exception as exc:
+            logger.warning("SoapVoice Supervisor 啟動失敗: %s", exc)
+
+    if supervisor:
+        atexit.register(supervisor.stop)
 
     def _open_confirm_window(cycle_id: str) -> None:
         """草稿就緒時跳出 SOAP 確認視窗（D-31-05 的醫師確認步驟）。"""
@@ -519,8 +633,28 @@ def _launch_traffic_bar(
         settings=settings,
         open_confirm_window=_open_confirm_window,
     )
+
+    # 2. 系統匣圖示整合 (B5)
+    tray_queue: queue.Queue[str] = queue.Queue()
+    tray_ctrl = TrayController(tray_queue)
+    tray_icon = None
+    launcher = tray_launcher or start_tray
+    try:
+        tray_icon = launcher(tray_ctrl)
+    except Exception as exc:
+        logger.warning("啟動 System Tray 圖示失敗: %s", exc)
+
     logger.info("啟動快捷列（紅綠黃燈），伺服器：%s", server_url)
-    run_traffic_bar(controller, settings, cfg_path)
+    try:
+        run_traffic_bar(controller, settings, cfg_path)
+    finally:
+        if supervisor:
+            supervisor.stop()
+        if tray_icon:
+            try:
+                tray_icon.stop()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

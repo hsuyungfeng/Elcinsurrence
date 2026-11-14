@@ -584,3 +584,124 @@ def test_standby_run_once_does_not_claim_pending_jobs(tmp_path: Path):
     assert agent.run_once() is None
     assert not any("/jobs/pending" in p for _, p in http.calls)
     assert not any("/claim" in p or "/status" in p for _, p in http.calls)
+
+
+# ==============================================================================
+# Phase 32 Plan 19: Entrypoint Integration Tests (B4, B5, B6, C3)
+# ==============================================================================
+
+def test_first_run_triggered_when_missing_config(tmp_path: Path):
+    """設定檔缺少 facility_code 或 room_id 時喚起首次啟動精靈，完成後寫入 config.json。"""
+    from deploy.windows_agent.first_run_wizard import FirstRunResult
+    from deploy.windows_agent.main import _check_or_run_first_setup
+
+    cfg_file = tmp_path / "config.json"
+    settings = AgentSettings(facility_code="", room_id="")
+
+    def mock_wizard_runner(flow):
+        return FirstRunResult(
+            server_url="http://192.168.1.88:5000",
+            facility_code="3501189999",
+            facility_name="安平診所",
+            room_id="R03",
+            vendor_key="vision",
+        )
+
+    updated = _check_or_run_first_setup(settings, cfg_file, wizard_runner=mock_wizard_runner)
+    assert updated is not None
+    assert updated.facility_code == "3501189999"
+    assert updated.room_id == "R03"
+    assert updated.last_server_url == "http://192.168.1.88:5000"
+
+    # 驗證已儲存至 config.json
+    loaded = load_settings(cfg_file)
+    assert loaded.facility_code == "3501189999"
+    assert loaded.room_id == "R03"
+    assert loaded.last_server_url == "http://192.168.1.88:5000"
+
+
+def test_first_run_cancelled_returns_none(tmp_path: Path):
+    """精靈回傳 None 時（使用者關閉），_check_or_run_first_setup 回傳 None。"""
+    from deploy.windows_agent.main import _check_or_run_first_setup
+
+    cfg_file = tmp_path / "config.json"
+    settings = AgentSettings(facility_code="", room_id="")
+
+    updated = _check_or_run_first_setup(settings, cfg_file, wizard_runner=lambda f: None)
+    assert updated is None
+
+
+def test_single_instance_mutex_already_exists(monkeypatch):
+    """Windows 下若 Mutex 已存在（ERROR_ALREADY_EXISTS = 183），彈出提示並退出。"""
+    import deploy.windows_agent.main as main_mod
+
+    monkeypatch.setattr(sys, "platform", "win32")
+
+    class MockKernel32:
+        def CreateMutexW(self, sec, initial, name):
+            return 12345
+
+        def GetLastError(self):
+            return 183  # ERROR_ALREADY_EXISTS
+
+    class MockCtypes:
+        windll = type("WinDLL", (), {"kernel32": MockKernel32()})()
+
+    monkeypatch.setattr("ctypes.windll", MockCtypes.windll, raising=False)
+
+    notified = []
+    monkeypatch.setattr(main_mod, "_notify_already_running", lambda: notified.append(True))
+
+    with pytest.raises(SystemExit) as exc_info:
+        main_mod._ensure_single_instance()
+
+    assert exc_info.value.code == 0
+    assert notified == [True]
+
+
+def test_launch_traffic_bar_wires_supervisor_and_tray(monkeypatch):
+    """_launch_traffic_bar 整合拉起 Supervisor 與 System Tray，並在退出時終止。"""
+    from deploy.windows_agent.main import _launch_traffic_bar
+
+    events = []
+
+    class MockSupervisor:
+        def start(self):
+            events.append("supervisor_started")
+
+        def stop(self):
+            events.append("supervisor_stopped")
+
+    class MockTrayIcon:
+        def stop(self):
+            events.append("tray_stopped")
+
+    def mock_tray_launcher(ctrl):
+        events.append("tray_started")
+        return MockTrayIcon()
+
+    def mock_run_bar(ctrl, settings, cfg_path):
+        events.append("bar_ran")
+
+    monkeypatch.setattr("deploy.windows_agent.traffic_bar.run_traffic_bar", mock_run_bar)
+
+    settings = AgentSettings(
+        soapvoice_control_port=18765,
+        facility_code="3501180000",
+        room_id="R01",
+    )
+
+    _launch_traffic_bar(
+        settings=settings,
+        server_url="http://192.168.1.50:5000",
+        cfg_path=None,
+        supervisor_factory=lambda: MockSupervisor(),
+        tray_launcher=mock_tray_launcher,
+    )
+
+    assert "supervisor_started" in events
+    assert "tray_started" in events
+    assert "bar_ran" in events
+    assert "supervisor_stopped" in events
+    assert "tray_stopped" in events
+

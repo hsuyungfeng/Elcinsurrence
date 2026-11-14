@@ -18,7 +18,8 @@ def test_client(tmp_path, monkeypatch):
 def test_stage2_and_3_buttons_dom_integrity_for_webbrain():
     """驗證 static/index.html 內第 2 階與第 3 階的所有操作按鈕均具備唯一的 id 與 data-test-id，
     使 WebBrain（瀏覽器 AI Agent）在 Act 模式下能 100% 精確定位與點擊。"""
-    html = Path("static/index.html").read_text(encoding="utf-8")
+    from tests.workbench_source import read_workbench_source
+    html = read_workbench_source()
 
     # 預期的第 2 階按鈕 ID（已依需求移除載入預審、重新抽樣、單案卡片、隨機抽5案連動）
     stage2_btn_ids = [

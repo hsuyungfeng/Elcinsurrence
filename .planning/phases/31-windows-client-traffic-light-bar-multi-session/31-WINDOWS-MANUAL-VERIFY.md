@@ -7,13 +7,17 @@
 ## 驗證前環境準備
 
 1. **工作站環境**：Windows 10 / 11 64-bit，以一般醫師權限或管理員帳號登入。
-2. **啟動 SoapVoice 客戶端**：
-   - 執行 `uv run python -m client.main`。
+2. **安裝檔路徑**：
+   - 現場安裝檔位於 `installer/Output/ElcAgentSetup.exe`（由 Inno Setup 編譯產出）。
+   - 首次安裝執行若遇到 SmartScreen「Windows 已保護您的電腦」提示，點擊「其他資訊」→「仍要執行」（如 `docs/CLINIC_DEPLOYMENT_GUIDE.md` 說明）。
+3. **啟動 SoapVoice 客戶端**：
+   - 執行 `uv run python -m client.main`（或由 ElcAgent 內部 supervisor 自動託管啟動）。
    - 確認本機控制通道監聽於 `127.0.0.1:18765`，且 `%LOCALAPPDATA%\ElcSoapVoice\control_token` 已自動生成。
-3. **啟動 ElcAgent 快捷列**：
-   - 執行 `python -m deploy.windows_agent.agent` 或桌面捷徑。
+4. **啟動 ElcAgent 快捷列**：
+   - 雙擊 `ElcAgent.exe`（或桌面捷徑）；無參數即啟動快捷列。工程師以原始碼執行時使用 `python -m deploy.windows_agent.main`。
+   - 排錯日誌：`%LOCALAPPDATA%\ElcAgent\logs\agent.log`（執行檔無主控台視窗，且具備 `ElcAgentSingleInstance` 互斥鎖防重複執行）。
    - 快捷列預設出現在主螢幕右下角（工作列上方）。
-4. **開啟測試用 HIS 或 MockHIS**：
+5. **開啟測試用 HIS 或 MockHIS**：
    - 開啟診所真實 HIS 門診病歷畫面，或執行替身視窗 `python deploy/windows_agent/mock_his/mock_his.py`。
 
 ---
@@ -50,7 +54,7 @@
   4. 關閉 ElcAgent 程序，稍候 3 秒後重新啟動。
 - [ ] **預期結果**：
   - 拖曳過程平滑無殘影。
-  - 重新啟動後，快捷列準確還原至上次釋放之座標（讀取 `%LOCALAPPDATA%\ElcAgent\agent_settings.json` 之 `bar_x` 與 `bar_y`）。
+  - 重新啟動後，快捷列準確還原至上次釋放之座標（讀取 `%LOCALAPPDATA%\ElcAgent\config.json` 之 `bar_x` 與 `bar_y`）。
 
 ---
 
@@ -121,6 +125,68 @@
      - 視窗關閉，快捷列狀態轉為「可封存」，黃燈亮起啟用。
   5. **點擊黃燈封存**：
      - HIS 自動回寫完成後，黃燈完成封存，快捷列重回「待命」，紅燈重新啟用，完成一次完整閉環。
+
+---
+
+### 9. 首次啟動精靈三次點擊驗證 (First-Run 3-Click Wizard, D-32-13, B6)
+- [ ] **測試步驟**：
+  1. 刪除或重新命名 `%LOCALAPPDATA%\ElcAgent\config.json` 模擬全新安裝環境。
+  2. 啟動 `ElcAgent.exe`。
+  3. 觀察首次啟動精靈畫面：
+     - **第 1 擊（選擇伺服器）**：UDP 廣播自動搜尋局域網主機（例如「仁愛診所主機 192.168.1.100」），點選命中項。若網路阻擋廣播，點選「手動輸入 IP」。
+     - **第 2 擊（選擇診間）**：下拉選單選取目前電腦所在之診間代號（如「第一診間」）。
+     - **第 3 擊（確認完成）**：點選「開始使用」按鈕。
+- [ ] **預期結果**：
+  - 精靈全繁體中文提示、無艱澀技術名詞。
+  - 點擊「開始使用」後，精靈視窗自動關閉，並立即於右下角拉起置頂快捷列。
+  - `%LOCALAPPDATA%\ElcAgent\config.json` 正確寫入 `server_url`、`room_id` 與 `is_first_run: false`。
+
+---
+
+### 10. 系統匣常駐與右鍵選單驗證 (System Tray & Background Guard, D-32-14, B5)
+- [ ] **測試步驟**：
+  1. 觀察 Windows 系統匣（通知區域）是否出現 ElcAgent 圖示。
+  2. 滑鼠右鍵點擊系統匣圖示。
+  3. 檢視快顯選單項目：
+     - 「顯示快捷列」
+     - 「重新連線伺服器」
+     - 「校正精靈」
+     - 「開啟日誌目錄」
+     - 「離開」
+  4. 點選「顯示快捷列」：已收合或隱藏之快捷列立即置頂顯示。
+  5. 點選「開啟日誌目錄」：Windows 檔案總管自動開啟 `%LOCALAPPDATA%\ElcAgent\logs`。
+- [ ] **預期結果**：
+  - 系統匣圖示不破圖、右鍵選單反應即時。
+  - 若雙擊再次執行 `ElcAgent.exe`，`ElcAgentSingleInstance` 互斥鎖生效，不會產生第二個進程或雙重快捷列。
+
+---
+
+### 11. 斷線自癒與 SoapVoice 守護程序驗證 (Disconnect Recovery & Supervisor, D-32-14, B4)
+- [ ] **測試步驟**：
+  1. 在工作管理員中強制結束 `SoapVoice.exe` 程序。
+  2. 觀察 ElcAgent 內部之 `SoapVoiceSupervisor` 行為：
+     - 最長在 3 秒內偵測到進程死亡。
+     - 自動在背景拉起 SoapVoice，並檢查本機 18765 埠健康。
+  3. 拔除診間網路線或中斷 Wi-Fi 5 秒後重新插回。
+- [ ] **預期結果**：
+  - SoapVoice 被終止後自動重啟自癒，快捷列狀態在 5 秒內恢復綠色「SoapVoice 正常」。
+  - 網路中斷時快捷列轉灰並提示斷線；網路復原後在下次心跳輪詢時無須重新開機即自動重新連線（自癒重試機制）。
+
+---
+
+### 12. 主機端增量備份與 exFAT 相容驗證 (Zero-Deletion & exFAT Backup, D-32-03, D-32-04, D4)
+- [ ] **測試步驟**：
+  1. 於 Ubuntu 主機端插入 exFAT 格式之隨身硬碟（掛載於 `/mnt/usb_backup`）。
+  2. 手動執行備份任務：`sudo deploy/backup.sh` 或透過 systemd timer 觸發。
+  3. 檢查備份目的端目錄結構：
+     - `elc-backup/full/`：包含完整資料庫快照與上傳檔案。
+     - `elc-backup/incr/<timestamp>/`：包含當日異動檔案。
+     - `elc-backup/manifests/<timestamp>.json`：包含每筆檔案之 SHA-256 雜湊值。
+  4. 故意在主機端刪除或修改歷史資料庫，驗證備份端是否完整保留歷史快照。
+- [ ] **預期結果**：
+  - 備份完全不使用 Linux 硬連結（`--link-dest`）或符號連結，完全相容 exFAT 檔案系統。
+  - 嚴格遵守「只增不刪」原則（無 `--delete`、無 `rm -rf`）。
+  - 每次備份皆產出一份一致性的 SQLite 快照，排除 `-wal` / `-shm`，且所有檔案雜湊驗證均 100% 通過。
 
 ---
 

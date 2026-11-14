@@ -297,9 +297,11 @@ def test_page_required_strings():
     """
     html_path = Path(__file__).resolve().parent.parent / "static" / "clients.html"
     content = html_path.read_text(encoding="utf-8")
+    js_path = Path(__file__).resolve().parent.parent / "static" / "js" / "clients.js"
+    combined = content + "\n" + (js_path.read_text(encoding="utf-8") if js_path.exists() else "")
 
     for s in ["/api/clients", "setInterval"]:
-        assert s in content, f"Missing required string {s} in static/clients.html"
+        assert s in combined, f"Missing required string {s} in static/clients.html or static/js/clients.js"
 
     for s in ["X-API-Key", "api-key-input"]:
         assert s not in content, f"金鑰相關字串不應再出現於 clients.html：{s}"

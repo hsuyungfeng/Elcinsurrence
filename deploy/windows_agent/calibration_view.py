@@ -1,7 +1,8 @@
-"""HIS UI Automation First-Use Calibration Wizard View (Phase 30: D-30-10, D-30-11, D-30-12).
+"""HIS UI Automation First-Use Calibration Wizard View (Phase 30 & Phase 32 Plan 32-04, B7).
 
 Tkinter desktop window presenting step-by-step UI calibration:
 - One item at a time presentation
+- Doctor clicks on HIS field instead of writing JSON selectors
 - Advisory-only items (ICD10, ORDER, MED) are read-only without a confirm button
 - Readback test verification with fixed probe string before enabling finalize
 - Tkinter is imported lazily inside run_calibration_wizard so this module is safe to import on headless Linux.
@@ -9,7 +10,6 @@ Tkinter desktop window presenting step-by-step UI calibration:
 
 from __future__ import annotations
 
-import json
 import logging
 import sys
 from pathlib import Path
@@ -59,6 +59,44 @@ KIND_LABELS = {
 }
 
 
+def describe_item(item: Any) -> str:
+    """Return a plain Chinese description of the detected/suggested element without formatting symbols."""
+    if item is None:
+        return "未指定項目"
+
+    detected = getattr(item, "detected", None)
+    suggested = getattr(item, "suggested", None)
+
+    if detected or suggested:
+        source = detected or suggested
+        auto_id = source.get("automation_id") if isinstance(source, dict) else getattr(source, "automation_id", None)
+        name = source.get("name") if isinstance(source, dict) else getattr(source, "name", None)
+        ctype = source.get("control_type") if isinstance(source, dict) else getattr(source, "control_type", None)
+
+        details = []
+        if auto_id:
+            details.append(f"識別碼: {auto_id}")
+        if name:
+            details.append(f"名稱: {name}")
+        if ctype:
+            details.append(f"控制項類型: {ctype}")
+
+        detail_str = f" ({', '.join(details)})" if details else ""
+        return f"已找到相符控制項{detail_str}"
+    else:
+        return "未偵測到相符欄位（找不到）"
+
+
+def handle_pick_result(wizard: Any, selector: Optional[Dict[str, Any]]) -> str:
+    """Pure logic handling for element pick result."""
+    if selector and isinstance(selector, dict):
+        wizard.correct(selector)
+        return "corrected"
+    else:
+        wizard.skip()
+        return "need_installer"
+
+
 def run_calibration_wizard(
     wizard: CalibrationWizard,
     write_and_read_fn: Optional[Callable[[str], str]] = None,
@@ -68,7 +106,7 @@ def run_calibration_wizard(
     Tkinter is imported inside this function to allow Linux headless imports.
     """
     import tkinter as tk
-    from tkinter import messagebox, simpledialog, ttk
+    from tkinter import messagebox, ttk
 
     root = tk.Tk()
     root.title(f"Elcinsurrence - HIS 首次使用校正精靈 ({wizard.vendor_key})")
@@ -78,17 +116,9 @@ def run_calibration_wizard(
 
     keep_on_top(root)
 
-    # Prompt actor_id if not set
+    # Ensure actor_id is present
     if not wizard.actor_id:
-        actor = simpledialog.askstring(
-            "校正操作者身分",
-            "請輸入校正人員姓名或代碼（例如：林醫師 / dr_lin）：",
-            parent=root,
-        )
-        if not actor or not actor.strip():
-            root.destroy()
-            return
-        wizard.actor_id = actor.strip()
+        wizard.actor_id = "installer"
 
     if wizard.profile is None:
         try:
@@ -121,7 +151,7 @@ def run_calibration_wizard(
     desc_lbl = ttk.Label(content_frame, textvariable=desc_var, wraplength=680)
     desc_lbl.pack(anchor="w", pady=(0, 8))
 
-    detected_text = tk.Text(content_frame, height=6, wrap="word", font=("Consolas", 9), bg="#f8f9fa")
+    detected_text = tk.Text(content_frame, height=6, wrap="word", font=("Consolas", 10), bg="#f8f9fa")
     detected_text.pack(fill="x", pady=(0, 8))
 
     suggested_var = tk.StringVar()
@@ -141,8 +171,8 @@ def run_calibration_wizard(
     action_frame = ttk.Frame(root, padding=12)
     action_frame.pack(fill="x", side="bottom")
 
-    btn_confirm = ttk.Button(action_frame, text="✔ 確認此項選擇器")
-    btn_correct = ttk.Button(action_frame, text="✏ 修正選擇器...")
+    btn_confirm = ttk.Button(action_frame, text="✔ 確認此項控制項")
+    btn_correct = ttk.Button(action_frame, text="👆 我來點選欄位")
     btn_skip = ttk.Button(action_frame, text="⏭ 略過")
 
     # Readback / Finalize section in final step
@@ -186,11 +216,9 @@ def run_calibration_wizard(
         title_var.set(f"項目 ({idx}/{total_count})：{sec_name} — {kind_name}")
         desc_var.set(f"項目識別碼: {item.item_key} | 類別: {kind_name}")
 
-        det_display = json.dumps(item.detected, ensure_ascii=False, indent=2) if item.detected else "(未偵測到相符 UIA 元素)"
-        detected_text.insert("1.0", f"偵測到的去識別化屬性 (已過濾 PHI):\n{det_display}")
-
-        sug_display = json.dumps(item.suggested, ensure_ascii=False) if item.suggested else "(無建議值)"
-        suggested_var.set(f"建議選擇器: {sug_display}")
+        item_desc = describe_item(item)
+        detected_text.insert("1.0", f"欄位偵測狀態:\n{item_desc}")
+        suggested_var.set(f"建議狀態: {item_desc}")
 
         # Reset action buttons
         btn_confirm.pack_forget()
@@ -199,7 +227,6 @@ def run_calibration_wizard(
 
         if item.kind == "advisory_only":
             advisory_warning_var.set("【僅供參考，不參與自動寫入】（D-30-12）\n此項目（如診斷碼/醫令）僅供審核介面參考顯示，HIS 代理人不會對其進行自動寫入。")
-            # Advisory items do NOT have a confirm button
             btn_skip.config(text="下一步")
             btn_skip.pack(side="right", padx=5)
         else:
@@ -219,18 +246,30 @@ def run_calibration_wizard(
         item = wizard.current()
         if not item:
             return
-        default_val = json.dumps(item.suggested or {"automation_id": ""}, ensure_ascii=False)
-        val = simpledialog.askstring("修正選擇器", f"請輸入 {item.section} 的選擇器 JSON (例如 {{\"automation_id\": \"xxx\"}}):", initialvalue=default_val, parent=root)
-        if not val:
-            return
-        try:
-            parsed = json.loads(val)
-            if not isinstance(parsed, dict):
-                raise ValueError("選擇器必須為 JSON 物件")
-            wizard.correct(parsed)
+        sec_name = SECTION_TITLES.get(item.section, item.section)
+        messagebox.showinfo(
+            "請點選欄位",
+            f"請在 5 秒內用滑鼠點一下 HIS 上的「{sec_name}」欄位。\n點選後請將焦點停留在該欄位上。",
+            parent=root,
+        )
+
+        def _do_pick():
+            try:
+                from deploy.windows_agent.pick_control import default_point_fn, pick_selector
+            except ImportError:
+                from pick_control import default_point_fn, pick_selector  # type: ignore[no-redef]
+
+            sel = pick_selector(wizard.runner_snapshot_fn, wizard.app_name, default_point_fn)
+            res = handle_pick_result(wizard, sel)
+            if res == "need_installer":
+                messagebox.showinfo(
+                    "提示",
+                    "找不到這個欄位，請聯絡安裝人員。其他欄位仍可繼續設定。",
+                    parent=root,
+                )
             _render_current()
-        except Exception as exc:
-            messagebox.showerror("格式錯誤", f"選擇器解析失敗：\n{exc}")
+
+        root.after(5000, _do_pick)
 
     def _on_skip():
         wizard.skip()
@@ -249,7 +288,7 @@ def run_calibration_wizard(
             readback_status_var.set(f"讀寫測試通過！探針字串 '{PROBE_TEXT}' 成功寫入並讀回比對一致。")
             btn_finalize.config(state="normal")
         else:
-            readback_status_var.set("讀寫測試失敗：寫入值與讀回值不一致，請檢查 HIS 焦點或欄位選擇器。")
+            readback_status_var.set("讀寫測試失敗：寫入值與讀回值不一致，請檢查 HIS 焦點或欄位控制項。")
             btn_finalize.config(state="disabled")
 
     def _on_finalize():

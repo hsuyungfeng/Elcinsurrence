@@ -92,6 +92,25 @@ class CycleServerClient:
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise ServerUnavailable(f"無法連線至 Server ({self.base_url}): {exc}")
 
+    def get_health(self) -> Dict[str, Any]:
+        """取得伺服器健康狀態與機構識別。"""
+        status, body = self._request("GET", "/api/health", allow_statuses=(200,))
+        return body
+
+    def get_rooms(self) -> list[Dict[str, Any]]:
+        """取得伺服器診間列表。若無設定或回空則回傳空清單。"""
+        try:
+            status, body = self._request("GET", "/api/rooms", allow_statuses=(200, 404))
+            if status == 200 and isinstance(body, dict):
+                rooms = body.get("rooms")
+                if isinstance(rooms, list):
+                    return rooms
+            return []
+        except ServerUnavailable:
+            raise
+        except Exception:
+            return []
+
     def create_cycle(
         self,
         command_id: str,

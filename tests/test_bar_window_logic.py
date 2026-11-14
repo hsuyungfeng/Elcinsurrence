@@ -239,3 +239,37 @@ def test_position_clamping_and_persistence(tmp_path):
     loaded = load_settings(settings_file)
     assert loaded.bar_x == 500
     assert loaded.bar_y == 400
+
+
+def test_button_labels_and_symbols():
+    """B8 需求：三顆按鈕各有文字與符號（▶ 開始／■ 結束／✔ 存檔），停用時明顯變灰，狀態字級 ≥ 11。"""
+    from deploy.windows_agent.traffic_bar.bar_window import (
+        BUTTON_LABELS,
+        COLOR_DISABLED_BG,
+        COLOR_DISABLED_FG,
+        COLOR_TEXT_MAIN,
+        STATUS_FONT_SIZE,
+    )
+
+    assert STATUS_FONT_SIZE >= 11
+    assert "●" not in BUTTON_LABELS["red"]
+    assert "●" not in BUTTON_LABELS["green"]
+    assert "●" not in BUTTON_LABELS["yellow"]
+    assert "▶" in BUTTON_LABELS["red"]
+    assert "■" in BUTTON_LABELS["green"]
+    assert "✔" in BUTTON_LABELS["yellow"]
+    assert len(set(BUTTON_LABELS.values())) == 3
+
+    ctrl = MockController(state=STATE_IDLE, status_msg="待命")
+    vm = build_view_model(ctrl, is_expanded=False)
+    assert vm.width >= 240
+    assert vm.status_text != ""
+    assert vm.red_enabled is True
+    assert vm.green_enabled is False
+    assert vm.yellow_enabled is False
+
+    assert vm.red_fg == COLOR_TEXT_MAIN
+    assert vm.green_bg == COLOR_DISABLED_BG
+    assert vm.green_fg == COLOR_DISABLED_FG
+    assert vm.yellow_bg == COLOR_DISABLED_BG
+    assert vm.yellow_fg == COLOR_DISABLED_FG

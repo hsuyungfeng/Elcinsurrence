@@ -40,3 +40,15 @@ access_log_format = '%(t)s %(h)s "%(r)s" %(s)s %(L)ss'
 
 # 程序名稱（ps／systemd 顯示用）。
 proc_name = "elc-audit-engine"
+
+
+def when_ready(server):
+    """在 gunicorn master 就緒後啟動 UDP 探索應答（C2）。"""
+    if os.getenv("ELC_DISCOVERY_ENABLED", "1") != "0":
+        try:
+            from elc_audit_engine.discovery_responder import start_responder
+
+            start_responder()
+            server.log.info("UDP discovery responder started in master process")
+        except Exception as exc:
+            server.log.warning("Failed to start UDP discovery responder: %s", exc)

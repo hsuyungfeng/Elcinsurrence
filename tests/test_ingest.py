@@ -181,20 +181,19 @@ def test_csp_has_no_external_host_allowance(api):
 
 def test_frontend_has_no_external_resource_links():
     """回歸：static/index.html 不得重新引入外鏈資源（字型/CDN）。"""
-    from pathlib import Path
+    from tests.workbench_source import read_workbench_source
 
-    html = Path("static/index.html").read_text(encoding="utf-8")
+    html = read_workbench_source()
     assert "fonts.googleapis.com" not in html
     assert "fonts.gstatic.com" not in html
 
 
 def test_frontend_case_list_does_not_use_innerhtml_templating():
     """回歸：P1-5 修復後 renderCaseList 不得再以 innerHTML 拼接 API 欄位。"""
-    from pathlib import Path
-
     import re
+    from tests.workbench_source import read_workbench_source
 
-    html = Path("static/index.html").read_text(encoding="utf-8")
+    html = read_workbench_source()
     # 只看「賦值」給 innerHTML 的位置（註解中提及 innerHTML 不算注入點）；
     # 僅允許賦成空字串字面值（清空子節點）。
     assignments = re.findall(r"\.innerHTML\s*=\s*(.+)", html)
@@ -208,9 +207,9 @@ def test_index_html_generate_consumes_standard_contract():
     （appeal_sections/xml_p8_p9_valid/data.reason1/data.reason2）不得殘留
     ——含註解與字數旗標在內，全文子字串層級不許再出現。
     """
-    from pathlib import Path
+    from tests.workbench_source import read_workbench_source
 
-    html = Path("static/index.html").read_text(encoding="utf-8")
+    html = read_workbench_source()
 
     # 已移除舊鍵不得殘留（全文子字串斷言，含註解）
     for old_key in ("appeal_sections", "xml_p8_p9_valid", "data.reason1", "data.reason2"):
@@ -225,9 +224,9 @@ def test_index_html_generate_sends_order_seq():
     """11.1-01 Test 3（前端靜態回歸）：generateAppealDraft 請求 body 帶
     order_seq（currentSelectedCase.order_seq），API 路徑醫令序不再漏送。
     """
-    from pathlib import Path
+    from tests.workbench_source import read_workbench_source
 
-    html = Path("static/index.html").read_text(encoding="utf-8")
+    html = read_workbench_source()
     assert "order_seq: currentSelectedCase.order_seq" in html, (
         "index.html 的 generateAppealDraft 請求 body 應帶 order_seq"
     )
@@ -242,9 +241,9 @@ def test_index_html_appeal_record_no_input():
     案件 payload.record_no 恆 None，輸入欄是 generate 端點 timeline 查詢的
     唯一真實病歷號入口——有值才查，無值由 server 端誠實標記 no_record_no）。
     """
-    from pathlib import Path
+    from tests.workbench_source import read_workbench_source
 
-    html = Path("static/index.html").read_text(encoding="utf-8")
+    html = read_workbench_source()
     assert 'id="aRecordNoInput"' in html, (
         "index.html 的 appeal 面板應有病歷號輸入欄 aRecordNoInput"
     )
@@ -259,9 +258,9 @@ def test_index_html_renders_records_degraded():
     顯示「⚠ 病歷缺席」＋原因文案；sampling 請求 body 帶 record_no
     （generate 請求 record_no 由 Task 2 的 aRecordNoInput 輸入欄負責）。
     """
-    from pathlib import Path
+    from tests.workbench_source import read_workbench_source
 
-    html = Path("static/index.html").read_text(encoding="utf-8")
+    html = read_workbench_source()
     assert "data.records_degraded" in html, "前端應消費 records_degraded 鍵"
     assert "data.records_degraded_reason" in html, "前端應消費 records_degraded_reason 鍵"
     assert "病歷缺席" in html, "前端應有「病歷缺席」可見文案"

@@ -27,6 +27,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 logger = logging.getLogger("windows_agent.discovery")
 
 EXPECTED_SERVICE_IDENTIFIER = "elc-audit-engine"
+DISCOVERY_PORT = 5002
+DISCOVERY_MAGIC = b"ELC_DISCOVER_SERVER_V1"
 
 _PRIVATE_NETWORKS = (
     ipaddress.ip_network("10.0.0.0/8"),
@@ -215,3 +217,189 @@ def discover_server(
         needs_manual_entry=True,
         source="none",
     )
+
+
+def udp_probe(
+    port: int = DISCOVERY_PORT,
+    timeout: float = 1.0,
+    socket_factory: Optional[Callable[[], socket.socket]] = None,
+    broadcast_addrs: Optional[List[str]] = None,
+) -> List[str]:
+    """以 UDP 廣播探索區域網路內的伺服器 (C2, D-32-12)。
+
+    送出魔術字串到 255.255.255.255 與各介面定向廣播，收集回覆直到逾時。
+    回覆過濾：
+    - 回覆非 JSON、service 不符、超過 2048 bytes 丟棄
+    - url 主機非私有網段（或 loopback）丟棄
+    - url 主機與回覆來源 IP 不同者丟棄
+    - 絕不指定 bind 埠（由 OS 自動指派來源埠，避免 Windows 防火牆彈窗）
+    """
+    targets: List[str] = list(broadcast_addrs) if broadcast_addrs is not None else []
+    if not targets:
+        targets.append("255.255.255.255")
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(("10.255.255.255", 1))
+                local_ip = s.getsockname()[0]
+            ip_obj = ipaddress.IPv4Address(local_ip)
+            if not ip_obj.is_loopback:
+                net = ipaddress.IPv4Network(f"{local_ip}/24", strict=False)
+                bcast = str(net.broadcast_address)
+                if bcast not in targets:
+                    targets.append(bcast)
+        except Exception:
+            pass
+
+    found: List[str] = []
+    sock = None
+    try:
+        sock = socket_factory() if socket_factory else socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        except OSError:
+            pass
+        sock.settimeout(timeout)
+
+        for addr in targets:
+            try:
+                sock.sendto(DISCOVERY_MAGIC, (addr, port))
+            except OSError as exc:
+                logger.debug("Failed to send UDP probe to %s:%d: %s", addr, port, exc)
+
+        while True:
+            try:
+                data, addr = sock.recvfrom(4096)
+            except (socket.timeout, TimeoutError, BlockingIOError):
+                break
+            except OSError as exc:
+                logger.debug("recvfrom error: %s", exc)
+                break
+
+            if len(data) > 2048:
+                continue
+
+            try:
+                raw_json = data.decode("utf-8")
+                payload = json.loads(raw_json)
+            except Exception:
+                continue
+
+            if not isinstance(payload, dict):
+                continue
+
+            if payload.get("service") != EXPECTED_SERVICE_IDENTIFIER:
+                continue
+
+            url = payload.get("url")
+            if not url or not isinstance(url, str):
+                continue
+
+            parsed = urllib.parse.urlsplit(url)
+            if parsed.scheme.lower() != "http":
+                continue
+
+            hostname = parsed.hostname
+            if not hostname:
+                continue
+
+            # url 主機必須與回覆來源 IP 相同
+            sender_ip = addr[0]
+            if hostname != sender_ip:
+                continue
+
+            try:
+                ip_val = ipaddress.IPv4Address(hostname)
+            except ValueError:
+                continue
+
+            is_private = ip_val.is_loopback or any(ip_val in net for net in _PRIVATE_NETWORKS)
+            if not is_private:
+                continue
+
+            srv_port = parsed.port or 80
+            norm_url = f"http://{hostname}:{srv_port}"
+            if norm_url not in found:
+                found.append(norm_url)
+
+    except OSError as exc:
+        logger.debug("udp_probe socket error: %s", exc)
+    finally:
+        if sock:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+    return found
+
+
+def rediscover_and_verify(
+    settings: Any,
+    probe: Optional[Callable[[str, float], Tuple[int, Optional[Dict[str, Any]]]]] = None,
+    udp_probe_fn: Optional[Callable[[], List[str]]] = None,
+    subnet_hosts_provider: Optional[Callable[[], List[str]]] = None,
+    port: int = 5000,
+    timeout: float = 0.5,
+) -> Tuple[Optional[str], str]:
+    """C3: 位址自動復原，依院所代碼 (facility_code) 比對確認為同一家診所。
+
+    回傳 (url, reason)，可能之 reason:
+    - "unchanged": 既有 last_server_url 可通且 facility_code 相符
+    - "recovered": 重新探索成功，找到相同 facility_code 之伺服器並更新 settings
+    - "mismatch": 探索到的伺服器 facility_code 皆不同（不自動切換）
+    - "needs_setup": settings.facility_code 為空（尚未完成首次設定）
+    - "not_found": 完全找不到任何伺服器
+    """
+    fac_code = getattr(settings, "facility_code", "")
+    if not fac_code:
+        return None, "needs_setup"
+
+    actual_probe = probe or default_probe
+
+    # 1. 嘗試既有 last_server_url
+    last_url = getattr(settings, "last_server_url", None)
+    if last_url:
+        try:
+            status, body = actual_probe(last_url.rstrip("/"), timeout)
+            if (
+                status == 200
+                and isinstance(body, dict)
+                and body.get("service") == EXPECTED_SERVICE_IDENTIFIER
+                and body.get("facility_code") == fac_code
+            ):
+                return last_url.rstrip("/"), "unchanged"
+        except Exception as exc:
+            logger.debug("Last known URL check failed: %s", exc)
+
+    # 2. 重新探索
+    actual_udp = udp_probe_fn if udp_probe_fn is not None else udp_probe
+    disc_res = discover_server(
+        last_known_url=None,
+        probe=actual_probe,
+        subnet_hosts_provider=subnet_hosts_provider,
+        port=port,
+        udp_probe=actual_udp,
+        timeout=timeout,
+    )
+
+    if not disc_res.candidates:
+        return None, "not_found"
+
+    # 3. 逐一比對候選的 facility_code
+    for cand in disc_res.candidates:
+        cand_norm = cand.rstrip("/")
+        try:
+            status, body = actual_probe(cand_norm, timeout)
+            if (
+                status == 200
+                and isinstance(body, dict)
+                and body.get("service") == EXPECTED_SERVICE_IDENTIFIER
+                and body.get("facility_code") == fac_code
+            ):
+                settings.last_server_url = cand_norm
+                return cand_norm, "recovered"
+        except Exception as exc:
+            logger.debug("Candidate probe error for %s: %s", cand, exc)
+
+    return None, "mismatch"
+

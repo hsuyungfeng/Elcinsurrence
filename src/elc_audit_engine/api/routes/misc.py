@@ -29,10 +29,35 @@ def index():
     return resp
 
 
+_VERSION_CACHE: str | None = None
+
+
+def _get_pkg_version() -> str:
+    global _VERSION_CACHE
+    if _VERSION_CACHE is None:
+        try:
+            from importlib.metadata import version
+            _VERSION_CACHE = version("elc-audit-engine")
+        except Exception:
+            _VERSION_CACHE = "0.1.0"
+    return _VERSION_CACHE
+
+
 @bp.route("/api/health", methods=["GET"])
 def health():
-    """健康檢查（供 HIS 與監控探測，豁免 API key，不含任何案件資料）。"""
-    return jsonify({"status": "ok", "service": "elc-audit-engine"})
+    """供客戶端探索比對與監控，不含病歷；院外來源已由 security 層拒絕 (C4)。"""
+    try:
+        cfg = settings.load_facility_config()
+    except Exception:
+        cfg = {}
+
+    return jsonify({
+        "status": "ok",
+        "service": "elc-audit-engine",
+        "facility_code": cfg.get("code") or "",
+        "facility_name": cfg.get("name") or "",
+        "version": _get_pkg_version(),
+    })
 
 
 @bp.route("/api/facility", methods=["GET"])

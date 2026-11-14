@@ -1,0 +1,11 @@
+[Unit]
+Description=ELC Audit Engine daily incremental backup
+After=network.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/elc-audit-engine/env
+WorkingDirectory=@ROOT@
+ExecStart=@ROOT@/deploy/backup.sh
+Nice=10
+IOSchedulingClass=idle

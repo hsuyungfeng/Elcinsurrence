@@ -83,7 +83,8 @@ def test_case_header_shows_icd_chinese_title():
 
 
 def test_index_html_tab_order_and_sidebar_width():
-    html = Path("static/index.html").read_text(encoding="utf-8")
+    from tests.workbench_source import read_workbench_source
+    html = read_workbench_source()
     # 左側欄寬度由 CSS 變數 --sidebar-width 控制（Phase 23 縮半為 140px）
     assert "--sidebar-width: 140px;" in html
     assert "grid-template-columns: var(--sidebar-width) 1fr;" in html
@@ -93,5 +94,5 @@ def test_index_html_tab_order_and_sidebar_width():
     pos_a = html.find("id=\"tabMode2\"")
     assert pos_m != -1 and pos_s != -1 and pos_a != -1
     assert pos_m < pos_s < pos_a, "按鈕順序應為 tabMode3 (當月申報) -> tabMode1 (抽樣事前) -> tabMode2 (核減事後)"
-    # 初始化預設進入 monthly
-    assert "switchWorkflowMode('monthly')" in html
+    # 初始化預設進入 soap (Phase 31+) 或 monthly
+    assert "switchWorkflowMode('soap')" in html or "switchWorkflowMode('monthly')" in html

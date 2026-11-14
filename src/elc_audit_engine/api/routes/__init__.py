@@ -17,6 +17,8 @@ from .sampling import bp as sampling_bp
 from .soap_recording import bp as soap_recording_bp
 from .soap_review import bp as soap_review_bp
 from .soap_review_queue import bp as soap_review_queue_bp
+from .status import bp as status_bp
+from .setup import bp as setup_bp
 from .vault import bp as vault_bp
 
 ALL_BLUEPRINTS = (
@@ -38,4 +40,6 @@ ALL_BLUEPRINTS = (
     cycles_bp,
     cycle_chunks_bp,
     clients_bp,
+    status_bp,
+    setup_bp,
 )

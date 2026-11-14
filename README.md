@@ -359,14 +359,14 @@ print("申復 XML / JSON 草稿：", result.appeal_paths)
 
 ## 🛠️ 開發與運作指南
 
-### 1. 啟動 Web UI 雙軌控制台
+### 1. 啟動 Web UI 三軌控制台
 
 ```bash
 # 安裝依賴（含 flask；紙本表格結構化加 --extra ocr）
 uv sync
 uv sync --extra ocr   # 選用：PP-StructureV3 表格結構化（paddlepaddle==3.2.2 釘版）
 
-# 啟動 API 與 雙軌控制台 Web Server
+# 啟動 API 與 三軌控制台 Web Server
 uv run python server.py
 ```
 啟動後打開瀏覽器造訪 `http://127.0.0.1:5000` 即可操作預審與申復介面。

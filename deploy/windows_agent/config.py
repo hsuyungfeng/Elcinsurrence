@@ -64,6 +64,8 @@ class AgentSettings:
     bar_x: Optional[int] = None
     bar_y: Optional[int] = None
     soapvoice_control_port: int = 18765
+    facility_code: str = ""
+    soapvoice_exe_path: str = ""
 
 
 def bundled_template_path() -> Optional[Path]:
@@ -107,6 +109,7 @@ def load_settings(path: Optional[Path] = None) -> AgentSettings:
                     bar_x=data.get("bar_x"),
                     bar_y=data.get("bar_y"),
                     soapvoice_control_port=data.get("soapvoice_control_port", 18765),
+                    facility_code=data.get("facility_code", ""),
                 )
                 save_settings(target_path, settings)
                 return settings
@@ -130,6 +133,7 @@ def load_settings(path: Optional[Path] = None) -> AgentSettings:
             bar_x=data.get("bar_x"),
             bar_y=data.get("bar_y"),
             soapvoice_control_port=data.get("soapvoice_control_port", 18765),
+            facility_code=data.get("facility_code", ""),
         )
     except Exception as exc:
         logger.warning(
@@ -159,6 +163,7 @@ def save_settings(path: Optional[Path], settings: AgentSettings) -> Path:
         "bar_x": settings.bar_x,
         "bar_y": settings.bar_y,
         "soapvoice_control_port": settings.soapvoice_control_port,
+        "facility_code": settings.facility_code,
     }
 
     raw_json = json.dumps(data, indent=2, ensure_ascii=False)

@@ -26,19 +26,29 @@ logger = logging.getLogger("traffic_bar.window")
 
 # 顏色定義
 COLOR_RED_ACTIVE = "#E53935"
-COLOR_RED_DIM = "#EF9A9A"
 COLOR_GREEN_ACTIVE = "#43A047"
-COLOR_GREEN_DIM = "#A5D6A7"
 COLOR_YELLOW_ACTIVE = "#FB8C00"
-COLOR_YELLOW_DIM = "#FFE082"
+COLOR_DISABLED_BG = "#616161"
+COLOR_DISABLED_FG = "#BDBDBD"
+COLOR_RED_DIM = COLOR_DISABLED_BG
+COLOR_GREEN_DIM = COLOR_DISABLED_BG
+COLOR_YELLOW_DIM = COLOR_DISABLED_BG
 COLOR_BG = "#212121"
 COLOR_TEXT_MAIN = "#FFFFFF"
 COLOR_TEXT_MUTED = "#B0BEC5"
 COLOR_BORDER = "#424242"
 
-COLLAPSED_WIDTH = 160
-COLLAPSED_HEIGHT = 44
-EXPANDED_WIDTH = 250
+STATUS_FONT_SIZE = 11
+
+BUTTON_LABELS = {
+    "red": "▶ 開始",
+    "green": "■ 結束",
+    "yellow": "✔ 存檔",
+}
+
+COLLAPSED_WIDTH = 280
+COLLAPSED_HEIGHT = 68
+EXPANDED_WIDTH = 280
 EXPANDED_HEIGHT = 100
 
 
@@ -62,6 +72,12 @@ class BarViewModel:
         width: int,
         height: int,
         toast: Optional[str] = None,
+        red_label: str = BUTTON_LABELS["red"],
+        green_label: str = BUTTON_LABELS["green"],
+        yellow_label: str = BUTTON_LABELS["yellow"],
+        red_fg: str = COLOR_TEXT_MAIN,
+        green_fg: str = COLOR_TEXT_MAIN,
+        yellow_fg: str = COLOR_TEXT_MAIN,
     ):
         self.bar_state = bar_state
         self.status_text = display_status
@@ -78,6 +94,12 @@ class BarViewModel:
         self.width = width
         self.height = height
         self.toast = toast
+        self.red_label = red_label
+        self.green_label = green_label
+        self.yellow_label = yellow_label
+        self.red_fg = red_fg
+        self.green_fg = green_fg
+        self.yellow_fg = yellow_fg
 
 
 def build_view_model(
@@ -94,9 +116,13 @@ def build_view_model(
     green_en = "green" in ENABLED.get(st, frozenset()) and controller.pending_action is None
     yellow_en = "yellow" in ENABLED.get(st, frozenset()) and controller.pending_action is None
 
-    red_bg = COLOR_RED_ACTIVE if red_en else COLOR_RED_DIM
-    green_bg = COLOR_GREEN_ACTIVE if green_en else COLOR_GREEN_DIM
-    yellow_bg = COLOR_YELLOW_ACTIVE if yellow_en else COLOR_YELLOW_DIM
+    red_bg = COLOR_RED_ACTIVE if red_en else COLOR_DISABLED_BG
+    green_bg = COLOR_GREEN_ACTIVE if green_en else COLOR_DISABLED_BG
+    yellow_bg = COLOR_YELLOW_ACTIVE if yellow_en else COLOR_DISABLED_BG
+
+    red_fg = COLOR_TEXT_MAIN if red_en else COLOR_DISABLED_FG
+    green_fg = COLOR_TEXT_MAIN if green_en else COLOR_DISABLED_FG
+    yellow_fg = COLOR_TEXT_MAIN if yellow_en else COLOR_DISABLED_FG
 
     # 連線狀態文字
     conn_parts: List[str] = []
@@ -131,6 +157,12 @@ def build_view_model(
         width=w,
         height=h,
         toast=toast_override,
+        red_label=BUTTON_LABELS["red"],
+        green_label=BUTTON_LABELS["green"],
+        yellow_label=BUTTON_LABELS["yellow"],
+        red_fg=red_fg,
+        green_fg=green_fg,
+        yellow_fg=yellow_fg,
     )
 
 
@@ -243,13 +275,13 @@ class TrafficBarWindow:
         # 紅燈按鈕
         self.btn_red = tk.Button(
             self.btn_frame,
-            text="●",
-            font=("Arial", 14, "bold"),
+            text=BUTTON_LABELS["red"],
+            font=("Microsoft JhengHei UI", 10, "bold"),
             bg=COLOR_RED_DIM,
             fg="#FFFFFF",
             activebackground=COLOR_RED_ACTIVE,
             bd=0,
-            width=2,
+            width=6,
             relief="flat",
             command=self._on_red_click,
             cursor="hand2",
@@ -259,13 +291,13 @@ class TrafficBarWindow:
         # 綠燈按鈕
         self.btn_green = tk.Button(
             self.btn_frame,
-            text="●",
-            font=("Arial", 14, "bold"),
+            text=BUTTON_LABELS["green"],
+            font=("Microsoft JhengHei UI", 10, "bold"),
             bg=COLOR_GREEN_DIM,
             fg="#FFFFFF",
             activebackground=COLOR_GREEN_ACTIVE,
             bd=0,
-            width=2,
+            width=6,
             relief="flat",
             command=self._on_green_click,
             cursor="hand2",
@@ -275,13 +307,13 @@ class TrafficBarWindow:
         # 黃燈按鈕
         self.btn_yellow = tk.Button(
             self.btn_frame,
-            text="●",
-            font=("Arial", 14, "bold"),
+            text=BUTTON_LABELS["yellow"],
+            font=("Microsoft JhengHei UI", 10, "bold"),
             bg=COLOR_YELLOW_DIM,
             fg="#FFFFFF",
             activebackground=COLOR_YELLOW_ACTIVE,
             bd=0,
-            width=2,
+            width=6,
             relief="flat",
             command=self._on_yellow_click,
             cursor="hand2",
@@ -302,15 +334,16 @@ class TrafficBarWindow:
         )
         self.btn_toggle.pack(side="right", padx=(4, 0))
 
-        # 展開資訊面板 (預設隱藏)
+        # 資訊面板 (收合時顯示狀態一行，展開時加顯示連線狀態)
         self.info_frame = tk.Frame(self.main_frame, bg=COLOR_BG)
+        self.info_frame.pack(side="top", fill="both", expand=True)
 
         self.lbl_status = tk.Label(
             self.info_frame,
             text="待命",
             fg=COLOR_TEXT_MAIN,
             bg=COLOR_BG,
-            font=("Microsoft JhengHei", 9),
+            font=("Microsoft JhengHei UI", STATUS_FONT_SIZE),
             anchor="w",
             justify="left",
         )
@@ -321,11 +354,12 @@ class TrafficBarWindow:
             text="Server 連線正常",
             fg=COLOR_TEXT_MUTED,
             bg=COLOR_BG,
-            font=("Microsoft JhengHei", 8),
+            font=("Microsoft JhengHei UI", 9),
             anchor="w",
             justify="left",
         )
-        self.lbl_conn.pack(fill="x", padx=6, pady=(0, 4))
+        # 預設收合狀態不顯示連線行
+        # self.lbl_conn.pack(fill="x", padx=6, pady=(0, 4))
 
         self._refresh_view()
 
@@ -386,10 +420,10 @@ class TrafficBarWindow:
 
         if self.is_expanded:
             self.btn_toggle.configure(text="▲")
-            self.info_frame.pack(side="top", fill="both", expand=True)
+            self.lbl_conn.pack(fill="x", padx=6, pady=(0, 4))
         else:
             self.btn_toggle.configure(text="▼")
-            self.info_frame.pack_forget()
+            self.lbl_conn.pack_forget()
 
         self._refresh_view()
 
@@ -472,9 +506,27 @@ class TrafficBarWindow:
             toast_override=self._toast_message,
         )
 
-        self.btn_red.configure(bg=vm.red_bg)
-        self.btn_green.configure(bg=vm.green_bg)
-        self.btn_yellow.configure(bg=vm.yellow_bg)
+        self.btn_red.configure(
+            text=vm.red_label,
+            bg=vm.red_bg,
+            fg=vm.red_fg,
+            state="normal" if vm.red_enabled else "disabled",
+            disabledforeground=COLOR_DISABLED_FG,
+        )
+        self.btn_green.configure(
+            text=vm.green_label,
+            bg=vm.green_bg,
+            fg=vm.green_fg,
+            state="normal" if vm.green_enabled else "disabled",
+            disabledforeground=COLOR_DISABLED_FG,
+        )
+        self.btn_yellow.configure(
+            text=vm.yellow_label,
+            bg=vm.yellow_bg,
+            fg=vm.yellow_fg,
+            state="normal" if vm.yellow_enabled else "disabled",
+            disabledforeground=COLOR_DISABLED_FG,
+        )
 
         if hasattr(self, "lbl_status"):
             self.lbl_status.configure(text=vm.status_text)

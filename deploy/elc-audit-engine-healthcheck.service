@@ -3,4 +3,4 @@ Description=ELC Audit Engine health check (restart on repeated failure)
 
 [Service]
 Type=oneshot
-ExecStart=/home/hsu/Desktop/Elcinsurrence/deploy/healthcheck.sh
+ExecStart=@ROOT@/deploy/healthcheck.sh

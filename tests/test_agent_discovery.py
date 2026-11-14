@@ -3,11 +3,21 @@ from __future__ import annotations
 import json
 import pytest
 from deploy.windows_agent.discovery import (
+    DISCOVERY_MAGIC,
+    DISCOVERY_PORT,
     EXPECTED_SERVICE_IDENTIFIER,
     DiscoveryResult,
     default_probe,
     discover_server,
+    rediscover_and_verify,
+    udp_probe,
     validate_manual_server_url,
+)
+from deploy.windows_agent.config import AgentSettings
+from elc_audit_engine.discovery_responder import (
+    DISCOVERY_MAGIC as SERVER_DISCOVERY_MAGIC,
+    DISCOVERY_PORT as SERVER_DISCOVERY_PORT,
+    start_responder,
 )
 from elc_audit_engine.api.app import create_app
 
@@ -230,3 +240,189 @@ def test_manual_server_url_rejects_path_query_userinfo():
 
     with pytest.raises(ValueError):
         validate_manual_server_url("http://192.168.1.1:5000?foo=bar")
+
+
+# --- Task 1 (Plan 32-11): UDP Probe & Consistency Tests ---
+
+def test_discovery_constants_match_server():
+    """客戶端與伺服器常數必須完全一致。"""
+    assert DISCOVERY_PORT == SERVER_DISCOVERY_PORT
+    assert DISCOVERY_MAGIC == SERVER_DISCOVERY_MAGIC
+
+
+def test_udp_probe_filters_invalid_responses():
+    """udp_probe 過濾不合法、過大、非私有、主機與來源 IP 不符之回覆。"""
+    class FakeSocket:
+        def __init__(self):
+            self.sent = []
+            self.packets = [
+                # 1. 非 JSON
+                (b"not a json", ("192.168.1.50", 5002)),
+                # 2. 超過 2048 bytes
+                (b"{" + b"a" * 2100 + b"}", ("192.168.1.51", 5002)),
+                # 3. service 不符
+                (json.dumps({"service": "other", "url": "http://192.168.1.52:5000"}).encode(), ("192.168.1.52", 5002)),
+                # 4. url 主機與來源 IP 不同 (偽造位址)
+                (json.dumps({"service": EXPECTED_SERVICE_IDENTIFIER, "url": "http://192.168.1.99:5000"}).encode(), ("192.168.1.53", 5002)),
+                # 5. url 主機為公網 IP
+                (json.dumps({"service": EXPECTED_SERVICE_IDENTIFIER, "url": "http://8.8.8.8:5000"}).encode(), ("8.8.8.8", 5002)),
+                # 6. 正確合法封包
+                (json.dumps({"service": EXPECTED_SERVICE_IDENTIFIER, "url": "http://192.168.1.60:5000"}).encode(), ("192.168.1.60", 5002)),
+                # 7. 重複封包 (去重測試)
+                (json.dumps({"service": EXPECTED_SERVICE_IDENTIFIER, "url": "http://192.168.1.60:5000"}).encode(), ("192.168.1.60", 5002)),
+            ]
+
+        def setsockopt(self, *args):
+            pass
+
+        def settimeout(self, timeout):
+            pass
+
+        def sendto(self, data, addr):
+            self.sent.append((data, addr))
+
+        def recvfrom(self, bufsize):
+            if self.packets:
+                return self.packets.pop(0)
+            raise TimeoutError("timeout")
+
+        def close(self):
+            pass
+
+    urls = udp_probe(port=5002, timeout=0.1, socket_factory=FakeSocket, broadcast_addrs=["192.168.1.255"])
+    assert urls == ["http://192.168.1.60:5000"]
+
+
+def test_udp_probe_loopback_e2e():
+    """端對端測試：啟動真實 discovery responder 於 loopback，udp_probe 能探測到。"""
+    import threading
+    import socket
+    stop_event = threading.Event()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(("127.0.0.1", 0))
+    dyn_port = sock.getsockname()[1]
+    sock.close()
+
+    thread = start_responder(
+        port=dyn_port,
+        host_ip="127.0.0.1",
+        server_port=5000,
+        stop_event=stop_event,
+    )
+    try:
+        found = udp_probe(
+            port=dyn_port,
+            timeout=1.0,
+            broadcast_addrs=["127.0.0.1"],
+        )
+        assert "http://127.0.0.1:5000" in found
+    finally:
+        stop_event.set()
+        thread.join(timeout=1.0)
+
+
+# --- Task 2 (Plan 32-11): rediscover_and_verify Tests (C3) ---
+
+def test_rediscover_and_verify_needs_setup():
+    """settings.facility_code 為空時直接回傳 (None, 'needs_setup')。"""
+    settings = AgentSettings(facility_code="", last_server_url="http://192.168.1.100:5000")
+    url, reason = rediscover_and_verify(settings)
+    assert url is None
+    assert reason == "needs_setup"
+
+
+def test_rediscover_and_verify_unchanged():
+    """last_server_url 可通且 facility_code 相符時回傳 (url, 'unchanged')。"""
+    settings = AgentSettings(facility_code="FAC001", last_server_url="http://192.168.1.100:5000")
+
+    def mock_probe(url: str, timeout: float):
+        if url == "http://192.168.1.100:5000":
+            return 200, {
+                "status": "ok",
+                "service": EXPECTED_SERVICE_IDENTIFIER,
+                "facility_code": "FAC001",
+            }
+        return 0, None
+
+    url, reason = rediscover_and_verify(settings, probe=mock_probe)
+    assert url == "http://192.168.1.100:5000"
+    assert reason == "unchanged"
+
+
+def test_rediscover_and_verify_recovered_via_udp():
+    """last_server_url 不通，透過 UDP 重新探索找到相同 facility_code 的伺服器並更新 settings。"""
+    settings = AgentSettings(facility_code="FAC001", last_server_url="http://192.168.1.100:5000")
+
+    def mock_probe(url: str, timeout: float):
+        # 舊 IP 連不上
+        if url == "http://192.168.1.100:5000":
+            return 0, None
+        # 新 IP 連線成功且院所代碼相同
+        if url == "http://192.168.1.222:5000":
+            return 200, {
+                "status": "ok",
+                "service": EXPECTED_SERVICE_IDENTIFIER,
+                "facility_code": "FAC001",
+            }
+        return 0, None
+
+    def mock_udp():
+        return ["http://192.168.1.222:5000"]
+
+    url, reason = rediscover_and_verify(
+        settings,
+        probe=mock_probe,
+        udp_probe_fn=mock_udp,
+    )
+    assert url == "http://192.168.1.222:5000"
+    assert reason == "recovered"
+    assert settings.last_server_url == "http://192.168.1.222:5000"
+
+
+def test_rediscover_and_verify_mismatch():
+    """探索到的伺服器 facility_code 皆不同，回傳 (None, 'mismatch') 且不更新 settings。"""
+    settings = AgentSettings(facility_code="FAC001", last_server_url="http://192.168.1.100:5000")
+
+    def mock_probe(url: str, timeout: float):
+        if url == "http://192.168.1.100:5000":
+            return 0, None
+        if url == "http://192.168.1.88:5000":
+            return 200, {
+                "status": "ok",
+                "service": EXPECTED_SERVICE_IDENTIFIER,
+                "facility_code": "OTHER_CLINIC",
+            }
+        return 0, None
+
+    def mock_udp():
+        return ["http://192.168.1.88:5000"]
+
+    url, reason = rediscover_and_verify(
+        settings,
+        probe=mock_probe,
+        udp_probe_fn=mock_udp,
+    )
+    assert url is None
+    assert reason == "mismatch"
+    assert settings.last_server_url == "http://192.168.1.100:5000"
+
+
+def test_rediscover_and_verify_not_found():
+    """完全找不到任何伺服器，回傳 (None, 'not_found')。"""
+    settings = AgentSettings(facility_code="FAC001", last_server_url="http://192.168.1.100:5000")
+
+    def mock_probe(url: str, timeout: float):
+        return 0, None
+
+    def mock_udp():
+        return []
+
+    url, reason = rediscover_and_verify(
+        settings,
+        probe=mock_probe,
+        udp_probe_fn=mock_udp,
+        subnet_hosts_provider=lambda: [],
+    )
+    assert url is None
+    assert reason == "not_found"
+
