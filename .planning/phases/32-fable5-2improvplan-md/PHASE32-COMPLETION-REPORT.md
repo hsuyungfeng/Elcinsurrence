@@ -103,10 +103,10 @@ $ ./.venv/bin/pytest tests/ -q
 6. 收合與展開介面切換 (Collapsed vs. Expanded, D-31-10)
 7. 斷線狀態顯示與非法操作防護 (Connection & Button Lock, D-31-11)
 8. 完整循環流程實機驗證 (Full Cycle Flow, D-31-05 ~ D-31-08)
-9. **首次啟動精靈三次點擊驗證 (First-Run 3-Click Wizard, D-32-13, B6)**
-10. **系統匣常駐與右鍵選單驗證 (System Tray & Background Guard, D-32-14, B5)**
-11. **斷線自癒與 SoapVoice 守護程序驗證 (Disconnect Recovery & Supervisor, D-32-14, B4)**
-12. **主機端增量備份與 exFAT 相容驗證 (Zero-Deletion & exFAT Backup, D-32-03, D-32-04, D4)**
+9. **首次啟動精靈三次點擊驗證 (First-Run 3-Click Wizard, 計畫項目 B6)**
+10. **系統匣常駐與右鍵選單驗證 (System Tray & Background Guard, 計畫項目 B5)**
+11. **斷線自癒與 SoapVoice 守護程序驗證 (Disconnect Recovery & Supervisor, D-32-05、計畫項目 B4)**
+12. **主機端增量備份與 exFAT 相容驗證 (Zero-Deletion & exFAT Backup, D-32-07、D-32-11、計畫項目 D4)**
 
 ---
 

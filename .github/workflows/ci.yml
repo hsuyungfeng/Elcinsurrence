@@ -28,3 +28,9 @@ jobs:
 
       - name: 執行測試（pytest，含覆蓋率）
         run: uv run pytest tests/
+
+      - name: 執行 SoapVoice 測試（獨立 lock，與根專案分開）
+        working-directory: SoapVoice
+        run: |
+          uv sync --locked --no-config --group dev
+          uv run --no-config pytest tests -q --no-cov
