@@ -22,49 +22,37 @@
 
 ---
 
-## 二、關鍵架構決策落實清單 (D-32-01 ~ D-32-15)
+## 二、決策落實清單（編號依 32-CONTEXT.md，2026-11-14 覆核更正）
 
-1. **D-32-01 (LAN Trust 院內信任模式)**：
-   - 移除 API Key 驗證門檻，內部網路免 Token 自動信任。
-   - 保留全域防護（本機回環及合法私有網段 `192.168.x.x`, `10.x.x.x`, `172.16-31.x.x`）。
-2. **D-32-02 (SmartScreen 警示對策)**：
-   - 裁示不購買付費數位簽章。
-   - 於 `docs/CLINIC_DEPLOYMENT_GUIDE.md` 詳列「Windows 已保護您的電腦」之單擊略過步驟（點選「其他資訊」→「仍要執行」）。
-3. **D-32-03 (exFAT 相容性)**：
-   - 廢棄 Unix 硬連結（`--link-dest`）與符號連結相依性。
-   - 使用 SQLite `.backup` 一致性快照機制，完美相容 exFAT 格式之隨身硬碟與外接儲存設備。
-4. **D-32-04 (零刪除保證 Strict Zero-Deletion)**：
-   - `src/elc_audit_engine/backup_job.py` 與 `deploy/backup.sh` 嚴禁任何 `--delete`、`rm -rf`、`rmtree` 等刪除邏輯。
-   - 備份標籤每日累加，每次異動皆經 SHA-256 完整性雜湊比對。
-5. **D-32-05 (容量預警門檻)**：
-   - `src/elc_audit_engine/capacity.py` 實作容量剩餘天數預警：大於 180 天為綠燈、90~180 天為黃燈、90 天以下為紅燈。
-6. **D-32-06 (E8 前端分割與嚴格 CSP)**：
-   - 原 818 行單體 `static/index.html` 分割為 `static/css/workbench.css` (4,400+ 行) 與 `static/js/workbench.js` (2,900+ 行)。
-   - 抽離所有 89 個 inline `on*` 事件，全面改採 `data-action` 文件級事件委派與白名單註冊。
-   - 抽離所有 295 個 inline `style` 屬性轉為 CSS 工具類別。
-   - CSP 的 `script-src` 已移除 `'unsafe-inline'`；`style-src` **仍保留** `'unsafe-inline'`（尚有約 292 處 inline style，待後續清理）。
-7. **D-32-07 (單實例互斥鎖 Guard)**：
-   - Windows Agent 啟動時以 `ElcAgentSingleInstance` Win32 Mutex 進行保護，避免醫師重複雙擊造成多重快捷列混亂。
-8. **D-32-08 (醫師模式與 3 步驟導航)**：
-   - 預設開啟醫師簡潔模式，隱藏進階工程按鈕。
-   - 實作「① 上傳申報檔 → ② 智慧檢查 → ③ 下載送審檔」頂部引導 Stepper。
-9. **D-32-09 (破壞性操作隔離)**：
-   - 將「清空重測」、「清空申報」等按鈕收納於「⋯ 更多」下拉選單中，點擊後觸發強制二級確認對話框。
-10. **D-32-10 (全面改為「三軌」命名)**：
-    - 將工作台內所有「雙軌」舊稱統一修正為「三軌」（事前抽樣預審、事後核減申覆、當月申報預審）。
-11. **D-32-11 (3 段式結構化錯誤提示)**：
-    - 遭遇伺服器或檢驗異常時，彈出結構化提示視窗，清楚說明：【發生什麼事】、【目前資料是否安全】、【下一步建議動作】。
-12. **D-32-12 (現場雙手冊交付)**：
-    - 醫師版：`docs/CLINIC_QUICKSTART_DOCTOR.md`（單頁 A4，重點說明紅黃綠三顆燈與三個按鈕）。
-    - 工程師版：`docs/CLINIC_DEPLOYMENT_GUIDE.md`（含 Ubuntu 一鍵安裝、Windows Agent 部署、exFAT 備份、SmartScreen 排除與常見排錯 FAQ）。
-13. **D-32-13 (首次啟動 3-Click 精靈)**：
-    - Windows Agent 首次啟動以繁體中文引導：「1 點選擇伺服器（UDP 自動探索）→ 2 點選擇診間 → 3 點開始使用」。
-14. **D-32-14 (系統匣常駐與 SoapVoice 守護)**：
-    - 右鍵選單支援快捷列開關、手動重連、日誌開啟；整合 `SoapVoiceSupervisor` 自癒重啟。
-15. **D-32-15 (總體就緒驗收與回歸測試)**：
-    - `tests/test_phase32_readiness.py` 斷言全產物存在性、語法合規與零 xfail，全套件回歸測試全綠。
+> 本節取代原先自行編號的清單。原清單的編號與決策紀錄不一致，已更正。
 
----
+| 決策 | 內容（摘要） | 狀態 | 證據 |
+|---|---|---|---|
+| D-32-01 | 信任範圍：伺服器所在子網 | 已實作 | `lan_trust.py`（網段偵測，讀取實際遮罩，見 D-32-16） |
+| D-32-02 | 訪客 Wi-Fi 不同網段 | 現場前提 | 無法由程式驗證，需現場確認 |
+| D-32-03 | 平台：主機 Ubuntu，不做 Windows 主機 | 已實作 | `deploy/install.sh` |
+| D-32-04 | 保存：客戶端 3 個月自動清理；主機永久 | 已實作 | 主機永久（無自動刪除）；客戶端 3 個月清理於 `SoapVoice/client/temp_cleanup.py`（`enforce_retention`，僅刪已上傳且超過 90 天的檔案），`tests/test_temp_cleanup.py` 10 項通過 |
+| D-32-05 | SoapVoice 併入安裝檔 | 待裁示（OPEN-32-06） | `deploy/windows_agent/supervisor.py` 為看管骨架，安裝檔併入範圍未定案 |
+| D-32-06 | 不保留金鑰模式 | 已實作 | `auth.py` 已移除；`ELC_API_KEYS` 不再使用 |
+| D-32-07 | 備份：完整一份＋每日增量，不覆寫 | 已實作 | `backup_job.py`（`sqlite3` backup API，無 `--delete`、無硬連結） |
+| D-32-08 | 容量預警（剩餘天數） | 已實作 | `capacity.py` |
+| D-32-09 | 診間端只錄音與上傳 | 已達成（程式） | 客戶端程式未匯入 torch／whisper／llama_cpp；打包範圍待 D-32-05 |
+| D-32-10 | 不買簽章憑證，文件說明 SmartScreen | 已實作 | `docs/CLINIC_DEPLOYMENT_GUIDE.md` |
+| D-32-11 | 主機 exFAT，無硬連結 | 已實作 | `backup_job.py`、`tests/test_backup_script.py` |
+| D-32-12 | 探索只用 UDP 廣播 | 已實作（程式） | `deploy/windows_agent/discovery.py`；Windows 實機行為待驗證 |
+| D-32-13 | 容量門檻 黃 180 天、紅 90 天 | 已實作 | `capacity.py` |
+| D-32-14 | E8 檔案拆分優先 | 已實作（部分） | `static/js/workbench.js`、`static/css/workbench.css`；`style-src` 仍 `unsafe-inline` |
+| D-32-15 | 第一期提交後再規劃 | 已完成 | `01e1a13` |
+| D-32-16 | 網段讀取實際遮罩（追認） | 已實作 | `lan_trust.py` |
+| D-32-17 | 排除 VPN／虛擬介面（追認） | 已實作 | `lan_trust.py`（`EXCLUDED_IFACE_PREFIXES`） |
+| D-32-18 | 跨站 GET 一律拒絕（追認） | 已實作 | `lan_trust.py`、`security.py`、`tests/test_lan_trust_api.py` |
+| D-32-19 | 管理寫入僅限本機（追認） | 已實作 | `lan_trust.py`、`api/routes/setup.py` |
+
+**未決事項（不得視為完成）**
+- OPEN-32-01 至 04、06：仍需裁示。OPEN-32-05 已於 2026-11-14 裁示（見 D-32-20、D-32-21）。
+- 客戶端 3 個月清理與 2GB 容量上限的關係已於 2026-11-14 裁示（D-32-20、D-32-21），既有實作與之相符。
+
+**CSP 的實際狀態**：`script-src` 已移除 `'unsafe-inline'`；`style-src` 仍保留 `'unsafe-inline'`（尚有約 292 處 inline style）。
 
 ## 三、自動化測試驗證結果
 
@@ -144,7 +132,7 @@ Phase 32 的所有執行目標與品質守則已全數達成，工作目錄維�
 | 備份不刪除、無硬連結 | ✅ `backup_job.py` 使用 `sqlite3` backup API，無 `--delete`、無硬連結 |
 | 容量門檻 180/90 天 | ✅ `capacity.py` |
 | B10 設定檔名 | ✅ 已改為 `config.json` |
-| **未經使用者裁示的決策** | ⚠️ 執行代理新增 D-32-16 ~ D-32-19（網段真實遮罩與 VPN 排除、跨站 GET 一律拒絕、管理端點僅限本機）。這些是上一輪列為 OPEN 的項目，**使用者尚未裁示**，需確認保留或撤回。 |
+| **決策追認** | ✅ D-32-16 ~ D-32-19（網段真實遮罩、排除 VPN、跨站 GET 拒絕、管理寫入僅限本機）已於 2026-11-14 由使用者追認保留。 |
 | 未追蹤目錄 `Wavesample/` | ⚠️ 含 238 MB 訓練資料 zip 與音訊，來源不明，**不可提交**，需確認來源與處置。 |
 
 **目前狀態**：所有變更皆未提交。依使用者第一期的做法，提交前需先確認上述未裁示決策與 `Wavesample/` 的處置。
