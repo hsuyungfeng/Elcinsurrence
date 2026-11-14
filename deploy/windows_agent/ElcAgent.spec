@@ -28,6 +28,15 @@ hiddenimports = [
     "deploy.windows_agent.calibration_wizard",
     "deploy.windows_agent.calibration_view",
     "deploy.windows_agent.window_utils",
+    # Phase 32-A（B1）：快捷列（紅綠黃燈）必須一併打包，否則醫師拿到的
+    # 執行檔看不到快捷列——Phase 31 交付了這些模組但未收錄進 spec。
+    "deploy.windows_agent.traffic_bar",
+    "deploy.windows_agent.traffic_bar.bar_window",
+    "deploy.windows_agent.traffic_bar.bar_state",
+    "deploy.windows_agent.traffic_bar.bar_position",
+    "deploy.windows_agent.traffic_bar.controller",
+    "deploy.windows_agent.traffic_bar.server_client",
+    "deploy.windows_agent.traffic_bar.soapvoice_client",
     # config/ 為 namespace 套件（無 __init__.py），PyInstaller 不會自動收集；
     # case_store 透過 `from config.settings import ...` 匯入，缺它會在校正精靈關閉後崩潰。
     "config",
@@ -69,7 +78,11 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,
+    # Phase 32-A（B2）：無主控台視窗。原本 console=True 會在醫師雙擊後彈出
+    # 黑色命令視窗，是「不會用電腦的醫師」最明顯的障礙。
+    # 診斷輸出改寫入 %LOCALAPPDATA%\\ElcAgent\\logs\\agent.log（見 main.py
+    # 的 _setup_file_logging）；工程師排錯可用 --no-bar 搭配 python -m 執行。
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

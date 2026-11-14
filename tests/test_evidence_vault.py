@@ -11,6 +11,11 @@ import pytest
 from config import settings
 from elc_audit_engine import evidence_vault as ev
 
+
+# Phase 32-A：院內信任模式取代 API key。原本「未帶金鑰→401」的測試改為
+# 「來源位址不在信任網段→403」——這才是現在唯一的存取控制。
+UNTRUSTED_ENV = {"REMOTE_ADDR": "192.168.99.99"}
+
 KEY = {"X-API-Key": "valid-key-123"}
 VALID_KEY = "A123625499-2605"
 
@@ -243,8 +248,10 @@ def client(make_api_app):
         yield c
 
 
-def test_api_requires_authentication(client, vault_dir):
-    assert client.get(f"/api/vault/{VALID_KEY}").status_code == 401
+def test_api_rejects_untrusted_source(client, vault_dir):
+    assert client.get(
+        f"/api/vault/{VALID_KEY}", environ_base=UNTRUSTED_ENV
+    ).status_code == 403
 
 
 def test_api_get_empty_vault_structure(client, vault_dir):

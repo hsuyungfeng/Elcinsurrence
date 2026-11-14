@@ -22,6 +22,11 @@ from elc_audit_engine.monthly_audit import (
 )
 from elc_audit_engine.rule_repository.models import RuleResult, not_found
 
+
+# Phase 32-A：院內信任模式取代 API key。原本「未帶金鑰→401」的測試改為
+# 「來源位址不在信任網段→403」——這才是現在唯一的存取控制。
+UNTRUSTED_ENV = {"REMOTE_ADDR": "192.168.99.99"}
+
 KEY = {"X-API-Key": "valid-key-123"}
 BATCH = "MONTHLY-202307"
 RECIPIENT = "doctor@hospital.example.org"
@@ -228,10 +233,14 @@ def client(app):
         yield c
 
 
-def test_email_endpoint_requires_api_key(client):
-    """月申報郵寄端點含全月病歷報告，未認證者一律回 401。"""
-    resp = client.post(f"/api/monthly/batch/{BATCH}/email", json={"email": RECIPIENT})
-    assert resp.status_code == 401
+def test_email_endpoint_rejects_untrusted_source(client):
+    """月申報郵寄端點含全月病歷報告，院外來源一律回 403。"""
+    resp = client.post(
+        f"/api/monthly/batch/{BATCH}/email",
+        json={"email": RECIPIENT},
+        environ_base=UNTRUSTED_ENV,
+    )
+    assert resp.status_code == 403
 
 
 def test_email_endpoint_is_permanently_disabled_for_security(client):

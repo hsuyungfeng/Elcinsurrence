@@ -23,9 +23,10 @@ class DraftChangedError(Exception):
 
 
 class DefaultReviewHttp:
-    """Lightweight urllib client utilizing operator API key."""
+    """Lightweight urllib client (Phase 32-A: no API key, LAN trust only)."""
 
-    def __init__(self, operator_key: str, timeout: float = 10.0):
+    def __init__(self, operator_key: str = "", timeout: float = 10.0):
+        # 保留參數以相容既有呼叫端；院內信任模式下不再送出金鑰。
         self.operator_key = operator_key
         self.timeout = timeout
 
@@ -37,10 +38,8 @@ class DefaultReviewHttp:
         json_body: Optional[Dict[str, Any]] = None,
     ) -> Tuple[int, Dict[str, Any]]:
         url = f"{base_url.rstrip('/')}{path}"
-        headers = {
-            "X-API-Key": self.operator_key,
-            "User-Agent": "ElcReviewClient/1.0",
-        }
+        # Phase 32-A：不附加 X-API-Key——伺服器以來源位址判定信任。
+        headers = {"User-Agent": "ElcReviewClient/1.0"}
         data_bytes = None
         if json_body is not None:
             data_bytes = json.dumps(json_body).encode("utf-8")
@@ -68,13 +67,12 @@ class ReviewClient:
     def __init__(
         self,
         base_url: str,
-        operator_key: str,
+        operator_key: str = "",
         http: Any = None,
         machine_id: Optional[str] = None,
     ):
-        if not operator_key or not str(operator_key).strip():
-            raise ValueError("operator_key must not be empty")
-
+        # Phase 32-A：院內網路不需驗證，故不再要求 operator_key 非空
+        # （原本空金鑰會讓客戶端永遠連不上伺服器）。
         self.base_url = base_url.rstrip("/")
         self.operator_key = operator_key
         self.http = http or DefaultReviewHttp(operator_key)

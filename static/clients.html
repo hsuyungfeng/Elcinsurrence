@@ -168,8 +168,6 @@
       <span style="font-size: 0.8125rem; color: #6c757d;">每 5 秒自動重新整理</span>
     </div>
     <div class="auth-bar">
-      <input type="password" id="api-key-input" placeholder="輸入 X-API-Key" />
-      <button class="btn" id="save-key-btn">儲存金鑰</button>
       <button class="btn btn-secondary" id="refresh-now-btn">立即整理</button>
     </div>
   </header>
@@ -179,36 +177,13 @@
 
   <script>
     (function () {
-      const STORAGE_KEY = 'elc_api_key';
-      const keyInput = document.getElementById('api-key-input');
-      const saveKeyBtn = document.getElementById('save-key-btn');
+      // Phase 32-A：院內網路不需驗證，已移除金鑰輸入。
       const refreshBtn = document.getElementById('refresh-now-btn');
       const errorBanner = document.getElementById('error-banner');
       const roomsContainer = document.getElementById('rooms-container');
 
-      function getApiKey() {
-        return localStorage.getItem(STORAGE_KEY) || '';
-      }
-
-      function setApiKey(val) {
-        if (val) {
-          localStorage.setItem(STORAGE_KEY, val);
-        } else {
-          localStorage.removeItem(STORAGE_KEY);
-        }
-      }
-
-      const initialKey = getApiKey();
-      if (initialKey) {
-        keyInput.value = initialKey;
-      }
-
-      saveKeyBtn.addEventListener('click', function () {
-        const val = keyInput.value.trim();
-        setApiKey(val);
-        showError('');
-        pollClients();
-      });
+      // 清掉舊版殘留的金鑰。
+      try { localStorage.removeItem('elc_api_key'); } catch (e) { /* 私密模式等 */ }
 
       refreshBtn.addEventListener('click', function () {
         pollClients();
@@ -329,10 +304,7 @@
                   draftBtn.textContent = '顯示待確認草稿';
                   return;
                 }
-                const key = getApiKey();
-                fetch('/api/cycles/' + encodeURIComponent(cId) + '/draft', {
-                  headers: { 'X-API-Key': key }
-                })
+                fetch('/api/cycles/' + encodeURIComponent(cId) + '/draft')
                   .then(function (res) {
                     if (!res.ok) {
                       throw new Error('無法取得草稿 (HTTP ' + res.status + ')');
@@ -378,13 +350,9 @@
                   const confirmed = confirm('確定要放棄此循環？\n\n注意：音檔與逐字稿仍保留於 server。');
                   if (!confirmed) return;
 
-                  const key = getApiKey();
                   fetch('/api/cycles/' + encodeURIComponent(cId) + '/abandon', {
                     method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'X-API-Key': key
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ reason_code: 'monitor_abandon' })
                   })
                     .then(function (res) {
@@ -424,16 +392,10 @@
       }
 
       function pollClients() {
-        const key = getApiKey();
-        const headers = {};
-        if (key) {
-          headers['X-API-Key'] = key;
-        }
-
-        fetch('/api/clients', { headers: headers })
+        fetch('/api/clients')
           .then(function (res) {
-            if (res.status === 401 || res.status === 403) {
-              showError('認證失敗 (' + res.status + ')，請檢查 X-API-Key。');
+            if (res.status === 403) {
+              showError('本機不在院內信任網段內，無法讀取工作站狀態。');
               return null;
             }
             if (!res.ok) {

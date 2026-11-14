@@ -10,6 +10,11 @@ import os
 
 import pytest
 
+
+# Phase 32-A：院內信任模式取代 API key。原本「未帶金鑰→401」的測試改為
+# 「來源位址不在信任網段→403」——這才是現在唯一的存取控制。
+UNTRUSTED_ENV = {"REMOTE_ADDR": "192.168.99.99"}
+
 KEY = {"X-API-Key": "valid-key-123"}
 DRUG_NAME = "藥品項查詢項目檔251016 AI  摘要.csv"
 PAYMENT_NAME = "醫療服務給付項目_測試260801.csv"
@@ -54,18 +59,15 @@ def _upload(client, filename: str, data: bytes, headers=KEY):
 # ── 認證（不得免認證） ────────────────────────────────────────────
 
 
-def test_rules_upload_requires_api_key(client):
-    assert _upload(client, DRUG_NAME, _csv([DRUG_HEADER]), headers={}).status_code == 401
+def test_rules_sync_rejects_untrusted_source(client):
+    assert client.post("/api/rules/sync", environ_base=UNTRUSTED_ENV).status_code == 403
 
 
-def test_rules_sync_requires_api_key(client):
-    assert client.post("/api/rules/sync").status_code == 401
+def test_rules_endpoints_not_audit_exempt():
+    """規則庫變更必須留審計軌跡（認證可省、軌跡不可省）。"""
+    from elc_audit_engine.api.security import AUDIT_EXEMPT_ENDPOINTS
 
-
-def test_rules_endpoints_not_in_auth_exempt_list():
-    from elc_audit_engine.api.security import AUTH_EXEMPT_ENDPOINTS
-
-    assert not any(name.startswith("rules.") for name in AUTH_EXEMPT_ENDPOINTS)
+    assert not any(name.startswith("rules.") for name in AUDIT_EXEMPT_ENDPOINTS)
 
 
 # ── 上傳 ─────────────────────────────────────────────────────────

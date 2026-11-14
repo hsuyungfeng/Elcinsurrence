@@ -705,16 +705,10 @@
           <span class="status-badge-verified" title="同一機構與同一月份已自動認證">免驗證</span>
         </div>
       </div>
-      <!-- 迷你收納工具列：自訂 API Key 與規則庫管理（點擊展開浮動面板） -->
+      <!-- 迷你收納工具列：規則庫管理（點擊展開浮動面板）。
+           Phase 32-A：金鑰面板已移除——院內網路使用不需驗證。 -->
       <div class="sidebar-quick-bar">
-        <button class="quick-btn" id="btnQuickKey" onclick="toggleQuickPanel('key')" title="自訂 API Key 設定">🔑 金鑰</button>
         <button class="quick-btn" id="btnQuickRules" onclick="toggleQuickPanel('rules')" title="規則庫管理與每月更新">📚 規則</button>
-      </div>
-      <div id="quickKeyPanel" class="quick-dropdown-panel">
-        <div style="font-size:10px; color:#94a3b8; margin-bottom:4px;">自訂 API Key：</div>
-        <input type="password" id="apiKeyInput" placeholder="自訂 API Key（選填）" autocomplete="off"
-          style="width:100%; box-sizing:border-box; font-size:11px; padding:4px 6px; background:#090d16; color:#f8fafc; border:1px solid rgba(148,163,184,0.4); border-radius:4px;"
-          onchange="saveApiKey(this.value)">
       </div>
       <div id="quickRulesPanel" class="quick-dropdown-panel">
         <div style="font-size:10px; color:#38bdf8; font-weight:600; margin-bottom:4px;">📚 規則庫管理</div>
@@ -1503,25 +1497,14 @@
     /* ==================================================================== */
     /* 側欄迷你快捷面板切換 (金鑰 / 規則庫)                                  */
     /* ==================================================================== */
+    // Phase 32-A：金鑰面板已移除，只剩規則庫面板。
     function toggleQuickPanel(name) {
-      const keyPanel = document.getElementById('quickKeyPanel');
+      if (name !== 'rules') return;
       const rulesPanel = document.getElementById('quickRulesPanel');
-      const btnKey = document.getElementById('btnQuickKey');
       const btnRules = document.getElementById('btnQuickRules');
-
-      if (name === 'key') {
-        const isOpen = keyPanel && keyPanel.classList.contains('open');
-        if (keyPanel) keyPanel.classList.toggle('open', !isOpen);
-        if (rulesPanel) rulesPanel.classList.remove('open');
-        if (btnKey) btnKey.classList.toggle('active', !isOpen);
-        if (btnRules) btnRules.classList.remove('active');
-      } else if (name === 'rules') {
-        const isOpen = rulesPanel && rulesPanel.classList.contains('open');
-        if (rulesPanel) rulesPanel.classList.toggle('open', !isOpen);
-        if (keyPanel) keyPanel.classList.remove('open');
-        if (btnRules) btnRules.classList.toggle('active', !isOpen);
-        if (btnKey) btnKey.classList.remove('active');
-      }
+      const isOpen = rulesPanel && rulesPanel.classList.contains('open');
+      if (rulesPanel) rulesPanel.classList.toggle('open', !isOpen);
+      if (btnRules) btnRules.classList.toggle('active', !isOpen);
     }
 
     /* ==================================================================== */
@@ -1610,17 +1593,9 @@
 
     let currentFacility = { code: '', name: '', address: '', physician_name: '' };
 
-    function getApiKey() {
-      const input = document.getElementById('apiKeyInput');
-      if (input && input.value && input.value.trim()) {
-        return input.value.trim();
-      }
-      const saved = localStorage.getItem('elc_api_key');
-      if (saved && saved.trim() && saved !== 'dev_api_key_for_local_development_1234567890abcdef') {
-        return saved.trim();
-      }
-      return currentFacility.code || '';
-    }
+    // Phase 32-A：getApiKey／saveApiKey 已移除。院內網路以來源位址信任，
+    // 瀏覽器不再需要持有任何金鑰（原本會把院所代碼當金鑰存進 localStorage，
+    // 而院所代碼是公開資訊，等於沒有保護力）。
 
     async function loadFacilityConfig() {
       try {
@@ -1630,11 +1605,6 @@
           if (data && data.facility) {
             currentFacility = data.facility;
             updateFacilityUI(currentFacility);
-            if (currentFacility.code) {
-              localStorage.setItem('elc_api_key', currentFacility.code);
-              const ki = document.getElementById('apiKeyInput');
-              if (ki) ki.value = currentFacility.code;
-            }
           }
         }
       } catch (e) {
@@ -1729,9 +1699,6 @@
         }
         currentFacility = data.facility;
         updateFacilityUI(currentFacility);
-        localStorage.setItem('elc_api_key', currentFacility.code);
-        const ki = document.getElementById('apiKeyInput');
-        if (ki) ki.value = currentFacility.code;
         toggleFacilityModal(false);
         showNonBlockingNotice('已成功存入院所檔案 (config/facility.json) 並設定為存取 KEY！');
         if (pendingPackageDownload) {
@@ -1847,16 +1814,10 @@
       window.location.href = window.location.pathname + '?_t=' + Date.now();
     }
 
+    // Phase 32-A：院內網路不需驗證，故不再附加 X-API-Key。
+    // 保留 authFetch 名稱作為薄包裝（約百處呼叫端沿用），同時留下日後若需
+    // 統一處理請求（逾時、重試、錯誤提示）的單一進入點。
     async function authFetch(url, options = {}) {
-      options.headers = options.headers || {};
-      const key = getApiKey();
-      if (key) {
-        if (options.headers instanceof Headers) {
-          options.headers.set('X-API-Key', key);
-        } else {
-          options.headers['X-API-Key'] = key;
-        }
-      }
       return fetch(url, options);
     }
 
@@ -2629,9 +2590,6 @@
       // Phase 29：機構代碼與本院不同（新機構 zip）→ 不改動本院院所設定與 KEY，只建立獨立批次
       if (data.facility_code && !data.foreign_facility) {
         currentFacility.code = data.facility_code;
-        localStorage.setItem('elc_api_key', data.facility_code);
-        const ki = document.getElementById('apiKeyInput');
-        if (ki) ki.value = data.facility_code;
         updateFacilityUI(currentFacility);
       }
       const foreignNote = data.foreign_facility
@@ -2772,9 +2730,6 @@
       }
       if (data.facility_code) {
         currentFacility.code = data.facility_code;
-        localStorage.setItem('elc_api_key', data.facility_code);
-        const ki = document.getElementById('apiKeyInput');
-        if (ki) ki.value = data.facility_code;
         updateFacilityUI(currentFacility);
       }
       let msg = `匯入完成：${data.imported} 筆（來源 ${data.source}）`;
@@ -2786,11 +2741,6 @@
       showNonBlockingNotice(msg);
       document.getElementById('importFile').value = '';
       await loadCaseData();
-    }
-
-    function saveApiKey(value) {
-      try { localStorage.setItem('elc_api_key', (value || '').trim()); } catch (e) { /* 私密模式等 */ }
-      loadCaseData();
     }
 
     function showCaseListMessage(msg) {
@@ -4168,10 +4118,8 @@
 
     // Init：載入院所機構設定與當月申報月份（同一機構同一月份免重複驗證）
     (async function init() {
-      const oldKey = localStorage.getItem('elc_api_key');
-      if (oldKey === 'dev_api_key_for_local_development_1234567890abcdef') {
-        localStorage.removeItem('elc_api_key');
-      }
+      // Phase 32-A：清掉舊版殘留的金鑰（院內網路不再需要驗證）。
+      try { localStorage.removeItem('elc_api_key'); } catch (e) { /* 私密模式等 */ }
       await loadFacilityConfig();
       await loadActiveMonthlyBatch();
       switchWorkflowMode('soap');

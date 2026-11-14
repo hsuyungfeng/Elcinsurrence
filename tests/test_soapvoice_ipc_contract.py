@@ -182,7 +182,8 @@ def test_cycle_server_client(mock_server):
     assert created["cycle_id"] == c_id
     req = handler.recorded_requests[-1]
     assert req["path"] == "/api/cycles"
-    assert req["headers"].get("x-api-key") == op_key
+    # Phase 32-A：院內網路不需驗證，快捷列不再送出 X-API-Key。
+    assert req["headers"].get("x-api-key") is None
     assert req["body"] == {"command_id": cmd_id, "machine_id": m_id, "room_id": "room_1"}
 
     # 2. archive: 202 his_pending

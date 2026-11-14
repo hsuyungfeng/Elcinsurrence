@@ -1,7 +1,8 @@
 """Phase 31: 快捷列與 Server 循環 API 客戶端 (契約 §3, D-31-03, D-30-09).
 
 安全限制：
-- 一律帶 operator_key 作為 X-API-Key（具醫師/操作員權限，非 Agent 專用金鑰）
+- Phase 32-A：院內網路不需驗證，不再附加 X-API-Key；伺服器以來源位址
+  判定信任。`operator_key` 保留為相容參數（預設空字串、不送出）。
 - repr() 絕不顯示 operator_key（T-31-45）
 - 日誌絕不輸出金鑰與病歷內容
 """
@@ -39,7 +40,7 @@ class ServerRejected(ServerError):
 class CycleServerClient:
     """快捷列呼叫 elc server 循環管理端點之客戶端。"""
 
-    def __init__(self, base_url: str, operator_key: str, timeout: float = 5.0):
+    def __init__(self, base_url: str, operator_key: str = "", timeout: float = 5.0):
         self.base_url = base_url.rstrip("/")
         self._operator_key = (operator_key or "").strip()
         self.timeout = float(timeout)
@@ -55,9 +56,8 @@ class CycleServerClient:
         allow_statuses: Tuple[int, ...] = (200, 201),
     ) -> Tuple[int, Dict[str, Any]]:
         url = f"{self.base_url}{path}"
-        headers = {
-            "X-API-Key": self._operator_key,
-        }
+        # Phase 32-A：不附加 X-API-Key——伺服器以來源位址判定信任。
+        headers: Dict[str, str] = {"User-Agent": "ElcTrafficBar/1.0"}
 
         data_bytes: Optional[bytes] = None
         if body is not None:

@@ -34,9 +34,6 @@ def app_with_db(tmp_path, monkeypatch):
     monkeypatch.setenv("CASES_DB_PATH", str(db_file))
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("AUDIT_LOG_PATH", str(audit_log_path))
-    monkeypatch.setenv("ELC_API_KEYS", "caller_client:valid_client_key_12345")
-    monkeypatch.setenv("ELC_AGENT_KEYS", "agent_win:valid_agent_key_67890")
-    monkeypatch.setenv("DISABLE_AUTH", "0")
 
     from config import settings
     monkeypatch.setattr(settings, "DATA_DIR", str(tmp_path))
@@ -50,9 +47,7 @@ def app_with_db(tmp_path, monkeypatch):
     app = create_app(
         config={
             "TESTING": True,
-            "DISABLE_AUTH": False,
-            "ELC_API_KEYS": {"valid_client_key_12345": "caller_client"},
-            "ELC_AGENT_KEYS": {"valid_agent_key_67890": "agent_win"},
+            "ELC_TRUSTED_SUBNETS": [__import__("ipaddress").ip_network("192.168.0.0/16")],
             "ELC_ALLOWED_HOSTS": ["localhost", "127.0.0.1", "testserver"],
             "DATA_DIR": str(tmp_path),
         },
@@ -215,24 +210,12 @@ def test_endpoint_successful_ingestion_and_idempotency(app_with_db, recording_fi
     assert res2_json["draft_id"] == draft_id1
 
 
-def test_endpoint_agent_key_rejected_with_403(app_with_db, recording_fixture):
-    """Test 3: Agent 金鑰 POST 回傳 403"""
-    client = app_with_db.test_client()
-    data = {
-        "session_id": "sess_agent_try",
-        "visit_date": "2026-11-09",
-        "patient_ref": "PAT_002",
-        "soap_txt": recording_fixture["soap_txt"],
-        "audio": (io.BytesIO(b"RIFF....WAVEfmt "), "recording.wav", "audio/wav"),
-    }
-    headers = {"X-API-Key": "valid_agent_key_67890"}
-    resp = client.post("/api/soap/recordings", data=data, headers=headers)
-    assert resp.status_code == 403
-    assert "Agent 金鑰權限不足" in resp.get_json()["message"]
+def test_endpoint_lan_allowed_public_ip_forbidden(app_with_db, recording_fixture):
+    """院內來源放行、公網來源 403（Phase 32-A 取代原 O3 私有 IP 免 key 決策）。
 
-
-def test_endpoint_o3_private_ip_exempt_public_ip_requires_key(app_with_db, recording_fixture):
-    """Test 4: 私有 IP 免 key，公網 IP 需 key（O3 決策）"""
+    回 403 而非 401：401 語意為「請提供憑證後重試」，但院內信任模式下
+    沒有任何憑證可提供，院外來源無論如何都不會被接受。
+    """
     client = app_with_db.test_client()
 
     # Case A: Private IP (127.0.0.1) without key -> Allowed (201)
@@ -250,7 +233,7 @@ def test_endpoint_o3_private_ip_exempt_public_ip_requires_key(app_with_db, recor
     )
     assert resp_lan.status_code == 201
 
-    # Case B: Public IP (8.8.8.8) without key -> Rejected (401)
+    # Case B: Public IP (8.8.8.8) -> Rejected (403)
     data_wan = {
         "session_id": "sess_wan_fail",
         "visit_date": "2026-11-09",
@@ -263,7 +246,7 @@ def test_endpoint_o3_private_ip_exempt_public_ip_requires_key(app_with_db, recor
         data=data_wan,
         environ_base={"REMOTE_ADDR": "8.8.8.8"},
     )
-    assert resp_wan.status_code == 401
+    assert resp_wan.status_code == 403
 
 
 def test_endpoint_persists_audio_file(app_with_db, recording_fixture, tmp_path):

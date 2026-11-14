@@ -34,7 +34,6 @@ def app_with_store(tmp_path, monkeypatch):
     monkeypatch.setenv("CASES_DB_PATH", str(db_file))
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("AUDIT_LOG_PATH", str(audit_file))
-    monkeypatch.setenv("DISABLE_AUTH", "0")
 
     from config import settings
     monkeypatch.setattr(settings, "DATA_DIR", str(tmp_path))
@@ -48,13 +47,7 @@ def app_with_store(tmp_path, monkeypatch):
     app = create_app(
         config={
             "TESTING": True,
-            "DISABLE_AUTH": False,
-            "ELC_API_KEYS": {
-                "key_operator_12345": "physician_user",
-            },
-            "ELC_AGENT_KEYS": {
-                "key_agent_67890": "agent_win",
-            },
+            "ELC_TRUSTED_SUBNETS": [__import__("ipaddress").ip_network("192.168.0.0/16")],
             "ELC_ALLOWED_HOSTS": ["localhost", "127.0.0.1", "testserver"],
             "DATA_DIR": str(tmp_path),
         },
@@ -82,16 +75,6 @@ def test_pending_review_only_validated(app_with_store):
     drafts = resp.get_json()["drafts"]
     assert len(drafts) == 1
     assert drafts[0]["soap"]["s"] == _sample_valid_soap()["s"]
-
-
-def test_pending_review_agent_key_rejected(app_with_store):
-    """Test 2: Agent 金鑰 GET 回傳 403"""
-    app, store = app_with_store
-    client = app.test_client()
-    headers = {"X-API-Key": "key_agent_67890"}
-
-    resp = client.get("/api/soap/drafts/pending-review", headers=headers)
-    assert resp.status_code == 403
 
 
 def test_pending_review_fields_and_advisory_structure(app_with_store):
@@ -254,9 +237,3 @@ def test_review_client_log_safety(caplog):
         assert secret_soap not in record.getMessage()
 
 
-def test_review_client_empty_operator_key_rejected():
-    """Test 6: ReviewClient 建構時若 operator_key 為空字串拋出 ValueError"""
-    with pytest.raises(ValueError):
-        ReviewClient(base_url="http://localhost:5000", operator_key="")
-    with pytest.raises(ValueError):
-        ReviewClient(base_url="http://localhost:5000", operator_key="   ")

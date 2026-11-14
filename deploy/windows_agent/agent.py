@@ -47,7 +47,9 @@ class UncalibratedVendorProfileError(RuntimeError):
 class AgentConfig:
     server_url: str
     agent_id: str
-    agent_key: str
+    # Phase 32-A：院內網路不需驗證；agent_key 保留為相容欄位（預設空字串，
+    # 不再附加到請求標頭），待客戶端設定檔 schema 升版後移除。
+    agent_key: str = ""
     vendor_key: str = "vision"
     app_name: str = "VisionHIS.exe"
     calibrated: bool = False
@@ -59,8 +61,9 @@ class AgentConfig:
 class DefaultHttpClient:
     """Lightweight HTTP client using Python standard library urllib."""
 
-    def __init__(self, server_url: str, agent_key: str, timeout: float = 10.0):
+    def __init__(self, server_url: str, agent_key: str = "", timeout: float = 10.0):
         self.server_url = server_url.rstrip("/")
+        # 保留參數以相容既有呼叫端；院內信任模式下不再送出金鑰。
         self.agent_key = agent_key
         self.timeout = timeout
 
@@ -71,10 +74,8 @@ class DefaultHttpClient:
         json_body: Optional[Dict[str, Any]] = None,
     ) -> tuple[int, Dict[str, Any]]:
         url = f"{self.server_url}{path}"
-        headers = {
-            "X-API-Key": self.agent_key,
-            "User-Agent": "ElcWindowsAgent/1.0",
-        }
+        # Phase 32-A：不附加 X-API-Key——伺服器以來源位址判定信任。
+        headers = {"User-Agent": "ElcWindowsAgent/1.0"}
         data_bytes = None
         if json_body is not None:
             data_bytes = json.dumps(json_body).encode("utf-8")

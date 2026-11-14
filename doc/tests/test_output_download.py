@@ -21,9 +21,12 @@ def test_download_pdf_with_key(client, out_dir):
     assert resp.data == b"%PDF-1.4 test"
 
 
-def test_download_requires_api_key(client, out_dir):
-    client.environ_base.pop("HTTP_X_API_KEY", None)
-    assert client.get("/api/output/核減明細_abc.pdf").status_code == 401
+def test_download_rejects_untrusted_source(client, out_dir):
+    """Phase 32-A：產出 PDF 含病歷資料，院外來源一律 403（原為「無金鑰 → 401」）。"""
+    assert client.get(
+        "/api/output/核減明細_abc.pdf",
+        environ_base={"REMOTE_ADDR": "203.0.113.9"},
+    ).status_code == 403
 
 
 def test_download_rejects_non_pdf_and_missing(client, out_dir):

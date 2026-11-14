@@ -5,7 +5,6 @@ from __future__ import annotations
 from flask import Flask, current_app, jsonify
 from werkzeug.exceptions import HTTPException
 
-from elc_audit_engine.auth import AuthenticationError
 from elc_audit_engine.case_store import CaseNotFoundError
 from elc_audit_engine.safe_paths import UnsafeIdentifierError
 
@@ -32,10 +31,9 @@ def _error(message: str, status: int, extra: dict | None = None):
 
 
 def register_error_handlers(app: Flask) -> None:
-    @app.errorhandler(AuthenticationError)
-    def _handle_authentication_error(exc: AuthenticationError):
-        """認證失敗一律回 401，且必須與「查無資料」可區分（P0-2／P1-1 同源原則）。"""
-        return _error(exc.message, 401)
+    # Phase 32-A：移除 AuthenticationError handler——院內信任模式無金鑰認證，
+    # 非信任來源由 security.py 的 before_request 直接回 403（不是 401：401 語意
+    # 為「請提供憑證後重試」，但本服務沒有任何憑證可提供）。
 
     @app.errorhandler(ApiError)
     def _handle_api_error(exc: ApiError):

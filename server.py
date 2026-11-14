@@ -27,15 +27,11 @@ app = create_app()
 
 
 if __name__ == '__main__':
-    # 安全預設（P0-1）：綁定 127.0.0.1、debug 關閉。
-    # 原設定 host='0.0.0.0' + debug=True 等於無認證對全網卡開放，且
-    # 例外會回顯堆疊；本服務會接觸病歷資料，不得如此。
-    # 需對外提供時請置於反向代理／VPN 後，並以環境變數覆寫：
-    #   ELC_SERVER_HOST=0.0.0.0 ELC_SERVER_PORT=5000 python server.py
-    # 認證：before_request 依 api.security.AUTH_EXEMPT_ENDPOINTS 決定是否強制 X-API-Key
-    # （案件清單、附件清單／刪除、PDF 下載必填；其餘選填，見該清單註解）。
-    # ELC_API_KEYS 未設定時服務啟動即失敗（fail-fast）。
-    # 對外部署另須設定 ELC_ALLOWED_HOSTS（Host header 白名單）。
+    # 區域網路部署（Phase 32-A）：院內信任模式下 host 需為 0.0.0.0 才能讓
+    # 診間電腦連入；存取控制由 api.security 的 before_request 以**來源位址**
+    # 把關（僅放行 loopback 與伺服器所在子網，其餘回 403），不再使用金鑰。
+    # 預設仍為 127.0.0.1，由部署腳本（deploy/install.sh）明示設定對外綁定。
+    # debug 一律關閉：例外回顯堆疊會洩漏路徑與程式結構。
     host = os.getenv('ELC_SERVER_HOST', '127.0.0.1')
     port = int(os.getenv('ELC_SERVER_PORT', '5000'))
     debug = os.getenv('ELC_SERVER_DEBUG', '').lower() in ('1', 'true', 'yes')

@@ -260,18 +260,19 @@ def test_page_no_auth(phase31_app, phase31_client):
     assert "cycle_id" not in html
 
 
-def test_page_security_exemptions():
-    """Test page_2: 驗證 security 模組端點豁免設定。"""
-    from elc_audit_engine.api.security import AUDIT_EXEMPT_ENDPOINTS, AUTH_EXEMPT_ENDPOINTS
+def test_page_audit_exemptions():
+    """Test page_2: 驗證審計豁免設定。
 
-    assert "clients.monitor_page" in AUTH_EXEMPT_ENDPOINTS
+    Phase 32-A：AUTH_EXEMPT_ENDPOINTS 已移除——沒有金鑰可豁免，放行與否
+    一律由來源位址決定，對所有端點一致。只剩「寫不寫審計」需要清單：
+    監控頁與心跳為高頻探測，寫入會淹沒病歷存取紀錄；讀取工作站清單則
+    必須留軌跡。
+    """
+    from elc_audit_engine.api.security import AUDIT_EXEMPT_ENDPOINTS
+
     assert "clients.monitor_page" in AUDIT_EXEMPT_ENDPOINTS
-
     assert "clients.client_heartbeat" in AUDIT_EXEMPT_ENDPOINTS
-    assert "clients.client_heartbeat" not in AUTH_EXEMPT_ENDPOINTS
-
     assert "clients.list_clients" not in AUDIT_EXEMPT_ENDPOINTS
-    assert "clients.list_clients" not in AUTH_EXEMPT_ENDPOINTS
 
 
 def test_page_no_dangerous_dom():
@@ -289,9 +290,16 @@ def test_page_no_dangerous_dom():
 
 
 def test_page_required_strings():
-    """Test page_4: 頁面含 /api/clients、X-API-Key、elc_api_key、setInterval 字串。"""
+    """Test page_4: 頁面含 /api/clients 與 setInterval 自動更新。
+
+    Phase 32-A：X-API-Key／elc_api_key 已自頁面移除（院內網路不需驗證），
+    改為斷言頁面**不得**再出現金鑰字樣，避免日後誤加回來。
+    """
     html_path = Path(__file__).resolve().parent.parent / "static" / "clients.html"
     content = html_path.read_text(encoding="utf-8")
 
-    for s in ["/api/clients", "X-API-Key", "elc_api_key", "setInterval"]:
+    for s in ["/api/clients", "setInterval"]:
         assert s in content, f"Missing required string {s} in static/clients.html"
+
+    for s in ["X-API-Key", "api-key-input"]:
+        assert s not in content, f"金鑰相關字串不應再出現於 clients.html：{s}"

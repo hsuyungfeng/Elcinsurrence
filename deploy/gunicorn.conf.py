@@ -1,8 +1,8 @@
 """Gunicorn 設定：正式 WSGI 伺服器（取代 Flask 開發伺服器）。
 
 - 綁定位址由環境變數決定：預設 127.0.0.1:5000（僅本機）。
-  要開放區域網路時設 ELC_SERVER_HOST=0.0.0.0，且必須同時設定
-  ELC_API_KEYS 與 ELC_ALLOWED_HOSTS（見 deploy/README.md）。
+  要開放區域網路時設 ELC_SERVER_HOST=0.0.0.0；存取控制由應用層以
+  請求來源位址把關（院內放行、院外 403），不需金鑰（見 deploy/README.md）。
 - 單一 worker + 多執行緒：SQLite（CaseStore）與本機 LLM 呼叫不宜多程序寫入。
 - 日誌寫入 logs/，崩潰（worker 例外、啟動失敗）同時輸出至 error log。
 """

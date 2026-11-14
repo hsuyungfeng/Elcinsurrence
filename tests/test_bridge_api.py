@@ -145,8 +145,12 @@ def test_unknown_job_is_404(client):
 
 
 def test_bridge_endpoints_require_api_key(client):
-    assert client.get("/api/bridge/jobs/pending").status_code in (401, 403)
-    assert client.post("/api/bridge/jobs", json={"s_type_code": "15", "target_id": "X"}).status_code in (401, 403)
+    # Phase 32-A：院外來源 403（取代原「無 key → 401/403」）。
+    env = {"REMOTE_ADDR": "203.0.113.9"}
+    assert client.get("/api/bridge/jobs/pending", environ_base=env).status_code == 403
+    assert client.post(
+        "/api/bridge/jobs", json={"s_type_code": "15", "target_id": "X"}, environ_base=env
+    ).status_code == 403
 
 
 def test_non_bridge_case_is_not_exposed_as_job(client, api):

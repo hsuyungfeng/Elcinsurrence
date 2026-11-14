@@ -12,6 +12,9 @@ from elc_audit_engine.cycles.states import (
 from elc_audit_engine.cycles.store import cycle_dir, transition_cycle
 from tests.phase31_support import phase31_app, phase31_client  # noqa: F401
 
+# Phase 32-A：院內信任模式；院外來源回 403。
+UNTRUSTED_ENV = {"REMOTE_ADDR": "203.0.113.9"}
+
 KEY = {"X-API-Key": "valid-key-123"}
 AGENT_KEY = {"X-API-Key": "agent-key-1"}
 
@@ -190,20 +193,18 @@ def test_abandon_cycle_flow(phase31_app, phase31_client):
 
 
 def test_auth_and_format_validation(phase31_client):
-    """Test 7: 無 key 401；Agent 金鑰 403；錯誤格式 422。"""
-    # 1. 無 key → 401
-    assert phase31_client.post("/api/cycles", json={}).status_code == 401
-    assert phase31_client.get("/api/cycles").status_code == 401
+    """Test 7: 院外來源 403；錯誤格式 422。
 
-    # 2. Agent 金鑰 → 403 (不在 AGENT_ALLOWED_ENDPOINTS)
-    res_agent = phase31_client.post(
-        "/api/cycles",
-        json={"command_id": CMD_1, "machine_id": MACHINE_1},
-        headers=AGENT_KEY,
-    )
-    assert res_agent.status_code == 403
+    Phase 32-A：原本驗證「無 key → 401」與「Agent 金鑰 → 403」，兩者皆建立
+    在已移除的金鑰分級之上。存取控制改由來源位址把關。
+    """
+    # 1. 院外來源 → 403
+    assert phase31_client.post(
+        "/api/cycles", json={}, environ_base=UNTRUSTED_ENV
+    ).status_code == 403
+    assert phase31_client.get("/api/cycles", environ_base=UNTRUSTED_ENV).status_code == 403
 
-    # 3. 欄位格式錯誤 → 422
+    # 2. 欄位格式錯誤 → 422
     # 錯誤的 command_id
     res_bad_cmd = phase31_client.post(
         "/api/cycles",

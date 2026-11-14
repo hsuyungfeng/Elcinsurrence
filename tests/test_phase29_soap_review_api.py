@@ -315,10 +315,15 @@ class TestCreateDraft:
         _, body = _push_drafts(env.client, "C-TPL-03", SOAP_OK, order_code="E5002C")
         assert body["draft"]["comparison"] is None
 
-    def test_requires_api_key(self, env):
+    def test_rejects_untrusted_source(self, env):
+        """Phase 32-A：院外來源 403（原為「無金鑰 → 401/403」）。"""
         _make_case(env.store, "C-AUTH-01")
-        res = env.client.post("/api/soap/drafts", json={"case_id": "C-AUTH-01", "soap": SOAP_OK})
-        assert res.status_code in (401, 403)
+        res = env.client.post(
+            "/api/soap/drafts",
+            json={"case_id": "C-AUTH-01", "soap": SOAP_OK},
+            environ_base={"REMOTE_ADDR": "203.0.113.9"},
+        )
+        assert res.status_code == 403
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -595,9 +600,14 @@ class TestBatchApprove:
         assert len(_his_push_jobs(store, "C-B-03")) == 1
         assert len(_his_push_jobs(store, "C-B-04")) == 1
 
-    def test_batch_approve_requires_api_key(self, env):
-        res = env.client.post("/api/soap/batches/BATCH-29/approve", json={})
-        assert res.status_code in (401, 403)
+    def test_batch_approve_rejects_untrusted_source(self, env):
+        """Phase 32-A：院外來源 403（原為「無金鑰 → 401/403」）。"""
+        res = env.client.post(
+            "/api/soap/batches/BATCH-29/approve",
+            json={},
+            environ_base={"REMOTE_ADDR": "203.0.113.9"},
+        )
+        assert res.status_code == 403
 
 
 # ─────────────────────────────────────────────────────────────────────────────

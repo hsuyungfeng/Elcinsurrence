@@ -1,89 +1,53 @@
-"""認證、Host 白名單、安全標頭與存取審計（Phase 9-01／A-CR-01）。
+"""院內網路信任、CSRF 防護、安全標頭與存取審計（Phase 32-A）。
 
 端點名稱為 blueprint 限定名（`<blueprint>.<函式>`）。
+
+**Phase 32-A 變更（使用者裁示 2026-11-13）**：移除 `X-API-Key` 認證，改以
+來源位址判定信任（見 `elc_audit_engine.lan_trust` 的完整理由）。因此：
+
+- `AUTH_EXEMPT_ENDPOINTS` 不再需要——沒有金鑰可豁免，信任與否只看來源
+  位址，對所有端點一致。
+- 新增 CSRF 防護：金鑰移除後瀏覽器成為攻擊面，寫入請求必須驗跨站來源。
+- 審計日誌仍然保留（「驗證可省、軌跡不可省」）。
 """
 
 from __future__ import annotations
 
-import ipaddress
-import os
-
 from flask import Flask, current_app, g, jsonify, request
 
 from elc_audit_engine import audit_log
-from elc_audit_engine.auth import (
-    API_KEY_HEADER,
-    AuthConfigError,
-    AuthenticationError,
-    load_api_keys,
-    resolve_agent_caller,
-    resolve_caller,
+from elc_audit_engine.lan_trust import (
+    BAD_HOST_MESSAGE,
+    CROSS_SITE_MESSAGE,
+    UNTRUSTED_MESSAGE,
+    caller_id_for,
+    is_allowed_host,
+    is_cross_site_request,
+    is_trusted_source,
 )
 
-# 審計豁免清單：靜態頁與健康檢查不含病歷存取，記錄會被探測流量淹沒。
-# 這份清單只決定「寫不寫審計」，與是否強制認證無關——業務端點即使
-# 免強制 API Key，仍接觸病歷資料，審計軌跡不可因此消失。
+# 審計豁免清單：靜態頁與健康檢查不含病歷存取，記錄會被探測流量淹沒
+# （客戶端每數秒探測一次 /api/health 與心跳）。
+# 這份清單**只**決定寫不寫審計；是否放行一律由來源位址決定。
 AUDIT_EXEMPT_ENDPOINTS = frozenset({
     "misc.index",
     "misc.health",
     "static",
-    "misc.get_facility",
     "clients.monitor_page",
     "clients.client_heartbeat",
-})
-
-# Agent 專用權限端點清單（Phase 29 §7.3）：Agent 金鑰僅限存取心跳與橋接任務相關端點。
-AGENT_ALLOWED_ENDPOINTS = frozenset({
-    "agent_bridge.agent_heartbeat",
-    "agent_bridge.get_agent_status",
-    "bridge.list_pending_jobs",
-    "bridge.report_bridge_job_status",
-    "bridge.get_bridge_job",
-})
-
-# 認證豁免清單：**僅決定認證是否強制，不得沿用來判斷審計**——兩份清單刻意
-# 分開（歷史教訓：曾共用一份清單，導致免認證的業務端點連審計日誌都被一併
-# 跳過，違反「認證可選、審計必留」的設計）。
-#
-# 2026-09 部分強制（code review A-CR-01，使用者裁示選項 2）：批次讀出 PHI 的
-# 端點（案件清單、附件清單、列印產出下載）與破壞性操作（刪除附件）必須帶
-# X-API-Key；其餘以單筆請求為單位、由呼叫方自帶資料的端點維持選填。
-# 申報預審端點（monthly.*）支援與其他院內系統/前端直接對接，免強制認證。
-AUTH_EXEMPT_ENDPOINTS = (AUDIT_EXEMPT_ENDPOINTS - {"clients.client_heartbeat"}) | frozenset({
-    "sampling.audit_sampling_case",
-    "sampling.import_sampling_cases",
-    "sampling.import_sampling_from_monthly",
-    "sampling.add_sampling_by_patient",
-    "sampling.update_sampling_soap",
-    "appeal.generate_appeal_draft",
-    "appeal.import_appeal_cases",
-    "appeal.import_appeal_from_monthly",
-    "appeal.add_appeal_by_patient",
-    "appeal.update_appeal_soap",
-    "attachments.upload_appeal_attachment",
-    "printing.generate_deduction_print",
-    "printing.generate_evidence_packet_print",
-    "monthly.upload_monthly",
-    "monthly.list_monthly_batches",
-    "monthly.monthly_batch_report",
-    "misc.get_facility",
-    "misc.update_facility",
-    "emr_packaging.create_emr_batch_package",
-    "emr_packaging.list_emr_packages",
-    "emr_packaging.download_emr_package",
 })
 
 #: P1-5 縱深防禦：即使前端某處遺漏轉義，CSP 也擋掉外部腳本與資料外送。
 #  外鏈字型已移除（D2 個資不出本機），故 default-src 收斂到 'self'。
 #  inline style/script 暫留 'unsafe-inline'——頁面目前為單檔 inline 樣板，
-#  待拆出外部 .css/.js 後可移除此例外。
+#  待拆出外部 .css/.js 後可移除此例外（見改進計畫 E8）。
 CSP = "; ".join(
     (
         "default-src 'self'",
         "style-src 'self' 'unsafe-inline'",
         "script-src 'self' 'unsafe-inline'",
-        # blob:：佐證庫（Phase 17-02）以 authFetch 取回檔案後轉 blob URL 顯示；
-        # <img>/<audio> 無法附帶 X-API-Key 標頭，只能用同源 blob。blob: 僅能由頁面自行建立，不外送資料。
+        # blob:：佐證庫（Phase 17-02）以 fetch 取回檔案後轉 blob URL 顯示；
+        # <img>/<audio> 只能用同源 blob。blob: 僅能由頁面自行建立，不外送資料。
         "img-src 'self' data: blob:",
         "media-src 'self' blob:",
         "connect-src 'self'",
@@ -96,135 +60,55 @@ CSP = "; ".join(
 )
 
 
-def load_allowed_hosts() -> frozenset[str]:
-    """Host header 白名單（防 DNS rebinding：惡意網域解析到 127.0.0.1 後，
-    瀏覽器會帶攻擊者網域的 Host，藉此讀取免認證端點）。
-
-    ELC_ALLOWED_HOSTS 以逗號分隔（不含 port 亦可）；未設定時僅允許本機名稱。
-    """
-    raw = os.getenv("ELC_ALLOWED_HOSTS", "")
-    hosts = {h.strip().lower() for h in raw.split(",") if h.strip()}
-    return frozenset(hosts or {"127.0.0.1", "localhost", "[::1]"})
-
-
-def load_api_keys_or_fail(app: Flask) -> dict[str, str]:
-    """啟動期載入 ELC_API_KEYS（fail-fast，不降級）。
-
-    AuthConfigError 直接重新拋出，服務啟動即失敗——本服務會接觸病歷資料，
-    設定缺失時繼續啟動等同於「無認證對外開放」。僅在
-    ELC_ALLOW_NO_AUTH_FOR_TESTS == "1" 時允許以空表啟動（**只准測試使用**）。
-    """
-    try:
-        return load_api_keys()
-    except AuthConfigError:
-        if os.environ.get("ELC_ALLOW_NO_AUTH_FOR_TESTS") == "1":
-            app.logger.warning(
-                "ELC_ALLOW_NO_AUTH_FOR_TESTS=1：以空 API key 表啟動（僅限測試環境！"
-                "正式環境設定此旗標等同於關閉認證，絕不可用於生產部署）"
-            )
-            return {}
-        raise
-
-
-def _host_allowed(allowed: frozenset[str]) -> bool:
-    host = (request.host or "").lower()
-    hostname = host.rsplit(":", 1)[0] if not host.endswith("]") else host
-    return host in allowed or hostname in allowed
-
-
-_RFC1918_NETWORKS = (
-    ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.168.0.0/16"),
-)
-
-
-def _is_private_ip(ip_str: str | None) -> bool:
-    """判斷 IP 是否為 127.0.0.1 或 RFC 1918 私有 IP 段（Phase 30 O3）。"""
-    if not ip_str:
-        return False
-    try:
-        ip = ipaddress.ip_address(ip_str)
-        if ip.is_loopback:
-            return True
-        return any(ip in net for net in _RFC1918_NETWORKS)
-    except ValueError:
-        return False
-
-
 def register_security(app: Flask) -> None:
     @app.before_request
-    def _enforce_host_and_api_key():
-        """統一強制 Host 白名單與 X-API-Key 認證（豁免需顯式列入白名單）。
+    def _enforce_lan_trust():
+        """統一強制「來源位址須在院內網段」與跨站寫入防護。
 
-        採 before_request 而非逐一端點 decorator：**新增端點時預設受保護**，
-        豁免必須顯式列入 AUTH_EXEMPT_ENDPOINTS。
+        採 before_request 而非逐一端點 decorator：**新增端點時預設受保護**。
+        不設任何豁免清單——信任判準對所有端點一致，包含健康檢查
+        （院外來源連 /api/health 都不該得到回應，那會洩漏服務存在）。
         """
-        if not _host_allowed(current_app.config["ELC_ALLOWED_HOSTS"]):
-            return jsonify({"status": "error", "message": "不允許的 Host"}), 400
-        keys = current_app.config["ELC_API_KEYS"]
-        presented_key = request.headers.get(API_KEY_HEADER)
+        # Host 檢查先行：DNS rebinding 的請求來源位址是可信的院內位址，
+        # 來源檢查無法分辨，且 GET 讀取不受 CSRF 檢查保護。
+        if not is_allowed_host(request.host):
+            return jsonify({"status": "error", "message": BAD_HOST_MESSAGE}), 400
 
-        # 測試階段免驗證政策（User Requirement: 目前測試階段先不須驗證）
-        if os.environ.get("DISABLE_AUTH") == "1" or current_app.config.get("DISABLE_AUTH"):
-            if presented_key:
-                try:
-                    g.caller_id = resolve_caller(presented_key, keys)
-                except Exception:
-                    g.caller_id = "tester"
-            else:
-                from elc_audit_engine.auth import get_facility_code
-                fac_code = get_facility_code()
-                g.caller_id = f"clinic_{fac_code}" if fac_code else "tester"
-            return None
+        # 反向代理防線（execurator 審查）：若前方有同機反向代理，所有外部請求
+        # 的 remote_addr 都是 127.0.0.1，loopback 會被無條件信任。信任模式不支援
+        # 反向代理，故一律拒絕帶轉發標頭的請求（fail closed）。
+        if any(h in request.headers for h in ("X-Forwarded-For", "Forwarded", "X-Real-IP")):
+            current_app.logger.warning("拒絕帶轉發標頭的請求（信任模式不支援反向代理）：%s", request.path)
+            return jsonify({"status": "error", "message": UNTRUSTED_MESSAGE}), 403
 
-        # Phase 30 O3: 錄音接收端點 POST /api/soap/recordings
-        # 僅對來源為私有 IP 段（10/8、172.16/12、192.168/16、127.0.0.1）的請求免 key；
-        # 其他來源仍需 key。Agent 金鑰無論來源一律回傳 403。
-        if request.endpoint == "soap_recording.receive_recording":
-            agent_keys = current_app.config.get("ELC_AGENT_KEYS", {})
-            if presented_key and agent_keys:
-                agent_id = resolve_agent_caller(presented_key, agent_keys)
-                if agent_id is not None:
-                    return jsonify({"status": "error", "message": "Agent 金鑰權限不足，僅能呼叫心跳與 HIS_PUSH 相關端點"}), 403
+        trusted = current_app.config["ELC_TRUSTED_SUBNETS"]
+        if not is_trusted_source(request.remote_addr, trusted):
+            # 不回報信任網段內容，避免協助攻擊者推測內網結構。
+            current_app.logger.warning(
+                "拒絕非信任來源：%s %s from %s",
+                request.method,
+                request.path,
+                request.remote_addr,
+            )
+            return jsonify({"status": "error", "message": UNTRUSTED_MESSAGE}), 403
 
-            if _is_private_ip(request.remote_addr):
-                if presented_key:
-                    try:
-                        g.caller_id = resolve_caller(presented_key, keys)
-                    except AuthenticationError:
-                        pass
-                if not getattr(g, "caller_id", None):
-                    g.caller_id = f"soapvoice-lan:{request.remote_addr}"
-                return None
-            # 非私有 IP：強制檢驗 API key
-            g.caller_id = resolve_caller(presented_key, keys)
-            return None
+        g.caller_id = caller_id_for(request.remote_addr)
 
-        if request.endpoint in AUTH_EXEMPT_ENDPOINTS:
-            # 免強制認證，但呼叫方帶了合法 key 時解析 caller_id，讓審計日誌不必然
-            # 落成 anonymous（key 錯誤或缺失靜默忽略——這裡不強制擋）。
-            if presented_key:
-                try:
-                    g.caller_id = resolve_caller(presented_key, keys)
-                except AuthenticationError:
-                    pass
-            return None
-        if request.endpoint is None:
-            return None  # 未匹配路由（404）交給 HTTPException handler
+        if is_cross_site_request(
+            request.method,
+            request.headers.get("Origin"),
+            request.headers.get("Sec-Fetch-Site"),
+            request.host_url,
+        ):
+            current_app.logger.warning(
+                "拒絕跨站寫入：%s %s origin=%r from %s",
+                request.method,
+                request.path,
+                request.headers.get("Origin"),
+                request.remote_addr,
+            )
+            return jsonify({"status": "error", "message": CROSS_SITE_MESSAGE}), 403
 
-        # 優先檢查是否為 Windows Agent 金鑰（Phase 29 §7.3）
-        agent_keys = current_app.config.get("ELC_AGENT_KEYS", {})
-        if presented_key and agent_keys:
-            agent_id = resolve_agent_caller(presented_key, agent_keys)
-            if agent_id is not None:
-                if request.endpoint not in AGENT_ALLOWED_ENDPOINTS:
-                    return jsonify({"status": "error", "message": "Agent 金鑰權限不足，僅能呼叫心跳與 HIS_PUSH 相關端點"}), 403
-                g.caller_id = agent_id
-                g.is_agent = True
-                return None
-
-        g.caller_id = resolve_caller(presented_key, keys)
         return None
 
     @app.after_request
@@ -246,7 +130,7 @@ def register_security(app: Flask) -> None:
         if request.endpoint not in AUDIT_EXEMPT_ENDPOINTS:
             try:
                 audit_log.record_access(
-                    caller_id=getattr(g, "caller_id", "anonymous"),
+                    caller_id=getattr(g, "caller_id", "lan:unknown"),
                     method=request.method,
                     path=request.path,
                     status=response.status_code,

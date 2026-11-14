@@ -9,6 +9,9 @@ from elc_audit_engine.cycles.states import (
 from elc_audit_engine.cycles.store import create_cycle, cycle_dir, transition_cycle
 from tests.phase31_support import phase31_app, phase31_client  # noqa: F401
 
+# Phase 32-A：院內信任模式；院外來源回 403。
+UNTRUSTED_ENV = {"REMOTE_ADDR": "203.0.113.9"}
+
 KEY = {"X-API-Key": "valid-key-123"}
 AGENT_KEY = {"X-API-Key": "agent-key-1"}
 
@@ -222,18 +225,17 @@ def test_submit_draft_payload_boundary_validation(phase31_client, phase31_app):
     assert phase31_client.post(f"/api/cycles/{cid}/draft", headers=KEY, json=bad_extra_list).status_code == 422
 
 
-def test_cycle_draft_auth(phase31_client, phase31_app):
-    """Test 8: Agent 金鑰 → 403；無 key → 401。"""
+def test_cycle_draft_rejects_untrusted_source(phase31_client, phase31_app):
+    """Phase 32-A：草稿含病歷內容，院外來源一律 403（取代原「無 key → 401」）。"""
     store = phase31_app.case_store
     cid = _setup_cycle_ready(store, "88" * 16, upload_complete=True)
 
-    # 無 key
-    assert phase31_client.get(f"/api/cycles/{cid}/draft").status_code == 401
-    assert phase31_client.post(f"/api/cycles/{cid}/draft", json={}).status_code == 401
-
-    # Agent 金鑰
-    assert phase31_client.get(f"/api/cycles/{cid}/draft", headers=AGENT_KEY).status_code == 403
-    assert phase31_client.post(f"/api/cycles/{cid}/draft", headers=AGENT_KEY, json={}).status_code == 403
+    assert phase31_client.get(
+        f"/api/cycles/{cid}/draft", environ_base=UNTRUSTED_ENV
+    ).status_code == 403
+    assert phase31_client.post(
+        f"/api/cycles/{cid}/draft", json={}, environ_base=UNTRUSTED_ENV
+    ).status_code == 403
 
 
 def test_cycle_draft_caplog_no_leak(phase31_client, phase31_app, caplog):

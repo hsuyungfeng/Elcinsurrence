@@ -14,11 +14,13 @@ from flask import Flask
 from config import settings
 from elc_audit_engine.case_store import CaseStore
 
+from elc_audit_engine.lan_trust import describe_trust, load_trusted_subnets
+
 from .cases import migrate_legacy_uploads
 from .context import EXTENSION_KEY, Services
 from .errors import register_error_handlers
 from .routes import ALL_BLUEPRINTS
-from .security import load_allowed_hosts, load_api_keys_or_fail, register_security
+from .security import register_security
 
 # 請求大小上限（A-WR-04）：單檔上限 10MB，另留 1MB 給 multipart 欄位與 JSON。
 MAX_CONTENT_LENGTH = 11 * 1024 * 1024
@@ -34,8 +36,8 @@ def create_app(
 
     Args:
         config: 覆寫 app.config，常用鍵：
-            - ELC_API_KEYS：{key: caller_id}；未提供時自環境變數載入（fail-fast）。
-            - ELC_ALLOWED_HOSTS：Host 白名單（iterable）；未提供時讀 ELC_ALLOWED_HOSTS。
+            - ELC_TRUSTED_SUBNETS：信任網段清單（`ipaddress` 網路物件的
+              iterable）；未提供時讀環境變數或自動偵測伺服器所在子網。
             - ELC_UPLOAD_DIR／ELC_RAW_DIR：匯入暫存目錄（預設 DATA_DIR/uploads[/raw]）。
             - TESTING 等 Flask 設定。
         case_store: 注入的 CaseStore；未提供時使用 settings.CASES_DB_PATH。
@@ -53,16 +55,16 @@ def create_app(
         ELC_RAW_DIR=os.path.join(upload_dir, "raw"),
     )
     app.config.update(config or {})
-    if "ELC_API_KEYS" not in app.config:
-        app.config["ELC_API_KEYS"] = load_api_keys_or_fail(app)
-    if "ELC_AGENT_KEYS" not in app.config:
-        try:
-            from elc_audit_engine.auth import load_agent_keys
-            app.config["ELC_AGENT_KEYS"] = load_agent_keys()
-        except Exception:
-            app.config["ELC_AGENT_KEYS"] = {}
-    app.config["ELC_ALLOWED_HOSTS"] = frozenset(
-        h.lower() for h in app.config.get("ELC_ALLOWED_HOSTS") or load_allowed_hosts()
+    # 院內信任模式（Phase 32-A）：無金鑰，以來源位址判定。信任範圍於啟動時
+    # 解析一次——逐請求偵測網路介面既慢又可能中途變動。
+    if "ELC_TRUSTED_SUBNETS" not in app.config:
+        app.config["ELC_TRUSTED_SUBNETS"] = load_trusted_subnets()
+    else:
+        app.config["ELC_TRUSTED_SUBNETS"] = list(app.config["ELC_TRUSTED_SUBNETS"])
+    # 安裝人員必須看得見信任範圍，才能確認訪客網段未被誤納。
+    app.logger.info(
+        "院內信任模式：信任來源 %s",
+        describe_trust(app.config["ELC_TRUSTED_SUBNETS"]),
     )
 
     store = case_store if case_store is not None else CaseStore()

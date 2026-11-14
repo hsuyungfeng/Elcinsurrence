@@ -83,9 +83,15 @@ def fake_rule(monkeypatch):
 
 
 def test_all_his_endpoints_require_api_key(client):
-    assert client.post("/api/his/v1/cases/push", json=PUSH_BODY).status_code == 401
-    assert client.post("/api/his/v1/cases/soap-enhance", json={"order_code": "X"}).status_code == 401
-    assert client.post("/api/his/v1/cases/HIS-x/approve-callback", json={"approved_soap": "S"}).status_code == 401
+    # Phase 32-A：院外來源 403（取代原「無 key → 401」）。
+    env = {"REMOTE_ADDR": "203.0.113.9"}
+    assert client.post("/api/his/v1/cases/push", json=PUSH_BODY, environ_base=env).status_code == 403
+    assert client.post(
+        "/api/his/v1/cases/soap-enhance", json={"order_code": "X"}, environ_base=env
+    ).status_code == 403
+    assert client.post(
+        "/api/his/v1/cases/HIS-x/approve-callback", json={"approved_soap": "S"}, environ_base=env
+    ).status_code == 403
 
 
 # ── 建檔 ─────────────────────────────────────────────────────────

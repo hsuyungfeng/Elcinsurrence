@@ -11,19 +11,21 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-os.environ.setdefault("ELC_API_KEYS", "test-suite:0000000000TESTKEY0000")
+# Phase 32-A：院內信任模式取代 API key，不再需要 ELC_API_KEYS。
 
 
 @pytest.fixture
 def app(tmp_path):
-    """create_app 隔離實例：暫存 CaseStore／上傳目錄、固定測試 key。"""
+    """create_app 隔離實例：暫存 CaseStore／上傳目錄、固定信任網段。"""
+    import ipaddress
+
     from elc_audit_engine.api import create_app
     from elc_audit_engine.case_store import CaseStore
 
     return create_app(
         {
             "TESTING": True,
-            "ELC_API_KEYS": {"valid-key-123": "clinic_a"},
+            "ELC_TRUSTED_SUBNETS": [ipaddress.ip_network("192.168.0.0/24")],
             "ELC_UPLOAD_DIR": str(tmp_path / "uploads"),
             "ELC_RAW_DIR": str(tmp_path / "uploads" / "raw"),
         },

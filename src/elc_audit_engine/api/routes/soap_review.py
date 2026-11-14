@@ -15,12 +15,11 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
 import uuid
 from typing import Any
 
-from flask import Blueprint, current_app, g, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from elc_audit_engine import audit_log
 from elc_audit_engine.bridge_queue import ensure_job, get_job
@@ -307,17 +306,15 @@ def get_auto_accept_setting():
 
 @bp.route("/api/soap/settings/auto-accept", methods=["PUT"])
 def update_auto_accept_setting():
-    """切換自動接入開關（D-30-04）。需非 Agent 金鑰，且寫入審計紀錄。"""
-    if getattr(g, "is_agent", False):
-        raise ApiError("Agent 金鑰權限不足，無法變更設定", status=403)
+    """切換自動接入開關（D-30-04）。寫入審計紀錄。
 
-    cur_caller = caller_id() or "anonymous"
-    admin_callers = os.getenv("ELC_SOAP_ADMIN_CALLERS", "").strip()
-    if admin_callers:
-        allowed = {c.strip() for c in admin_callers.split(",") if c.strip()}
-        if cur_caller not in allowed:
-            raise ApiError(f"呼叫方 '{cur_caller}' 無權限變更自動接入設定", status=403)
-
+    Phase 32-A：原本以「非 Agent 金鑰」與 `ELC_SOAP_ADMIN_CALLERS` 白名單
+    限制呼叫方，兩者都建立在金鑰衍生的 caller_id 之上。院內信任模式下
+    caller_id 是 `lan:<IP>`，該白名單若設定會把所有人擋掉（靜默失效的
+    權限檢查比沒有檢查更危險），故一併移除。變更仍完整寫入審計紀錄，
+    可事後追查是哪一台電腦改的。
+    """
+    cur_caller = caller_id() or "lan:unknown"
     data = _json_object()
     if "enabled" not in data:
         raise ApiError("缺少 enabled 欄位", status=400)

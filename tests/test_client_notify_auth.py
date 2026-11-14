@@ -9,6 +9,9 @@ from typing import Any
 from elc_audit_engine.cycles.store import create_cycle, transition_cycle
 from tests.phase31_support import phase31_app, phase31_client  # noqa: F401
 
+# Phase 32-A：院內信任模式；院外來源回 403。
+UNTRUSTED_ENV = {"REMOTE_ADDR": "203.0.113.9"}
+
 
 def _assert_no_phi(obj: Any) -> None:
     """遞迴檢查字典/串列中絕無任何 PHI 欄位 (契約 §3, D-31-12)."""
@@ -91,26 +94,17 @@ def test_notify_awaiting_confirm(phase31_app, phase31_client):
     _assert_no_phi(data)
 
 
-def test_notify_auth(phase31_app, phase31_client):
-    """Test notify_2: 無 key → 401 且不含 notify；Agent key → 403。"""
+def test_notify_rejects_untrusted_source(phase31_app, phase31_client):
+    """Phase 32-A：院外來源 403 且不得回傳 notify 內容（取代原「無 key → 401」）。"""
     m1 = str(uuid.uuid4())
 
-    # 1. 無 key 請求
-    resp_no_key = phase31_client.post(
+    resp = phase31_client.post(
         "/api/clients/heartbeat",
         json={"machine_id": m1},
+        environ_base=UNTRUSTED_ENV,
     )
-    assert resp_no_key.status_code == 401
-    data_no_key = resp_no_key.get_json()
-    assert "notify" not in (data_no_key or {})
-
-    # 2. Agent 金鑰請求
-    resp_agent = phase31_client.post(
-        "/api/clients/heartbeat",
-        headers={"X-API-Key": "agent-key-1"},
-        json={"machine_id": m1},
-    )
-    assert resp_agent.status_code == 403
+    assert resp.status_code == 403
+    assert "notify" not in (resp.get_json() or {})
 
 
 def test_notify_isolation(phase31_app, phase31_client):

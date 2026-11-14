@@ -29,6 +29,8 @@ from elc_audit_engine.monthly_report_html import render_batch_report_html
 from elc_audit_engine.rule_repository.models import RuleResult, not_found
 
 KEY = {"X-API-Key": "valid-key-123"}
+# Phase 32-A：院內信任模式取代 API key；院外來源回 403。
+UNTRUSTED_ENV = {"REMOTE_ADDR": "192.168.99.99"}
 BATCH = "MONTHLY-202307"
 
 # 總字元數須落在 200–500（目標 200–400；見 comparator/soap_advice.py 與 LLM 系統提示）。
@@ -449,8 +451,10 @@ def client(api):
         yield c
 
 
-def test_pregen_endpoint_requires_api_key(client):
-    assert client.post(f"/api/monthly/batch/{BATCH}/pregen").status_code == 401
+def test_pregen_endpoint_rejects_untrusted_source(client):
+    assert client.post(
+        f"/api/monthly/batch/{BATCH}/pregen", environ_base=UNTRUSTED_ENV
+    ).status_code == 403
 
 
 def test_pregen_endpoint_validates_limit(client):

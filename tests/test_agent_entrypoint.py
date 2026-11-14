@@ -22,33 +22,35 @@ from deploy.windows_agent.main import (
 )
 
 
-@pytest.fixture(autouse=True)
-def _no_default_seed_url(monkeypatch):
-    """既有啟動流程測試假設沒有預設位址；預設位址行為另由專屬測試覆蓋。"""
-    monkeypatch.setattr(agent_main_module, "DEFAULT_CENTRAL_SERVER_URL", "")
+def test_startup_flow_has_no_hardcoded_server_url():
+    """Phase 32-A（C1）：不得有寫死的診所伺服器位址。
+
+    原本 `DEFAULT_CENTRAL_SERVER_URL = "http://192.168.68.118:5000"` 是某一
+    間診所的位址：換分享器或 DHCP 重發就連不上，其他診所的客戶端還會去
+    探測不存在的主機。位址只能來自記住的上次位址、區網探索或手動輸入。
+    """
+    assert not hasattr(agent_main_module, "DEFAULT_CENTRAL_SERVER_URL")
 
 
-def test_startup_flow_probes_default_central_url_first(monkeypatch):
-    """第一次啟動、無記住位址時，先探測診所預設位址（回歸：Windows 雙擊後無反應）。"""
-    monkeypatch.setattr(agent_main_module, "DEFAULT_CENTRAL_SERVER_URL", "http://192.168.68.112:5000")
+def test_startup_flow_without_last_url_goes_straight_to_discovery():
+    """無記住位址時直接進入探索，不探測任何寫死位址。"""
+    from deploy.windows_agent.config import AgentSettings
+    from deploy.windows_agent.main import DiscoveryResult
+
     probed: List[str] = []
 
     def fake_probe_unauth(url: str) -> bool:
         probed.append(url)
         return True
 
-    def fake_probe_auth(url: str, key: str) -> bool:
-        return True
-
-    from deploy.windows_agent.config import AgentSettings
-
     res = run_startup_flow(
-        AgentSettings(agent_key="k"),
+        AgentSettings(),
+        discovery=lambda: DiscoveryResult(candidates=[], needs_manual_entry=True),
         probe_unauthenticated=fake_probe_unauth,
-        probe_authenticated=fake_probe_auth,
+        probe_authenticated=lambda url, key="": True,
     )
-    assert res == "http://192.168.68.112:5000"
-    assert probed == ["http://192.168.68.112:5000"]
+    assert res is None
+    assert probed == [], f"不應探測任何寫死位址，實際探測：{probed}"
 from elc_audit_engine.his_calibration import (
     CalibrationItem,
     CalibrationProfile,

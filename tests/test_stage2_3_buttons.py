@@ -7,7 +7,6 @@ from elc_audit_engine.api.app import create_app
 
 @pytest.fixture
 def test_client(tmp_path, monkeypatch):
-    monkeypatch.setenv("DISABLE_AUTH", "1")
     store_file = tmp_path / "test_store.json"
     monkeypatch.setenv("CASE_STORE_PATH", str(store_file))
     app = create_app()

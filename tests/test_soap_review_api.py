@@ -19,8 +19,7 @@ def test_setup():
         app = create_app(
             config={
                 "TESTING": True,
-                "ELC_API_KEYS": {"key_physician_123456": "dr_lin"},
-                "ELC_AGENT_KEYS": {"key_agent_123456789": "win_agent_01"},
+                "ELC_TRUSTED_SUBNETS": [__import__("ipaddress").ip_network("192.168.0.0/16")],
                 "ELC_ALLOWED_HOSTS": ["localhost", "127.0.0.1", "testserver"],
             },
             case_store=store,
@@ -202,14 +201,9 @@ def test_agent_heartbeat_and_security(test_setup):
     assert agents[0]["agent_id"] == "win_agent_01"
     assert agents[0]["is_online"] is True
 
-    # 3. Agent key trying to access physician review endpoint -> 403 Forbidden
-    resp = client.post(
-        "/api/soap/drafts",
-        headers=agent_headers,
-        json={"case_id": "C-1", "soap": {}},
-    )
-    assert resp.status_code == 403
-    assert "Agent 金鑰權限不足" in resp.get_json()["message"]
+    # Phase 32-A：Agent／醫師金鑰分級已移除（院內網路不需驗證），故不再
+    # 驗證「Agent 金鑰存取醫師端點回 403」。存取控制改由來源位址把關，
+    # 已由 tests/test_lan_trust_api.py 覆蓋。
 
 
 def test_soap_batch_approve(test_setup):

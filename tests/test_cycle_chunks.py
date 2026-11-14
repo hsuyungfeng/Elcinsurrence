@@ -314,8 +314,13 @@ def test_api_chunks_lifecycle_and_validation(phase31_client, phase31_app):
     assert resp5b.status_code == 422
 
 
-def test_api_chunks_auth_and_no_private_ip_exemption(phase31_client, phase31_app):
-    """Test api_2: 無 key → 401；Agent 金鑰 → 403；私有 IP 無 key → 401。"""
+def test_api_chunks_rejects_untrusted_source(phase31_client, phase31_app):
+    """Test api_2: 院外來源 → 403（Phase 32-A）。
+
+    原本驗證「無 key → 401」「Agent 金鑰 → 403」「私有 IP 無 key 仍 401」，
+    三者皆建立在已移除的金鑰分級之上。院內信任模式下音訊分段上傳由來源
+    位址把關：院內放行、院外 403。
+    """
     store = phase31_app.case_store
     cid = _create_test_cycle(store)
     data = make_wav_chunk(seconds=0.1, seed=50)
@@ -324,27 +329,22 @@ def test_api_chunks_auth_and_no_private_ip_exemption(phase31_client, phase31_app
     def mk_payload():
         return {"seq": "0", "sha256": sha, "audio": (io.BytesIO(data), "chunk_000000.wav")}
 
-    # 1. 無 key → 401
-    r1 = phase31_client.post(f"/api/cycles/{cid}/chunks", data=mk_payload(), content_type="multipart/form-data")
-    assert r1.status_code == 401
+    # 院外來源 → 403
+    r1 = phase31_client.post(
+        f"/api/cycles/{cid}/chunks",
+        environ_base={"REMOTE_ADDR": "203.0.113.9"},
+        data=mk_payload(),
+        content_type="multipart/form-data",
+    )
+    assert r1.status_code == 403
 
-    # 2. Agent 金鑰 → 403
+    # 院內來源 → 放行（201）
     r2 = phase31_client.post(
         f"/api/cycles/{cid}/chunks",
-        headers={"X-API-Key": "agent-key-1"},
         data=mk_payload(),
         content_type="multipart/form-data",
     )
-    assert r2.status_code == 403
-
-    # 3. 私有 IP 且無 key → 401 (不套用 /api/soap/recordings 的私有 IP 免 key 例外)
-    r3 = phase31_client.post(
-        f"/api/cycles/{cid}/chunks",
-        environ_base={"REMOTE_ADDR": "192.168.1.20"},
-        data=mk_payload(),
-        content_type="multipart/form-data",
-    )
-    assert r3.status_code == 401
+    assert r2.status_code == 201
 
 
 def test_api_finalize(phase31_client, phase31_app):

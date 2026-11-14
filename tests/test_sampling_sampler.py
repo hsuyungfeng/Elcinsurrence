@@ -18,6 +18,8 @@ from elc_audit_engine.sampling_sampler import (
 )
 
 KEY = {"X-API-Key": "valid-key-123"}
+# Phase 32-A：院內信任模式取代 API key；院外來源回 403。
+UNTRUSTED_ENV = {"REMOTE_ADDR": "192.168.99.99"}
 BATCH = "MONTHLY-202307"
 
 
@@ -184,8 +186,10 @@ def test_sample_batch_is_idempotent_on_repeat(client):
     assert len(again["case_store_conflicts"]) == 30
 
 
-def test_sample_batch_requires_api_key(client):
-    assert client.post("/api/sampling/sample-batch", json={"batch": BATCH}).status_code == 401
+def test_sample_batch_rejects_untrusted_source(client):
+    assert client.post(
+        "/api/sampling/sample-batch", json={"batch": BATCH}, environ_base=UNTRUSTED_ENV
+    ).status_code == 403
 
 
 @pytest.mark.parametrize("body", [

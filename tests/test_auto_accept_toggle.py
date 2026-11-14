@@ -21,7 +21,6 @@ def app_with_db(tmp_path, monkeypatch):
     monkeypatch.setenv("CASES_DB_PATH", str(db_file))
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("AUDIT_LOG_PATH", str(audit_log_path))
-    monkeypatch.setenv("DISABLE_AUTH", "0")
 
     from config import settings
     monkeypatch.setattr(settings, "DATA_DIR", str(tmp_path))
@@ -35,15 +34,7 @@ def app_with_db(tmp_path, monkeypatch):
     app = create_app(
         config={
             "TESTING": True,
-            "DISABLE_AUTH": False,
-            "ELC_API_KEYS": {
-                "valid_client_key_12345": "caller_client",
-                "doc_a_key_12345678": "doc_a",
-                "doc_b_key_12345678": "doc_b",
-            },
-            "ELC_AGENT_KEYS": {
-                "valid_agent_key_67890": "agent_win",
-            },
+            "ELC_TRUSTED_SUBNETS": [__import__("ipaddress").ip_network("192.168.0.0/16")],
             "ELC_ALLOWED_HOSTS": ["localhost", "127.0.0.1", "testserver"],
             "DATA_DIR": str(tmp_path),
         },
@@ -90,45 +81,13 @@ def test_auto_accept_toggle_and_audit(app_with_db):
     assert ev["new"] is True
     assert ev["changed"] is True
     assert ev["reason_code"] == "CLINIC_POLICY"
-    assert ev["caller"] == "caller_client"
+    # Phase 32-A：無金鑰可辨識身分，caller 改記來源位址（A3）。
+    assert ev["caller"] == "lan:127.0.0.1"
 
     # Test 3: Ensure no SOAP text in audit detail
     raw_text = json.dumps(ev)
     assert "subjective" not in raw_text.lower()
     assert "objective" not in raw_text.lower()
-
-
-def test_auto_accept_agent_key_forbidden(app_with_db):
-    """Test 4: Agent 金鑰 PUT 回傳 403"""
-    client = app_with_db.test_client()
-    resp = client.put(
-        "/api/soap/settings/auto-accept",
-        json={"enabled": True, "reason_code": "CLINIC_POLICY"},
-        headers={"X-API-Key": "valid_agent_key_67890"},
-    )
-    assert resp.status_code == 403
-
-
-def test_auto_accept_admin_callers_restriction(app_with_db, monkeypatch):
-    """Test 5: 設定 ELC_SOAP_ADMIN_CALLERS 為 'doc_a' 時，caller 'doc_b' 的 PUT 回傳 403"""
-    monkeypatch.setenv("ELC_SOAP_ADMIN_CALLERS", "doc_a")
-    client = app_with_db.test_client()
-
-    # doc_b is forbidden
-    resp_b = client.put(
-        "/api/soap/settings/auto-accept",
-        json={"enabled": True, "reason_code": "CLINIC_POLICY"},
-        headers={"X-API-Key": "doc_b_key_12345678"},
-    )
-    assert resp_b.status_code == 403
-
-    # doc_a is allowed
-    resp_a = client.put(
-        "/api/soap/settings/auto-accept",
-        json={"enabled": True, "reason_code": "CLINIC_POLICY"},
-        headers={"X-API-Key": "doc_a_key_12345678"},
-    )
-    assert resp_a.status_code == 200
 
 
 def test_auto_accept_repeated_put_changed_false(app_with_db):
@@ -261,7 +220,8 @@ def test_auto_accept_audit_format_and_reviewer_id(app_with_db):
     approve_events = [l for l in lines if l.get("detail", {}).get("action") == "soap_auto_accept_approve"]
     assert len(approve_events) >= 1
     ev = approve_events[-1]
-    assert ev["caller_id"] == "auto-accept:caller_client"
+    # Phase 32-A：caller 改記來源位址（A3）。
+    assert ev["caller_id"] == "auto-accept:lan:127.0.0.1"
     assert "draft_id" in ev["detail"]
     assert "content_hash" in ev["detail"]
 

@@ -9,13 +9,11 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-# Phase 9-01：`server.py`（WSGI 入口）在 import 期即以 create_app() 讀取 ELC_API_KEYS
-# （fail-fast 設計，見 elc_audit_engine.auth）。測試環境若完全不設定此變數，
-# 任何匯入 server 模組的測試檔會在收集階段就以 AuthConfigError 中止。
-# 這裡以 setdefault 提供一組測試用固定 key（非真實憑證，公開於版控中亦
-# 無風險）；各測試檔仍可用 monkeypatch 覆寫 app.config["ELC_API_KEYS"]
-# 測試特定的認證情境（如 test_auth.py 的 401/200 案例）。
-os.environ.setdefault("ELC_API_KEYS", "test-suite:0000000000TESTKEY0000")
+# Phase 32-A：院內信任模式取代 API key 認證，故不再需要 ELC_API_KEYS。
+# Flask 測試客戶端的 request.remote_addr 預設為 127.0.0.1（loopback），
+# `is_trusted_source` 一律放行，因此測試無需額外設定信任網段。
+# 需驗證「非信任來源被拒」的測試請以 environ_base={"REMOTE_ADDR": ...}
+# 指定來源位址（見 tests/test_lan_trust.py）。
 
 
 @pytest.fixture
@@ -94,12 +92,20 @@ def make_api_app(tmp_path):
     避免測試寫入專案 data/db/cases.sqlite3。
     """
     def _make(api_keys: dict | None = None, *, case_store=None, **config):
+        """建立測試 app。
+
+        `api_keys` 保留為相容參數（Phase 32-A 後已無作用，院內信任模式不使用
+        金鑰）；既有測試仍以位置引數傳入，故不移除簽章。
+        """
+        import ipaddress
+
         from elc_audit_engine.api import create_app
         from elc_audit_engine.case_store import CaseStore
 
         cfg = {
             "TESTING": True,
-            "ELC_API_KEYS": api_keys if api_keys is not None else {"valid-key-123": "clinic_a"},
+            # 固定信任網段，避免測試結果隨執行主機的實際網路環境變動。
+            "ELC_TRUSTED_SUBNETS": [ipaddress.ip_network("192.168.0.0/24")],
             "ELC_UPLOAD_DIR": str(tmp_path / "uploads"),
             "ELC_RAW_DIR": str(tmp_path / "uploads" / "raw"),
         }

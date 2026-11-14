@@ -13,6 +13,7 @@ import logging
 import os
 import shutil
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -47,16 +48,90 @@ from elc_audit_engine.his_calibration import (
 logger = logging.getLogger("windows_agent.main")
 
 
-def default_probe_authenticated(server_url: str, auth_key: str) -> bool:
-    """Default probe with authentication header against server /api/soap/drafts/pending-review."""
+def default_log_path() -> Path:
+    """診斷日誌路徑（Phase 32-A／B2：無主控台後的唯一輸出去向）。"""
+    if sys.platform == "win32":
+        local_app_data = os.environ.get("LOCALAPPDATA", "")
+        base = Path(local_app_data) if local_app_data else Path.home() / "AppData" / "Local"
+        return base / "ElcAgent" / "logs" / "agent.log"
+    return Path.home() / ".elcagent" / "logs" / "agent.log"
+
+
+def say(message: str) -> None:
+    """輸出使用者訊息，在無主控台（PyInstaller windowed）環境下安全。
+
+    windowed 模式的 `sys.stdout` 為 None，直接 `print()` 會拋
+    AttributeError；一律改走日誌，並在有主控台時才額外印出。
+    """
+    logger.info(message)
+    if sys.stdout is not None:
+        try:
+            print(message)  # noqa: T201 - 刻意：有主控台時給使用者即時回饋
+        except (OSError, ValueError):
+            # 主控台已關閉或重導失敗；日誌已留存，不中斷流程。
+            pass
+
+
+def _setup_file_logging(log_path: Optional[Path] = None) -> None:
+    """將日誌寫入檔案，讓無主控台的執行檔仍可排錯。
+
+    失敗時（唯讀目錄、權限不足）不得讓程式無法啟動——診斷能力是附加價值，
+    不是啟動條件。
+    """
+    target = log_path or default_log_path()
+    handlers: List[logging.Handler] = []
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(target, encoding="utf-8"))
+    except OSError as exc:  # noqa: BLE001 - 已降級處理
+        if sys.stderr is not None:
+            print(f"（警告）無法寫入日誌檔 {target}：{exc}", file=sys.stderr)
+    if sys.stdout is not None:
+        handlers.append(logging.StreamHandler())
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        handlers=handlers or [logging.NullHandler()],
+        force=True,
+    )
+
+
+def _notify_exit_failure(exit_code: int) -> None:
+    """以視窗告知醫師啟動失敗與日誌位置（無主控台時唯一的可見提示）。"""
+    message = (
+        f"ElcAgent 無法啟動（代碼 {exit_code}）。\n\n"
+        f"請聯絡安裝人員，並提供此檔案：\n{default_log_path()}"
+    )
+    logger.error("啟動失敗，代碼 %d", exit_code)
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("ElcAgent 啟動失敗", message)
+        root.destroy()
+    except Exception:
+        # 無顯示環境（例如伺服器或 CI）時退回文字輸出。
+        if sys.stderr is not None:
+            print(message, file=sys.stderr)
+
+
+def default_probe_authenticated(server_url: str, auth_key: str = "") -> bool:
+    """Probe a real business endpoint to confirm the server accepts this workstation.
+
+    Phase 32-A：院內網路不需驗證，故不再附帶金鑰。本探測仍有意義——它確認
+    本機來源位址落在伺服器的信任網段內（非信任來源會得到 403），因此是
+    「這台電腦能不能用」的真正答案，而 /api/health 只回答「伺服器活著嗎」。
+
+    原本實作在 `auth_key` 為空時直接回傳 False，導致未注入金鑰的客戶端
+    永遠連不上伺服器。
+    """
     import urllib.error
     import urllib.request
 
-    if not auth_key:
-        return False
-
     url = server_url.rstrip("/") + "/api/soap/drafts/pending-review"
-    req = urllib.request.Request(url, headers={"X-API-Key": auth_key})
+    req = urllib.request.Request(url, headers={"User-Agent": "ElcAgent/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=3.0) as resp:
             return resp.status == 200
@@ -66,9 +141,10 @@ def default_probe_authenticated(server_url: str, auth_key: str) -> bool:
         return False
 
 
-# 診所中央伺服器預設位址（區網）。第一次啟動、尚未記住位址時先探測此位址；
-# 仍須通過 /api/health 的 service 身分檢查，不是盲目信任。
-DEFAULT_CENTRAL_SERVER_URL = "http://192.168.68.118:5000"
+# Phase 32-A（改進計畫 C1）：移除寫死的診所伺服器位址。
+# 原本寫死 `http://192.168.68.118:5000`——那是某一間診所的位址，換分享器
+# 或 DHCP 重發就連不上，且會讓其他診所的客戶端去探測不存在的主機。
+# 位址只應來自：① 本機記住的上次位址 ② 區網自動探索 ③ 使用者手動輸入。
 
 
 def run_startup_flow(
@@ -91,8 +167,8 @@ def run_startup_flow(
     probe_auth = probe_authenticated or default_probe_authenticated
     auth_key = settings.operator_key or settings.agent_key
 
-    # Step 1: Try last known server URL（尚未記住時使用診所預設位址）
-    seed_url = settings.last_server_url or DEFAULT_CENTRAL_SERVER_URL
+    # Step 1: Try last known server URL（無寫死預設位址，見上方 C1 註解）
+    seed_url = settings.last_server_url
     if seed_url:
         if probe_unauth(seed_url):
             if probe_auth(seed_url, auth_key):
@@ -173,22 +249,22 @@ def run_selftest(
     - 2: agent-desktop executable is missing
     """
     # 1. Config check
-    print("自我檢查：設定檔載入正常")
+    say("自我檢查：設定檔載入正常")
 
     # 2. agent-desktop executable check
     bin_path = find_agent_desktop_binary(custom_agent_desktop_bin)
     if not bin_path:
-        print("自我檢查失敗：找不到 agent-desktop 執行檔")
+        say("自我檢查失敗：找不到 agent-desktop 執行檔")
         return 2
-    print("自我檢查：agent-desktop 執行檔存在")
+    say("自我檢查：agent-desktop 執行檔存在")
 
     # 3. Calibration status check
     cal_store = store or CalibrationStore(base_dir=default_calibration_dir())
     profile = cal_store.load(settings.vendor_key, settings.machine_id)
     if profile and is_ready(profile):
-        print("自我檢查：校正狀態：已完成校正")
+        say("自我檢查：校正狀態：已完成校正")
     else:
-        print("自我檢查：校正狀態：尚未校正")
+        say("自我檢查：校正狀態：尚未校正")
 
     return 0
 
@@ -230,8 +306,18 @@ def main(
     parser.add_argument("--run", action="store_true", help="啟動常駐執行模式")
     parser.add_argument("--config", type=str, default=None, help="設定檔路徑")
     parser.add_argument("--agent-desktop-bin", type=str, default=None, help="agent-desktop 執行檔路徑")
+    parser.add_argument(
+        "--no-bar",
+        action="store_true",
+        help="不啟動快捷列，只在背景輪詢 HIS 寫入任務（維護與排錯用）",
+    )
 
     args = parser.parse_args(argv)
+    # 無主控台的執行檔（B2）唯一的診斷來源；測試注入 settings_override 時
+    # 不設定，避免污染 pytest 的 logging 設定。
+    if settings_override is None:
+        _setup_file_logging()
+    no_bar = args.no_bar
     cfg_path = Path(args.config) if args.config else None
     settings = settings_override or load_settings(cfg_path)
     store = calibration_store_override or CalibrationStore(base_dir=default_calibration_dir())
@@ -250,9 +336,9 @@ def main(
         check_fn = startup_flow_override or (lambda s: run_startup_flow(s, settings_path=cfg_path))
         url = check_fn(settings)
         if url:
-            print(f"連線成功：{url}（已通過認證）")
+            say(f"連線成功：{url}（已通過認證）")
             return 0
-        print("連線失敗：無法連上伺服器或認證未通過。")
+        say("連線失敗：無法連上伺服器或認證未通過。")
         return 1
 
     # Handle --calibrate
@@ -304,8 +390,8 @@ def main(
     is_standby = not (prof_current and is_ready(prof_current))
     if is_standby:
         logger.warning("HIS 校正尚未完成，進入「連線待命（STANDBY）」模式：允許連線與回報心跳，但禁止任何 HIS 寫入。")
-        print("\n【提示】工作站尚未完成 HIS 校正，目前以「連線待命（STANDBY）」模式運行。")
-        print("代理人將維持伺服器連線並定期回報心跳，但會安全阻擋任何 HIS 病歷寫入。\n")
+        say("\n【提示】工作站尚未完成 HIS 校正，目前以「連線待命（STANDBY）」模式運行。")
+        say("代理人將維持伺服器連線並定期回報心跳，但會安全阻擋任何 HIS 病歷寫入。\n")
     else:
         logger.info("HIS 校正已完成（READY），已啟用 HIS 病歷寫入。")
 
@@ -329,11 +415,63 @@ def main(
             allow_uncalibrated=is_standby,
         )
 
-    # Worker loop with exponential backoff (2s -> 300s)
+    # Phase 32-A（改進計畫 B1）：預設啟動快捷列，HIS 輪詢移至背景執行緒。
+    #
+    # 為何需要這段：Phase 31 交付了 `run_traffic_bar`，但正式程式中沒有任何
+    # 呼叫者，`ElcAgent.spec` 也未收錄——醫師拿到的執行檔看不到紅綠黃燈。
+    #
+    # 執行緒配置：Tkinter 的事件迴圈必須在主執行緒（Windows 上於非主執行緒
+    # 建立視窗會直接失敗），故快捷列佔用主執行緒，HIS 寫入輪詢改為 daemon
+    # 背景執行緒。daemon=True 讓關閉快捷列即可結束整個程式，不留殘餘程序。
+    #
+    # 注入 agent_factory（測試替身）時一律走無頭路徑：測試不應依賴顯示環境，
+    # 且會讓 tkinter 被匯入而污染其他測試的 sys.modules 斷言。
+    if no_bar or agent_factory is not None:
+        return _run_polling_loop(agent, sleeper)
+
+    stop_polling = threading.Event()
+    poller = threading.Thread(
+        target=_run_polling_loop,
+        args=(agent, sleeper, stop_polling),
+        name="his-push-poller",
+        daemon=True,
+    )
+    poller.start()
+
+    try:
+        _launch_traffic_bar(settings, server_url, cfg_path)
+    except KeyboardInterrupt:
+        # 輪詢迴圈已移至背景執行緒，Ctrl+C 現在落在主執行緒的 Tk 事件迴圈，
+        # 不再由該迴圈自己的 handler 接到；在此收斂為正常結束。
+        logger.info("收到中斷信號，關閉快捷列並結束。")
+    except Exception as exc:
+        # 快捷列失敗不得讓 HIS 回寫一起停擺：退回純輪詢模式繼續服務
+        # （例如伺服器無顯示環境、Tk 未安裝、SoapVoice 控制通道異常）。
+        logger.error("快捷列啟動失敗，退回背景輪詢模式：%s", exc)
+        stop_polling.set()
+        poller.join(timeout=5.0)
+        return _run_polling_loop(agent, sleeper)
+
+    stop_polling.set()
+    return 0
+
+
+def _run_polling_loop(
+    agent: Any,
+    sleeper: Callable[[float], None],
+    stop_event: Optional[Any] = None,
+) -> int:
+    """HIS 寫入任務輪詢迴圈，指數退避 2s → 300s。
+
+    Args:
+        agent: WindowsAgent（或測試替身），需有 `run_once()`。
+        sleeper: 休眠函式（測試可注入）。
+        stop_event: `threading.Event`；設定後迴圈結束（背景執行緒用）。
+    """
     backoff = 2.0
     max_backoff = 300.0
     try:
-        while True:
+        while not (stop_event is not None and stop_event.is_set()):
             try:
                 res = agent.run_once()
                 if res is not None and res.get("status") == "success":
@@ -347,15 +485,50 @@ def main(
                 backoff = min(backoff * 2.0, max_backoff)
     except KeyboardInterrupt:
         logger.info("收到中斷信號，結束工作輪詢迴圈。")
-        return 0
+    return 0
+
+
+def _launch_traffic_bar(
+    settings: AgentSettings,
+    server_url: str,
+    cfg_path: Optional[Path],
+) -> None:
+    """組裝快捷列的相依元件並進入 Tk 主迴圈（阻塞至醫師關閉視窗）。"""
+    from deploy.windows_agent.traffic_bar.controller import BarController
+    from deploy.windows_agent.traffic_bar.server_client import CycleServerClient
+    from deploy.windows_agent.traffic_bar.soapvoice_client import SoapVoiceControlClient
+    from deploy.windows_agent.traffic_bar import run_traffic_bar
+
+    sv_client = SoapVoiceControlClient(port=settings.soapvoice_control_port)
+    server_client = CycleServerClient(base_url=server_url)
+
+    def _open_confirm_window(cycle_id: str) -> None:
+        """草稿就緒時跳出 SOAP 確認視窗（D-31-05 的醫師確認步驟）。"""
+        from deploy.windows_agent.review_client import ReviewClient
+        from deploy.windows_agent.review_window import run_review_window
+
+        try:
+            client = ReviewClient(base_url=server_url, machine_id=settings.machine_id)
+            run_review_window(client)
+        except Exception as exc:
+            logger.error("開啟 SOAP 確認視窗失敗（循環 %s）：%s", cycle_id, exc)
+
+    controller = BarController(
+        sv_client=sv_client,
+        server_client=server_client,
+        settings=settings,
+        open_confirm_window=_open_confirm_window,
+    )
+    logger.info("啟動快捷列（紅綠黃燈），伺服器：%s", server_url)
+    run_traffic_bar(controller, settings, cfg_path)
 
 
 if __name__ == "__main__":
     _exit_code = main()
-    if getattr(sys, "frozen", False):
-        # 雙擊執行時主控台會在程式結束後立即關閉，使用者看不到錯誤訊息；停住等待確認。
-        try:
-            input("\n程式已結束（代碼 %d）。按 Enter 關閉視窗..." % _exit_code)
-        except EOFError:
-            pass
+    # Phase 32-A（B2）：無主控台視窗後不得再呼叫 input()。
+    # PyInstaller windowed 模式下 sys.stdin/stdout 為 None，input() 會直接
+    # 拋 RuntimeError——原本「停住等待確認」的好意會變成當掉。
+    # 失敗原因改以視窗提示（醫師看得到）＋日誌檔（工程師可查）呈現。
+    if _exit_code != 0:
+        _notify_exit_failure(_exit_code)
     sys.exit(_exit_code)

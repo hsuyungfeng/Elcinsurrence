@@ -77,7 +77,6 @@ def phase31_app(tmp_path, monkeypatch):
     monkeypatch.setenv("CASES_DB_PATH", str(db_file))
     monkeypatch.setenv("DATA_DIR", str(data_dir))
     monkeypatch.setenv("AUDIT_LOG_PATH", str(audit_log_path))
-    monkeypatch.setenv("DISABLE_AUTH", "0")
 
     from config import settings
     monkeypatch.setattr(settings, "DATA_DIR", str(data_dir))
@@ -94,9 +93,7 @@ def phase31_app(tmp_path, monkeypatch):
     app = create_app(
         config={
             "TESTING": True,
-            "DISABLE_AUTH": False,
-            "ELC_API_KEYS": {"valid-key-123": "clinic_a"},
-            "ELC_AGENT_KEYS": {"agent-key-1": "agent_a"},
+            "ELC_TRUSTED_SUBNETS": [__import__("ipaddress").ip_network("192.168.0.0/16")],
             "ELC_ALLOWED_HOSTS": ["localhost", "127.0.0.1", "testserver"],
             "DATA_DIR": str(data_dir),
             "AUDIT_LOG_PATH": str(audit_log_path),
