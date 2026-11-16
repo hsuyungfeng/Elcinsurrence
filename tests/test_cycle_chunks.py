@@ -34,7 +34,7 @@ def _create_test_cycle(store, cycle_id: str = "c0000000000000000000000000000001"
     return cycle["cycle_id"]
 
 
-def test_store_chunk_new_segment(tmp_path, phase31_app):
+def test_store_chunk_new_segment(tmp_path, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 1: store_chunk 新段 → 檔案存在、回傳 duplicate=False、sha256 等於 wav_sha256。"""
     store = phase31_app.case_store
     cid = _create_test_cycle(store)
@@ -53,7 +53,7 @@ def test_store_chunk_new_segment(tmp_path, phase31_app):
     assert chunk_file.read_bytes() == data
 
 
-def test_store_chunk_duplicate_idempotent(tmp_path, phase31_app):
+def test_store_chunk_duplicate_idempotent(tmp_path, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 2: 同 seq 同內容 → duplicate=True，檔案修改時間不變。"""
     store = phase31_app.case_store
     cid = _create_test_cycle(store)
@@ -73,7 +73,7 @@ def test_store_chunk_duplicate_idempotent(tmp_path, phase31_app):
     assert chunk_file.stat().st_mtime_ns == mtime_before
 
 
-def test_store_chunk_conflict_different_hash(tmp_path, phase31_app):
+def test_store_chunk_conflict_different_hash(tmp_path, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 3: 同 seq 不同內容 → 拋 ChunkConflictError，原檔內容不變。"""
     store = phase31_app.case_store
     cid = _create_test_cycle(store)
@@ -92,7 +92,7 @@ def test_store_chunk_conflict_different_hash(tmp_path, phase31_app):
     assert chunk_file.read_bytes() == data1
 
 
-def test_store_chunk_declared_hash_mismatch(tmp_path, phase31_app):
+def test_store_chunk_declared_hash_mismatch(tmp_path, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 4: 宣告 sha256 與內容不符 → 拋 ChunkHashMismatchError，不留下任何檔案。"""
     store = phase31_app.case_store
     cid = _create_test_cycle(store)
@@ -109,7 +109,7 @@ def test_store_chunk_declared_hash_mismatch(tmp_path, phase31_app):
         assert len(list(c_dir.glob("*.tmp*"))) == 0
 
 
-def test_store_chunk_invalid_format(tmp_path, phase31_app):
+def test_store_chunk_invalid_format(tmp_path, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 5: 非 WAV 或非 16 kHz mono 16-bit → 拋 ChunkFormatError。"""
     store = phase31_app.case_store
     cid = _create_test_cycle(store)
@@ -131,7 +131,7 @@ def test_store_chunk_invalid_format(tmp_path, phase31_app):
         store_chunk(store, cycle_id=cid, seq=0, declared_sha256=wav_sha256(stereo_data), data=stereo_data)
 
 
-def test_store_chunk_invalid_cycle_state(tmp_path, phase31_app):
+def test_store_chunk_invalid_cycle_state(tmp_path, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 6: 循環狀態為 AWAITING_CONFIRM 時 store_chunk → ChunkStateError。"""
     store = phase31_app.case_store
     cid = _create_test_cycle(store)
@@ -145,7 +145,7 @@ def test_store_chunk_invalid_cycle_state(tmp_path, phase31_app):
         store_chunk(store, cycle_id=cid, seq=0, declared_sha256=wav_sha256(data), data=data)
 
 
-def test_finalize_cycle_audio_lifecycle(tmp_path, phase31_app):
+def test_finalize_cycle_audio_lifecycle(tmp_path, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 7: finalize_cycle_audio 缺段、雜湊錯、成功串接與冪等性。"""
     store = phase31_app.case_store
     cid = _create_test_cycle(store)
@@ -192,7 +192,7 @@ def test_finalize_cycle_audio_lifecycle(tmp_path, phase31_app):
     assert fin_res_repeat["upload_complete"] is True
 
 
-def test_cycle_artifacts(tmp_path, phase31_app):
+def test_cycle_artifacts(tmp_path, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 8: cycle_artifacts 回傳 audio_path, chunk_paths, transcript_path。"""
     store = phase31_app.case_store
     cid = _create_test_cycle(store)
@@ -208,7 +208,7 @@ def test_cycle_artifacts(tmp_path, phase31_app):
     assert arts["transcript_path"] is None
 
 
-def test_store_chunk_concurrency(tmp_path, phase31_app):
+def test_store_chunk_concurrency(tmp_path, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 9: 兩個執行緒同時以相同 (cycle_id, seq) 呼叫 store_chunk → 恰一個 duplicate=False。"""
     store = phase31_app.case_store
     cid = _create_test_cycle(store)
@@ -245,7 +245,7 @@ def test_store_chunk_concurrency(tmp_path, phase31_app):
 # ======================================================================
 
 
-def test_api_chunks_lifecycle_and_validation(phase31_client, phase31_app):
+def test_api_chunks_lifecycle_and_validation(phase31_client, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test api_1: POST chunks 新段 201、重送 200 duplicate、衝突 409、雜湊不符 422、過大 413、seq 不合法 422。"""
     store = phase31_app.case_store
     cid = _create_test_cycle(store)
@@ -314,7 +314,7 @@ def test_api_chunks_lifecycle_and_validation(phase31_client, phase31_app):
     assert resp5b.status_code == 422
 
 
-def test_api_chunks_rejects_untrusted_source(phase31_client, phase31_app):
+def test_api_chunks_rejects_untrusted_source(phase31_client, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test api_2: 院外來源 → 403（Phase 32-A）。
 
     原本驗證「無 key → 401」「Agent 金鑰 → 403」「私有 IP 無 key 仍 401」，
@@ -347,7 +347,7 @@ def test_api_chunks_rejects_untrusted_source(phase31_client, phase31_app):
     assert r2.status_code == 201
 
 
-def test_api_finalize(phase31_client, phase31_app):
+def test_api_finalize(phase31_client, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test api_3: POST finalize 缺段 → 409 含 missing；成功 → 200 upload_complete:true。"""
     store = phase31_app.case_store
     cid = _create_test_cycle(store)
@@ -378,7 +378,7 @@ def test_api_finalize(phase31_client, phase31_app):
     assert r_ok.get_json()["upload_complete"] is True
 
 
-def test_api_not_found_cycle(phase31_client, phase31_app):
+def test_api_not_found_cycle(phase31_client, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test api_4: 不存在或格式錯誤的 cycle_id → 404。"""
     headers = {"X-API-Key": "valid-key-123"}
 
@@ -391,7 +391,7 @@ def test_api_not_found_cycle(phase31_client, phase31_app):
     assert r2.status_code == 404
 
 
-def test_api_caplog_no_audio_or_phi(phase31_client, phase31_app, caplog):
+def test_api_caplog_no_audio_or_phi(phase31_client, phase31_app, caplog):  # noqa: F811  # pytest fixture shadows import
     """Test api_5: 回應與日誌不含音訊位元組或病人欄位。"""
     store = phase31_app.case_store
     cid = _create_test_cycle(store)

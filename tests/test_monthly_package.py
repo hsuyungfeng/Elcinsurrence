@@ -371,7 +371,7 @@ def test_package_generates_missing_templates_within_limit(make_api_app, facility
 
     monkeypatch.setattr(mp, "generate_template_soap_condensed", fake_generator)
     app = make_api_app(ELC_RULES_DB_PATH=rules_db)
-    store = app.extensions["elc"].case_store
+    _store = app.extensions["elc"].case_store
     client = app.test_client()
     _upload(client, _sample_zip(FAC))
     client.post("/api/facility", headers=KEY, json={"source": "web", "code": facility_config["code"],

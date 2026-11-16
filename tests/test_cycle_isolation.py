@@ -25,7 +25,7 @@ def _mk_draft(store, case_id: str, soap_dict: dict | None = None):
     )
 
 
-def test_pending_review_excludes_cycle_draft(phase31_client, phase31_app):
+def test_pending_review_excludes_cycle_draft(phase31_client, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 1: pending-review 排除已綁定循環之草稿 (D-31-39)。"""
     store = phase31_app.case_store
 
@@ -50,7 +50,7 @@ def test_pending_review_excludes_cycle_draft(phase31_client, phase31_app):
     assert d_bound.draft_id not in draft_ids  # D-31-39: 已綁定者必須被排除
 
 
-def test_generic_approve_and_edit_blocked_for_cycle_draft(phase31_client, phase31_app):
+def test_generic_approve_and_edit_blocked_for_cycle_draft(phase31_client, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 2: 通用 approve 與 edit 對已綁定循環的草稿回 409。"""
     store = phase31_app.case_store
 
@@ -83,7 +83,7 @@ def test_generic_approve_and_edit_blocked_for_cycle_draft(phase31_client, phase3
     assert res_unbound.status_code == 200
 
 
-def test_two_machines_cycle_draft_isolation(phase31_client, phase31_app):
+def test_two_machines_cycle_draft_isolation(phase31_client, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 3: 兩台機器 m1、m2 的循環各自讀取綁定草稿，互不混淆 (D-31-16)。"""
     store = phase31_app.case_store
 

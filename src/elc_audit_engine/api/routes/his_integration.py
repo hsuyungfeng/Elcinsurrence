@@ -389,7 +389,7 @@ def ingest_soapvoice_session():
             logger.warning("SoapVoice 截圖歸檔失敗: %s", exc)
 
     # 建立 HIS 看診個案記錄入 case_store
-    soap_text_repr = json.dumps(soap_dict, ensure_ascii=False) if isinstance(soap_dict, dict) else str(soap_dict)
+    _soap_text_repr = json.dumps(soap_dict, ensure_ascii=False) if isinstance(soap_dict, dict) else str(soap_dict)
     case_id = _encounter_case_id(id_card, visit_date or "", order_code or "", session_id or "")
 
     store = case_store()
@@ -407,14 +407,14 @@ def ingest_soapvoice_session():
     }
 
     try:
-        record = store.create(
+        _record = store.create(
             case_id=case_id,
             kind="his",
             payload=payload,
             actor=caller_id(),
         )
     except DuplicateCaseError:
-        record = store.get(case_id)
+        _record = store.get(case_id)
 
     # 雙軌審核與比對（健保合規審核 + 自費品項推薦）
     compliance_evaluation = {"status": "ok", "warnings": []}
@@ -796,7 +796,7 @@ PATIENT_DB = {
 def soap_patients_list():
     """取得診間門診病患清單供左側側邊欄展示。"""
     patients = []
-    for pid, pdata in PATIENT_DB.items():
+    for _pid, pdata in PATIENT_DB.items():
         patients.append({
             "id_card": pdata["id_card"],
             "patient_name": pdata["patient_name"],
@@ -1045,7 +1045,7 @@ def soap_case_bundle(case_id: str):
     if vault_key:
         try:
             stored_dict = list_vault_files(vault_key)
-            for cat, flist in stored_dict.items():
+            for _cat, flist in stored_dict.items():
                 for f in flist:
                     files_list.append({
                         "category": f.category,
@@ -1166,7 +1166,7 @@ ELCINSURRENCE CLINICAL EVIDENCE & FORENSIC CERTIFICATE
         found_any = False
         try:
             vault_dict = list_vault_files(vault_key)
-            for cat, flist in vault_dict.items():
+            for _cat, flist in vault_dict.items():
                 for vi in flist:
                     if os.path.isfile(vi.path):
                         found_any = True

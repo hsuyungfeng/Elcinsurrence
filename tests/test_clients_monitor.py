@@ -36,7 +36,7 @@ def _assert_no_phi(obj: Any) -> None:
             _assert_no_phi(item)
 
 
-def test_monitor_rooms_grouped(phase31_app, phase31_client):
+def test_monitor_rooms_grouped(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test monitor_1: 三台客戶端（room A 兩台、room B 一台、未指定 room 一台）→ rooms 分組。"""
     headers = {"X-API-Key": "valid-key-123"}
     m1 = str(uuid.uuid4())
@@ -66,7 +66,7 @@ def test_monitor_rooms_grouped(phase31_app, phase31_client):
     assert room_map[None][0]["machine_id"] == m4
 
 
-def test_monitor_offline_detection(phase31_app, phase31_client, monkeypatch):
+def test_monitor_offline_detection(phase31_app, phase31_client, monkeypatch):  # noqa: F811  # pytest fixture shadows import
     """Test monitor_2: 最後心跳 16 秒前 → online=false、display_state="離線"；14 秒前 → online=true。"""
     headers = {"X-API-Key": "valid-key-123"}
     m1 = str(uuid.uuid4())
@@ -109,7 +109,7 @@ def test_monitor_offline_detection(phase31_app, phase31_client, monkeypatch):
     assert clients_by_id[m2]["display_state"] == "待命"
 
 
-def test_monitor_display_states(phase31_app, phase31_client):
+def test_monitor_display_states(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test monitor_3: display_state 對 RECORDING、AWAITING_CONFIRM、最近循環 ARCHIVED、無循環分別為 錄音中、待確認、已封存、待命。"""
     store = phase31_app.case_store
     headers = {"X-API-Key": "valid-key-123"}
@@ -154,7 +154,7 @@ def test_monitor_display_states(phase31_app, phase31_client):
     assert cmap[m_idle] == "待命"
 
 
-def test_monitor_no_phi(phase31_app, phase31_client):
+def test_monitor_no_phi(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test monitor_4: 回應遞迴不含 soap、transcript、extras、patient 開頭的鍵 (D-31-17)。"""
     headers = {"X-API-Key": "valid-key-123"}
     m1 = str(uuid.uuid4())
@@ -165,7 +165,7 @@ def test_monitor_no_phi(phase31_app, phase31_client):
     _assert_no_phi(resp.get_json())
 
 
-def test_monitor_subnet_attribution(phase31_app, phase31_client, monkeypatch):
+def test_monitor_subnet_attribution(phase31_app, phase31_client, monkeypatch):  # noqa: F811  # pytest fixture shadows import
     """Test monitor_5: REMOTE_ADDR=192.168.5.77 → client_subnet="192.168.5.0/24"；ELC_CLINIC_SUBNETS 判斷。"""
     headers = {"X-API-Key": "valid-key-123"}
     m1 = str(uuid.uuid4())
@@ -192,7 +192,7 @@ def test_monitor_subnet_attribution(phase31_app, phase31_client, monkeypatch):
     assert client2["in_clinic_subnet"] is False
 
 
-def test_monitor_validation_room_id(phase31_app, phase31_client):
+def test_monitor_validation_room_id(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test monitor_6: 心跳 body 的 room_id 不合格式 → 422；room_id 不由 IP 推得。"""
     headers = {"X-API-Key": "valid-key-123"}
     m1 = str(uuid.uuid4())
@@ -228,7 +228,7 @@ def test_monitor_validation_room_id(phase31_app, phase31_client):
     assert rooms["room_beta"][0]["machine_id"] == m2
 
 
-def test_monitor_validation_fields(phase31_app, phase31_client):
+def test_monitor_validation_fields(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test monitor_7: machine_name、bar_state、soapvoice_state 超過 64 字或含控制字元 → 422。"""
     headers = {"X-API-Key": "valid-key-123"}
     m1 = str(uuid.uuid4())
@@ -250,7 +250,7 @@ def test_monitor_validation_fields(phase31_app, phase31_client):
     assert resp_ctrl.status_code == 422
 
 
-def test_page_no_auth(phase31_app, phase31_client):
+def test_page_no_auth(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test page_1: GET /clients 無 key → 200 text/html；不內嵌資料。"""
     resp = phase31_client.get("/clients")
     assert resp.status_code == 200

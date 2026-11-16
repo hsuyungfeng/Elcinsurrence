@@ -259,7 +259,7 @@ def test_auto_accept_already_pushed_idempotency(app_with_db):
     headers = {"X-API-Key": "valid_client_key_12345"}
 
     soap = _valid_soap()
-    chash = compute_soap_content_hash(soap)
+    _chash = compute_soap_content_hash(soap)
     with app_with_db.app_context():
         store = case_store()
         # Seed an already pushed draft

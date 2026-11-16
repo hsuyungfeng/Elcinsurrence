@@ -231,7 +231,7 @@ def run_probe_check(custom_path: Optional[str] = None) -> bool:
     for el in elements:
         name = el.get("name", "")
         automation_id = el.get("automation_id", "")
-        role = el.get("role", "")
+        _role = el.get("role", "")
         ref = el.get("ref", "")
         if "主訴" in name or automation_id in ("txtS", "soap_s") or "soap_s" in name:
             target_ref = ref

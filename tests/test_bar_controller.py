@@ -288,7 +288,7 @@ def test_archive_his_failed_and_retry(test_setup):
     ctrl, sv, server, _, _ = test_setup
 
     ctrl.on_red()
-    cid = ctrl.current_cycle["cycle_id"]
+    _cid = ctrl.current_cycle["cycle_id"]
     sv.current_state = "IDLE"
     ctrl.tick_soapvoice()
     ctrl.current_cycle["state"] = "CONFIRMED"

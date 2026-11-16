@@ -120,7 +120,7 @@ def test_webbrain_mock_extraction(sample_nhi_payload):
 
 def test_webbrain_nhi_extract_api(app, client, sample_nhi_payload):
     store = app.extensions["elc"].case_store
-    created = store.create(
+    _created = store.create(
         case_id="case_webbrain_test_01",
         kind="his",
         payload={

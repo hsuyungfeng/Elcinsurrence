@@ -13,7 +13,6 @@ from tests.phase31_support import (
     pcm_sha256,
     wav_sha256,
 )
-from tests.phase31_support import phase31_app  # noqa: F401
 
 EXPECTED_STATES = {
     "RECORDING",
@@ -99,7 +98,7 @@ def test_make_wav_chunk_and_pcm_sha256():
     assert calc_hash == expected_pcm_hash
 
 
-def test_phase31_app_isolation(phase31_app, tmp_path):
+def test_phase31_app_isolation(phase31_app, tmp_path):  # noqa: F811  # pytest fixture shadows import
     """Test 5: phase31_app fixture 建立的 app 其 DATA_DIR 指向 tmp_path，不寫入專案 data/。"""
     app_data_dir = phase31_app.config.get("DATA_DIR")
     assert app_data_dir is not None

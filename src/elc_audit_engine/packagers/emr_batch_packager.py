@@ -200,31 +200,31 @@ class StructuredSoapPdfBuilder:
         writer = PdfWriter()
 
         # 整理 SOAP 文字
-        s_txt = ""
-        o_txt = ""
-        a_txt = ""
-        p_txt = ""
+        _s_txt = ""
+        _o_txt = ""
+        _a_txt = ""
+        _p_txt = ""
         if isinstance(soap_text, dict):
-            s_txt = str(soap_text.get("s") or soap_text.get("subjective") or "")
-            o_txt = str(soap_text.get("o") or soap_text.get("objective") or "")
-            a_txt = str(soap_text.get("a") or soap_text.get("assessment") or "")
-            p_txt = str(soap_text.get("p") or soap_text.get("plan") or "")
+            _s_txt = str(soap_text.get("s") or soap_text.get("subjective") or "")
+            _o_txt = str(soap_text.get("o") or soap_text.get("objective") or "")
+            _a_txt = str(soap_text.get("a") or soap_text.get("assessment") or "")
+            _p_txt = str(soap_text.get("p") or soap_text.get("plan") or "")
         else:
-            s_txt = str(soap_text or "")
+            _s_txt = str(soap_text or "")
 
         patient_name = case_info.get("patient_name") or "未具名"
         id_card = case_info.get("id_card") or case_info.get("record_no") or "無身分證號"
         visit_date = case_info.get("visit_date") or datetime.now().strftime("%Y-%m-%d")
-        clinic = case_info.get("clinic") or "西醫基層門診"
-        primary_diag = case_info.get("primary_diagnosis") or "無主診斷"
+        _clinic = case_info.get("clinic") or "西醫基層門診"
+        _primary_diag = case_info.get("primary_diagnosis") or "無主診斷"
 
         # ── 建立 3 頁標準病歷頁面 ──
         # Page 1: 病歷首頁
-        p1 = writer.add_blank_page(width=595, height=842)
+        _p1 = writer.add_blank_page(width=595, height=842)
         # Page 2: 處方箋與醫囑紀錄單
-        p2 = writer.add_blank_page(width=595, height=842)
+        _p2 = writer.add_blank_page(width=595, height=842)
         # Page 3: 門診 SOAP 紀錄單
-        p3 = writer.add_blank_page(width=595, height=842)
+        _p3 = writer.add_blank_page(width=595, height=842)
 
         # ── 設定標準健保電子病歷文件中繼資料 ──
         writer.add_metadata({

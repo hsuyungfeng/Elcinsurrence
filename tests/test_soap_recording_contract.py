@@ -29,7 +29,7 @@ def recording_fixture():
 @pytest.fixture
 def app_with_db(tmp_path, monkeypatch):
     db_file = tmp_path / "cases.sqlite3"
-    rec_dir = tmp_path / "recordings"
+    _rec_dir = tmp_path / "recordings"
     audit_log_path = tmp_path / "audit" / "access.log"
     monkeypatch.setenv("CASES_DB_PATH", str(db_file))
     monkeypatch.setenv("DATA_DIR", str(tmp_path))

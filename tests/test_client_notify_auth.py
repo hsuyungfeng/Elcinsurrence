@@ -36,7 +36,7 @@ def _assert_no_phi(obj: Any) -> None:
             _assert_no_phi(item)
 
 
-def test_notify_awaiting_confirm(phase31_app, phase31_client):
+def test_notify_awaiting_confirm(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test notify_1: 機器 m1 有 AWAITING_CONFIRM 循環 → 心跳回應 notify 且零 PHI。"""
     store = phase31_app.case_store
     m1 = str(uuid.uuid4())
@@ -94,7 +94,7 @@ def test_notify_awaiting_confirm(phase31_app, phase31_client):
     _assert_no_phi(data)
 
 
-def test_notify_rejects_untrusted_source(phase31_app, phase31_client):
+def test_notify_rejects_untrusted_source(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Phase 32-A：院外來源 403 且不得回傳 notify 內容（取代原「無 key → 401」）。"""
     m1 = str(uuid.uuid4())
 
@@ -107,7 +107,7 @@ def test_notify_rejects_untrusted_source(phase31_app, phase31_client):
     assert "notify" not in (resp.get_json() or {})
 
 
-def test_notify_isolation(phase31_app, phase31_client):
+def test_notify_isolation(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test notify_3: m2 的心跳不會收到 m1 的通知 (D-31-16)。"""
     store = phase31_app.case_store
     m1 = str(uuid.uuid4())
@@ -127,7 +127,7 @@ def test_notify_isolation(phase31_app, phase31_client):
     assert data["notify"] is None
 
 
-def test_notify_no_active_cycle(phase31_app, phase31_client):
+def test_notify_no_active_cycle(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test notify_4: 無未終結循環 → notify 為 null。"""
     store = phase31_app.case_store
     m1 = str(uuid.uuid4())

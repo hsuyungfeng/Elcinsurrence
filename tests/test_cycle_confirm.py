@@ -68,7 +68,7 @@ def _setup_cycle_with_draft(app, state="AWAITING_CONFIRM", soap=None):
     return cid, draft, m_id
 
 
-def test_confirm_unmodified_success(phase31_app, phase31_client):
+def test_confirm_unmodified_success(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 1 & 2: AWAITING_CONFIRM 未修改 soap → cycle_confirmations 寫入，草稿 queued，HIS_PUSH 任務綁定本機且 soap 嚴格僅 {s,o,a,p}。"""
     store = phase31_app.case_store
     cid, draft, m_id = _setup_cycle_with_draft(phase31_app, "AWAITING_CONFIRM")
@@ -116,7 +116,7 @@ def test_confirm_unmodified_success(phase31_app, phase31_client):
         assert forbidden not in extra
 
 
-def test_confirm_stale_hash_rejected(phase31_app, phase31_client):
+def test_confirm_stale_hash_rejected(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 3: content_hash 過期 → 409，無任何寫入。"""
     cid, draft, _ = _setup_cycle_with_draft(phase31_app, "AWAITING_CONFIRM")
 
@@ -136,7 +136,7 @@ def test_confirm_stale_hash_rejected(phase31_app, phase31_client):
     conn.close()
 
 
-def test_confirm_modified_soap_valid(phase31_app, phase31_client):
+def test_confirm_modified_soap_valid(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 4: 帶修改後 soap（合格）→ 草稿版本遞增，確認版存新 soap 與新 hash。"""
     cid, draft, _ = _setup_cycle_with_draft(phase31_app, "AWAITING_CONFIRM")
 
@@ -164,7 +164,7 @@ def test_confirm_modified_soap_valid(phase31_app, phase31_client):
     assert conf_soap["s"] == SOAP_MODIFIED["s"]
 
 
-def test_confirm_modified_soap_invalid(phase31_app, phase31_client):
+def test_confirm_modified_soap_invalid(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 5: 帶修改後 soap（不合格）→ 422 附 quality_issues，循環轉 DRAFT_UNUSABLE，無 HIS 任務。"""
     cid, draft, _ = _setup_cycle_with_draft(phase31_app, "AWAITING_CONFIRM")
 
@@ -193,7 +193,7 @@ def test_confirm_modified_soap_invalid(phase31_app, phase31_client):
     conn.close()
 
 
-def test_confirm_draft_unusable_with_valid_soap(phase31_app, phase31_client):
+def test_confirm_draft_unusable_with_valid_soap(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 6: DRAFT_UNUSABLE 帶合格 soap → 建立新草稿改綁定，循環 CONFIRMED，舊草稿不動。"""
     cid, old_draft, _ = _setup_cycle_with_draft(phase31_app, "DRAFT_UNUSABLE", soap=SOAP_BAD)
 
@@ -214,7 +214,7 @@ def test_confirm_draft_unusable_with_valid_soap(phase31_app, phase31_client):
     assert d_old.draft_id == old_draft.draft_id  # 舊草稿保留
 
 
-def test_confirm_draft_unusable_no_soap(phase31_app, phase31_client):
+def test_confirm_draft_unusable_no_soap(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 7: DRAFT_UNUSABLE 不帶 soap → 422「草稿需修改後才能存檔」。"""
     cid, draft, _ = _setup_cycle_with_draft(phase31_app, "DRAFT_UNUSABLE", soap=SOAP_BAD)
 
@@ -228,7 +228,7 @@ def test_confirm_draft_unusable_no_soap(phase31_app, phase31_client):
     assert "需修改" in resp.get_json()["message"]
 
 
-def test_confirm_idempotent_resend(phase31_app, phase31_client):
+def test_confirm_idempotent_resend(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 8: 已 CONFIRMED 以相同 content_hash 重送 → 200，不產生第二筆任務或第二列確認版。"""
     cid, draft, _ = _setup_cycle_with_draft(phase31_app, "AWAITING_CONFIRM")
     headers = {"X-API-Key": "valid-key-123"}
@@ -259,7 +259,7 @@ def test_confirm_idempotent_resend(phase31_app, phase31_client):
     conn.close()
 
 
-def test_confirm_crash_recovery(phase31_app, phase31_client):
+def test_confirm_crash_recovery(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 9: ensure_job 第一次拋錯 500；重送 confirm → 200，恰一筆任務，循環 CONFIRMED (D-31-38)。"""
     cid, draft, _ = _setup_cycle_with_draft(phase31_app, "AWAITING_CONFIRM")
     headers = {"X-API-Key": "valid-key-123"}
@@ -300,7 +300,7 @@ def test_confirm_crash_recovery(phase31_app, phase31_client):
     conn.close()
 
 
-def test_confirm_audit_detail(phase31_app, phase31_client):
+def test_confirm_audit_detail(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 10: 審計 detail 只含 action、cycle_id、draft_id、content_hash。"""
     cid, draft, _ = _setup_cycle_with_draft(phase31_app, "AWAITING_CONFIRM")
     headers = {"X-API-Key": "valid-key-123"}

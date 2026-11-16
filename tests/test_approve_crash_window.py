@@ -44,7 +44,7 @@ def _create_validated_draft(store, case_id: str = "CASE-CRASH-01"):
     return draft
 
 
-def test_crash_after_approved_and_retry(phase31_app, phase31_client, monkeypatch):
+def test_crash_after_approved_and_retry(phase31_app, phase31_client, monkeypatch):  # noqa: F811  # pytest fixture shadows import
     """Test 1: 第一步 (approved) 成功後在 enqueue 崩潰，重試核准可收斂至 queued 且恰有一筆任務。"""
     store = phase31_app.case_store
     draft = _create_validated_draft(store, "C-CRASH-01")
@@ -96,7 +96,7 @@ def test_crash_after_approved_and_retry(phase31_app, phase31_client, monkeypatch
     assert jobs[0].payload["extra_payload"]["draft_id"] == draft_id
 
 
-def test_crash_after_enqueue_and_retry(phase31_app, phase31_client, monkeypatch):
+def test_crash_after_enqueue_and_retry(phase31_app, phase31_client, monkeypatch):  # noqa: F811  # pytest fixture shadows import
     """Test 2: enqueue 成功後在轉 queued 步驟崩潰，重試核准不會建立第二筆任務。"""
     store = phase31_app.case_store
     draft = _create_validated_draft(store, "C-CRASH-02")
@@ -140,7 +140,7 @@ def test_crash_after_enqueue_and_retry(phase31_app, phase31_client, monkeypatch)
     assert len(jobs) == 1
 
 
-def test_recover_stuck_approved_sweep(phase31_app):
+def test_recover_stuck_approved_sweep(phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 3: recover_stuck_approved(store) 掃描並修復卡在 approved 狀態的草稿。"""
     store = phase31_app.case_store
     draft = _create_validated_draft(store, "C-CRASH-03")
@@ -170,7 +170,7 @@ def test_recover_stuck_approved_sweep(phase31_app):
     assert recover_stuck_approved(store) == 0
 
 
-def test_failed_retry_generates_new_job(phase31_app, phase31_client):
+def test_failed_retry_generates_new_job(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 4: 草稿 failed 之後重試核准，產生新的 HIS_PUSH 任務，舊任務不被覆寫。"""
     store = phase31_app.case_store
     draft = _create_validated_draft(store, "C-CRASH-04")
@@ -210,7 +210,7 @@ def test_failed_retry_generates_new_job(phase31_app, phase31_client):
     assert job1_id in job_ids
 
 
-def test_batch_approve_crash_recovery(phase31_app, phase31_client, monkeypatch):
+def test_batch_approve_crash_recovery(phase31_app, phase31_client, monkeypatch):  # noqa: F811  # pytest fixture shadows import
     """Test 5: approve_batch 中途崩潰的草稿，再次 approve_batch 可恢復且任務不重複。"""
     store = phase31_app.case_store
     batch_id = "BATCH-CRASH-01"

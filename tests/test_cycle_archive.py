@@ -52,7 +52,7 @@ def _setup_confirmed_cycle(app, client):
     return cid, draft, m_id
 
 
-def test_archive_requires_confirmed(phase31_app, phase31_client):
+def test_archive_requires_confirmed(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 1: AWAITING_CONFIRM 封存 → 409 not_confirmed，循環狀態不變 (D-31-08)。"""
     store = phase31_app.case_store
     m_id = str(uuid.uuid4())
@@ -70,7 +70,7 @@ def test_archive_requires_confirmed(phase31_app, phase31_client):
     assert c["state"] == "AWAITING_CONFIRM"
 
 
-def test_archive_his_pending(phase31_app, phase31_client):
+def test_archive_his_pending(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 2: CONFIRMED、草稿 queued → 202 his_pending，循環 ARCHIVING。"""
     store = phase31_app.case_store
     cid, _, _ = _setup_confirmed_cycle(phase31_app, phase31_client)
@@ -84,7 +84,7 @@ def test_archive_his_pending(phase31_app, phase31_client):
     assert c["state"] == "ARCHIVING"
 
 
-def test_archive_success_and_already_archived(phase31_app, phase31_client):
+def test_archive_success_and_already_archived(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 3: Agent 回報 SUCCESS → 草稿 pushed → 封存 200 archived、再封存 200 already_archived。"""
     store = phase31_app.case_store
     cid, draft, m_id = _setup_confirmed_cycle(phase31_app, phase31_client)
@@ -130,7 +130,7 @@ def test_archive_success_and_already_archived(phase31_app, phase31_client):
     assert resp2.get_json()["status"] == "already_archived"
 
 
-def test_archive_his_failed(phase31_app, phase31_client):
+def test_archive_his_failed(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 4: Agent 回報 FAILED → 草稿 failed；封存 → 409 his_failed，循環 ARCHIVE_FAILED。"""
     store = phase31_app.case_store
     cid, draft, m_id = _setup_confirmed_cycle(phase31_app, phase31_client)
@@ -165,7 +165,7 @@ def test_archive_his_failed(phase31_app, phase31_client):
     assert c["state"] == "ARCHIVE_FAILED"
 
 
-def test_archive_retry_from_failed(phase31_app, phase31_client):
+def test_archive_retry_from_failed(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 5: 從 ARCHIVE_FAILED 再封存 → 202 his_retry_queued，產生新 HIS_PUSH 任務，確認版不重寫。"""
     store = phase31_app.case_store
     cid, draft, m_id = _setup_confirmed_cycle(phase31_app, phase31_client)
@@ -217,7 +217,7 @@ def test_archive_retry_from_failed(phase31_app, phase31_client):
     conn.close()
 
 
-def test_archive_missing_confirmation_snapshot(phase31_app, phase31_client):
+def test_archive_missing_confirmation_snapshot(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 6: 人為刪除 cycle_confirmations 列後封存 → 409 confirmation_missing，循環轉 ARCHIVE_FAILED。"""
     store = phase31_app.case_store
     cid, _, _ = _setup_confirmed_cycle(phase31_app, phase31_client)
@@ -238,7 +238,7 @@ def test_archive_missing_confirmation_snapshot(phase31_app, phase31_client):
     assert c["state"] == "ARCHIVE_FAILED"
 
 
-def test_archive_stuck_approved_recovery(phase31_app, phase31_client):
+def test_archive_stuck_approved_recovery(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 7: 草稿 approved 且無任務（31-02 崩潰窗口）→ 封存自動恢復排入任務回 202 his_pending。"""
     store = phase31_app.case_store
     cid, draft, m_id = _setup_confirmed_cycle(phase31_app, phase31_client)
@@ -263,7 +263,7 @@ def test_archive_stuck_approved_recovery(phase31_app, phase31_client):
     conn.close()
 
 
-def test_archive_double_submit_concurrency(phase31_app, phase31_client):
+def test_archive_double_submit_concurrency(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 8: 兩個執行緒同時封存 → 一個 200 archived、一個 200 already_archived；ARCHIVED 轉換與審計恰一筆。"""
     store = phase31_app.case_store
     cid, draft, m_id = _setup_confirmed_cycle(phase31_app, phase31_client)
@@ -305,7 +305,7 @@ def test_archive_double_submit_concurrency(phase31_app, phase31_client):
     assert len(arch_entries) == 1
 
 
-def test_archive_allows_new_cycle(phase31_app, phase31_client):
+def test_archive_allows_new_cycle(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 9: 封存後同一 machine_id 可建立新循環（回到待命）。"""
     cid, draft, m_id = _setup_confirmed_cycle(phase31_app, phase31_client)
 
@@ -326,7 +326,7 @@ def test_archive_allows_new_cycle(phase31_app, phase31_client):
     assert resp_new.status_code == 201
 
 
-def test_archive_does_not_delete_files(phase31_app, phase31_client):
+def test_archive_does_not_delete_files(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 10: 封存不刪除 DATA_DIR/cycles/{id}/ 任何檔案 (D-31-29)。"""
     store = phase31_app.case_store
     cid, draft, _ = _setup_confirmed_cycle(phase31_app, phase31_client)

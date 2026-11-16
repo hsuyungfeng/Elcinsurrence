@@ -48,7 +48,7 @@ def _flatten_vault_files(vault_key: str) -> list[dict[str, Any]]:
     result = []
     try:
         grouped = list_vault_files(vault_key)
-        for cat, items in grouped.items():
+        for _cat, items in grouped.items():
             for it in items:
                 result.append({
                     "vault_key": it.vault_key,

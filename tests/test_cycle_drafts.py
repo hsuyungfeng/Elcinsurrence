@@ -41,7 +41,7 @@ def _setup_cycle_ready(store, cycle_id: str = "c1" * 16, upload_complete: bool =
     return cid
 
 
-def test_submit_draft_unfinalized_blocked(phase31_client, phase31_app):
+def test_submit_draft_unfinalized_blocked(phase31_client, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 1: 未 finalize（upload_complete=0）送出草稿 → 409。"""
     store = phase31_app.case_store
     cid = _setup_cycle_ready(store, "11" * 16, upload_complete=False)
@@ -55,7 +55,7 @@ def test_submit_draft_unfinalized_blocked(phase31_client, phase31_app):
     assert res.status_code == 409
 
 
-def test_submit_draft_success(phase31_client, phase31_app):
+def test_submit_draft_success(phase31_client, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 2: 正確送出 → 201，cycle.state=AWAITING_CONFIRM，transcript.txt 保存，extras 存入。"""
     store = phase31_app.case_store
     cid = _setup_cycle_ready(store, "22" * 16, upload_complete=True)
@@ -86,7 +86,7 @@ def test_submit_draft_success(phase31_client, phase31_app):
     assert t_file.read_text(encoding="utf-8") == transcript_text
 
 
-def test_submit_draft_idempotency_and_state_conflict(phase31_client, phase31_app):
+def test_submit_draft_idempotency_and_state_conflict(phase31_client, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 3: 同 session_id 重送 → 200 同一 draft_id；不同 session_id 於 AWAITING_CONFIRM → 409。"""
     store = phase31_app.case_store
     cid = _setup_cycle_ready(store, "33" * 16, upload_complete=True)
@@ -116,7 +116,7 @@ def test_submit_draft_idempotency_and_state_conflict(phase31_client, phase31_app
     assert r3.status_code == 409
 
 
-def test_submit_draft_quality_unusable_then_retry(phase31_client, phase31_app):
+def test_submit_draft_quality_unusable_then_retry(phase31_client, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 4: 品質不合格 soap → 201 DRAFT_UNUSABLE；於 DRAFT_UNUSABLE 再送合格 soap → AWAITING_CONFIRM。"""
     store = phase31_app.case_store
     cid = _setup_cycle_ready(store, "44" * 16, upload_complete=True)
@@ -143,7 +143,7 @@ def test_submit_draft_quality_unusable_then_retry(phase31_client, phase31_app):
     assert r_good.get_json()["draft_id"] != r_bad.get_json()["draft_id"]
 
 
-def test_cycle_draft_never_auto_accepted(phase31_client, phase31_app, monkeypatch):
+def test_cycle_draft_never_auto_accepted(phase31_client, phase31_app, monkeypatch):  # noqa: F811  # pytest fixture shadows import
     """Test 5: 自動接入設定為 true 時，循環草稿仍停在 validated (未 approved, D-31-08)。"""
     store = phase31_app.case_store
     cid = _setup_cycle_ready(store, "55" * 16, upload_complete=True)
@@ -164,7 +164,7 @@ def test_cycle_draft_never_auto_accepted(phase31_client, phase31_app, monkeypatc
     assert d.state == "validated"  # 絕不可為 approved 或 queued
 
 
-def test_get_cycle_draft_view_structure(phase31_client, phase31_app):
+def test_get_cycle_draft_view_structure(phase31_client, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 6: GET /api/cycles/{id}/draft 唯讀建議項、可選逐字稿。"""
     store = phase31_app.case_store
     cid = _setup_cycle_ready(store, "66" * 16, upload_complete=True)
@@ -199,7 +199,7 @@ def test_get_cycle_draft_view_structure(phase31_client, phase31_app):
     assert b2["transcript"] == "這是逐字稿全文記錄"
 
 
-def test_submit_draft_payload_boundary_validation(phase31_client, phase31_app):
+def test_submit_draft_payload_boundary_validation(phase31_client, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Test 7: soap 缺鍵、extras 長度超限、suggestions 清單超限 → 422。"""
     store = phase31_app.case_store
     cid = _setup_cycle_ready(store, "77" * 16, upload_complete=True)
@@ -225,7 +225,7 @@ def test_submit_draft_payload_boundary_validation(phase31_client, phase31_app):
     assert phase31_client.post(f"/api/cycles/{cid}/draft", headers=KEY, json=bad_extra_list).status_code == 422
 
 
-def test_cycle_draft_rejects_untrusted_source(phase31_client, phase31_app):
+def test_cycle_draft_rejects_untrusted_source(phase31_client, phase31_app):  # noqa: F811  # pytest fixture shadows import
     """Phase 32-A：草稿含病歷內容，院外來源一律 403（取代原「無 key → 401」）。"""
     store = phase31_app.case_store
     cid = _setup_cycle_ready(store, "88" * 16, upload_complete=True)
@@ -238,7 +238,7 @@ def test_cycle_draft_rejects_untrusted_source(phase31_client, phase31_app):
     ).status_code == 403
 
 
-def test_cycle_draft_caplog_no_leak(phase31_client, phase31_app, caplog):
+def test_cycle_draft_caplog_no_leak(phase31_client, phase31_app, caplog):  # noqa: F811  # pytest fixture shadows import
     """Test 9: 審計與日誌不含 transcript 或 soap 內文。"""
     store = phase31_app.case_store
     cid = _setup_cycle_ready(store, "99" * 16, upload_complete=True)

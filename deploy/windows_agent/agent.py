@@ -230,7 +230,7 @@ class WindowsAgent:
         payload = job.get("extra_payload") or job.get("payload") or {}
         case_id = payload.get("case_id", "")
         expected_hash = payload.get("content_hash", "")
-        raw_soap = payload.get("soap") or {}
+        _raw_soap = payload.get("soap") or {}
 
         logger.info(
             "Executing HIS_PUSH job_id=%s case_id=%s content_hash=%s",

@@ -26,7 +26,7 @@ MACHINE_1 = "00000000-0000-4000-8000-000000000001"
 MACHINE_2 = "00000000-0000-4000-8000-000000000002"
 
 
-def test_create_cycle_success(phase31_client):
+def test_create_cycle_success(phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 1: POST /api/cycles 建立新循環，欄位符合契約且無 PHI。"""
     res = phase31_client.post(
         "/api/cycles",
@@ -48,7 +48,7 @@ def test_create_cycle_success(phase31_client):
         assert forbidden not in c
 
 
-def test_create_cycle_idempotent(phase31_client):
+def test_create_cycle_idempotent(phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 2: 同 command_id 重送 → 200，同一 cycle_id。"""
     res1 = phase31_client.post(
         "/api/cycles",
@@ -68,7 +68,7 @@ def test_create_cycle_idempotent(phase31_client):
     assert c1["cycle_id"] == c2["cycle_id"]
 
 
-def test_create_cycle_active_exists_conflict(phase31_client):
+def test_create_cycle_active_exists_conflict(phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 3: 同 machine_id 不同 command_id → 409，回應含 active_cycle_id。"""
     res1 = phase31_client.post(
         "/api/cycles",
@@ -89,7 +89,7 @@ def test_create_cycle_active_exists_conflict(phase31_client):
     assert body["active_cycle_id"] == c1["cycle_id"]
 
 
-def test_get_cycles_endpoints(phase31_client):
+def test_get_cycles_endpoints(phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 4: GET /api/cycles/{id} → 200；GET /api/cycles?machine_id= → 回未終結循環或 null。"""
     res1 = phase31_client.post(
         "/api/cycles",
@@ -114,7 +114,7 @@ def test_get_cycles_endpoints(phase31_client):
     assert res_m2.get_json()["cycle"] is None
 
 
-def test_stop_cycle_recording(phase31_client):
+def test_stop_cycle_recording(phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 5: POST /api/cycles/{id}/stop → AWAITING_DRAFT；重送冪等；不同 command_id 重試 409。"""
     res_init = phase31_client.post(
         "/api/cycles",
@@ -149,7 +149,7 @@ def test_stop_cycle_recording(phase31_client):
     assert res_stop_diff.status_code == 409
 
 
-def test_abandon_cycle_flow(phase31_app, phase31_client):
+def test_abandon_cycle_flow(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 6: POST /api/cycles/{id}/abandon；放棄後可建新循環；CONFIRMED 狀態不可 abandon。"""
     store = phase31_app.case_store
     res_init = phase31_client.post(
@@ -192,7 +192,7 @@ def test_abandon_cycle_flow(phase31_app, phase31_client):
     assert res_abandon_confirmed.status_code == 409
 
 
-def test_auth_and_format_validation(phase31_client):
+def test_auth_and_format_validation(phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 7: 院外來源 403；錯誤格式 422。
 
     Phase 32-A：原本驗證「無 key → 401」與「Agent 金鑰 → 403」，兩者皆建立
@@ -230,7 +230,7 @@ def test_auth_and_format_validation(phase31_client):
     assert res_bad_room.status_code == 422
 
 
-def test_cycle_events_logged_and_files_not_deleted(phase31_app, phase31_client, tmp_path):
+def test_cycle_events_logged_and_files_not_deleted(phase31_app, phase31_client, tmp_path):  # noqa: F811  # pytest fixture shadows import
     """Test 8: cycle_events 記錄轉換且 abandon 絕對不刪除磁碟檔案 (D-31-29)。"""
     store = phase31_app.case_store
     res = phase31_client.post(

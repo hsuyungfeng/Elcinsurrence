@@ -39,7 +39,7 @@ def _create_bound_draft(store, case_id: str, machine_id: str | None = None):
     return draft, job
 
 
-def test_pending_filter_by_machine_id(phase31_app, phase31_client):
+def test_pending_filter_by_machine_id(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 1: 帶 machine_id=m1 輪詢時，只會取得 m1 的任務，不會拿到 m2 的任務。"""
     store = phase31_app.case_store
     _, job_m1 = _create_bound_draft(store, "C-AFF-01", machine_id="m1")
@@ -57,7 +57,7 @@ def test_pending_filter_by_machine_id(phase31_app, phase31_client):
     assert job_m2["job_id"] not in job_ids
 
 
-def test_pending_without_machine_id_returns_only_unbound(phase31_app, phase31_client):
+def test_pending_without_machine_id_returns_only_unbound(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 2: 未帶 machine_id 的輪詢只會回傳未綁定任務，不含 m1、m2。"""
     store = phase31_app.case_store
     _, job_m1 = _create_bound_draft(store, "C-AFF-03", machine_id="m1")
@@ -77,7 +77,7 @@ def test_pending_without_machine_id_returns_only_unbound(phase31_app, phase31_cl
     assert job_m2["job_id"] not in job_ids
 
 
-def test_pending_with_machine_id_includes_unbound(phase31_app, phase31_client):
+def test_pending_with_machine_id_includes_unbound(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 3: 帶 machine_id=m1 的輪詢會同時包含 m1 任務與未綁定任務（相容性）。"""
     store = phase31_app.case_store
     _, job_m1 = _create_bound_draft(store, "C-AFF-06", machine_id="m1")
@@ -95,7 +95,7 @@ def test_pending_with_machine_id_includes_unbound(phase31_app, phase31_client):
     assert job_unbound["job_id"] in job_ids
 
 
-def test_wrong_machine_id_claim_rejected(phase31_app, phase31_client):
+def test_wrong_machine_id_claim_rejected(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 4: 以 machine_id=m2 認領 m1 任務時回傳 409，狀態仍保持 PENDING。"""
     store = phase31_app.case_store
     _, job_m1 = _create_bound_draft(store, "C-AFF-08", machine_id="m1")
@@ -112,7 +112,7 @@ def test_wrong_machine_id_claim_rejected(phase31_app, phase31_client):
     assert job_now["status"] == "PENDING"
 
 
-def test_matching_machine_id_claim_and_report_success(phase31_app, phase31_client):
+def test_matching_machine_id_claim_and_report_success(phase31_app, phase31_client):  # noqa: F811  # pytest fixture shadows import
     """Test 5: 以 machine_id=m1 認領並回報 SUCCESS，任務成功且草稿轉 pushed。"""
     store = phase31_app.case_store
     draft, job_m1 = _create_bound_draft(store, "C-AFF-09", machine_id="m1")
