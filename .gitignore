@@ -66,3 +66,4 @@ TOTFA.zip
 
 # 使用者上傳之測試資料（2026-11-14，含 238MB 訓練 zip 與音訊，不可提交）
 Wavesample/
+config/facility.json
