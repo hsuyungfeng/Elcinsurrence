@@ -36,7 +36,7 @@ def test_index_html_has_no_style_or_inline_script():
 
 def test_extracted_css_and_js_preserve_head_content():
     """新 css 內容包含 git HEAD 基準中 style 區塊內容，新 js 包含基準核心函式。"""
-    head_html = subprocess.check_output(["git", "show", "HEAD:static/index.html"], text=True)
+    head_html = subprocess.check_output(["git", "show", "01e1a13:static/index.html"], text=True)
 
     style_m = re.search(r"<style>([\s\S]*?)</style>", head_html)
     assert style_m, "HEAD index.html 應含 <style> 區塊"

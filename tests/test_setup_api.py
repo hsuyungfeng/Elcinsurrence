@@ -1,4 +1,4 @@
-"""Tests for Setup API and Rooms API (Phase 32 Plan 32-13, D2, D-32-19)."""
+"""Tests for Setup API and Rooms API (Phase 32 Plan 32-13, D2)."""
 
 import json
 from pathlib import Path
@@ -36,15 +36,15 @@ def test_setup_state_needs_setup(temp_facility_path):
         assert data["facility"]["code"] == ""
 
 
-def test_setup_state_write_not_allowed_for_lan(temp_facility_path):
-    """GET /api/setup/state 在非本機時 write_allowed 為 False 且附中文提示。"""
+def test_setup_state_write_allowed_for_lan(temp_facility_path):
+    """D-32-19 已撤回：GET /api/setup/state 在院內非本機時 write_allowed 為 True。"""
     app = create_app({"TESTING": True})
     with app.test_client() as client:
         resp = client.get("/api/setup/state", environ_base={"REMOTE_ADDR": "192.168.1.50"})
         assert resp.status_code == 200
         data = resp.get_json()
-        assert data["write_allowed"] is False
-        assert "本機" in data["write_hint"]
+        assert data["write_allowed"] is True
+        assert data["write_hint"] == ""
 
 
 def test_save_setup_validation_errors(temp_facility_path):
@@ -127,8 +127,8 @@ def test_save_setup_success_and_preserves_other_keys(temp_facility_path):
         assert state_data["needs_setup"] is False
 
 
-def test_save_setup_forbidden_from_lan(temp_facility_path):
-    """POST /api/setup 來自非本機 IP 時被 403 拒絕 (D-32-19)。"""
+def test_save_setup_allowed_from_lan(temp_facility_path):
+    """D-32-19 已撤回：院內網路的診間電腦可完成初次設定（不限伺服器本機）。"""
     app = create_app({"TESTING": True})
     with app.test_client() as client:
         payload = {
@@ -137,11 +137,9 @@ def test_save_setup_forbidden_from_lan(temp_facility_path):
             "rooms": [{"id": "r1", "name": "第 1 診"}],
         }
         resp = client.post("/api/setup", json=payload, environ_base={"REMOTE_ADDR": "192.168.1.100"})
-        assert resp.status_code == 403
-        data = resp.get_json()
-        assert "本機" in data["message"]
-
-
+        assert resp.status_code == 200
+        state = client.get("/api/setup/state", environ_base={"REMOTE_ADDR": "192.168.1.100"}).get_json()
+        assert state["write_allowed"] is True
 def test_get_rooms_api(temp_facility_path):
     """GET /api/rooms 回傳診間清單供客戶端下拉使用。"""
     app = create_app({"TESTING": True})

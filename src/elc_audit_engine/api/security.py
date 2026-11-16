@@ -13,16 +13,13 @@
 
 from __future__ import annotations
 
-import ipaddress
 
 from flask import Flask, current_app, g, jsonify, request
 
 from elc_audit_engine import audit_log
 from elc_audit_engine.lan_trust import (
-    ADMIN_WRITE_MESSAGE,
     BAD_HOST_MESSAGE,
     CROSS_SITE_MESSAGE,
-    UNSAFE_METHODS,
     UNTRUSTED_MESSAGE,
     caller_id_for,
     is_allowed_host,
@@ -30,13 +27,6 @@ from elc_audit_engine.lan_trust import (
     is_cross_site_request,
     is_trusted_source,
 )
-
-#: 管理類寫入端點（D-32-19：僅限伺服器本機 loopback 修改）。
-ADMIN_WRITE_ENDPOINTS = frozenset({
-    "misc.update_facility",
-    "soap_review.update_auto_accept_setting",
-    "setup.save_setup",
-})
 
 # 審計豁免清單：靜態頁與健康檢查不含病歷存取，記錄會被探測流量淹沒
 # （客戶端每數秒探測一次 /api/health 與心跳）。
@@ -130,23 +120,6 @@ def register_security(app: Flask) -> None:
                 request.remote_addr,
             )
             return jsonify({"status": "error", "message": CROSS_SITE_MESSAGE}), 403
-
-        # 管理類寫入端點限制僅限 loopback（D-32-19）
-        if request.endpoint in ADMIN_WRITE_ENDPOINTS and request.method in UNSAFE_METHODS:
-            is_loopback = False
-            if request.remote_addr:
-                try:
-                    is_loopback = ipaddress.ip_address(request.remote_addr).is_loopback
-                except ValueError:
-                    pass
-            if not is_loopback:
-                current_app.logger.warning(
-                    "拒絕非本機寫入管理設定：%s %s from %s",
-                    request.method,
-                    request.path,
-                    request.remote_addr,
-                )
-                return jsonify({"status": "error", "message": ADMIN_WRITE_MESSAGE}), 403
 
         return None
 

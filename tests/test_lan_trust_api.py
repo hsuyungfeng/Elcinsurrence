@@ -90,7 +90,7 @@ def test_cross_site_write_rejected_even_from_trusted_subnet(client):
 
 
 def test_same_origin_write_allowed_from_loopback(client):
-    """管理端點自伺服器本機 (loopback) 寫入正常放行 (D-32-19)。"""
+    """管理端點自伺服器本機 (loopback) 寫入正常放行。"""
     res = client.post(
         "/api/facility",
         json={"code": "3503250461", "name": "測試院所"},
@@ -100,33 +100,7 @@ def test_same_origin_write_allowed_from_loopback(client):
     assert res.status_code == 200
 
 
-def test_admin_write_from_lan_rejected(client):
-    """D-32-19: 管理端點（facility 與 auto-accept）禁止區網端點修改。"""
-    # 1. facility
-    res1 = client.post(
-        "/api/facility",
-        json={"code": "1234567890", "name": "變更"},
-        environ_base={"REMOTE_ADDR": TRUSTED},
-        headers={"Host": HOST, "Origin": f"http://{HOST}", "Sec-Fetch-Site": "same-origin"},
-    )
-    assert res1.status_code == 403
-    assert "此設定只能在伺服器本機修改" in res1.get_json()["message"]
 
-    # 2. auto-accept
-    res2 = client.put(
-        "/api/soap/settings/auto-accept",
-        json={"enabled": True},
-        environ_base={"REMOTE_ADDR": TRUSTED},
-        headers={"Host": HOST, "Origin": f"http://{HOST}", "Sec-Fetch-Site": "same-origin"},
-    )
-    assert res2.status_code == 403
-    assert "此設定只能在伺服器本機修改" in res2.get_json()["message"]
-
-    # 3. 讀取依然對區網放行
-    res_get1 = client.get("/api/facility", environ_base={"REMOTE_ADDR": TRUSTED}, headers={"Host": HOST})
-    assert res_get1.status_code == 200
-    res_get2 = client.get("/api/soap/settings/auto-accept", environ_base={"REMOTE_ADDR": TRUSTED}, headers={"Host": HOST})
-    assert res_get2.status_code == 200
 
 
 def test_native_client_write_allowed_without_browser_headers(client):

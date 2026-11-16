@@ -10,12 +10,11 @@
 
 from __future__ import annotations
 
-import ipaddress
 import json
 import os
 from pathlib import Path
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from flask import Blueprint, current_app, jsonify, request, send_from_directory
 
@@ -41,16 +40,6 @@ def _load_facility_raw() -> Dict[str, Any]:
     return {}
 
 
-def _is_write_allowed(remote_addr: Optional[str]) -> bool:
-    """判斷來源是否允許寫入管理設定 (D-32-19 僅限 loopback)。"""
-    if not remote_addr:
-        return False
-    try:
-        return ipaddress.ip_address(remote_addr).is_loopback
-    except ValueError:
-        return False
-
-
 @bp.route("/setup", methods=["GET"])
 def setup_page():
     """傳回初次設定靜態網頁。"""
@@ -65,8 +54,9 @@ def setup_state():
     code = str(cfg.get("code") or "").strip()
     needs_setup = not bool(code)
 
-    write_allowed = _is_write_allowed(request.remote_addr)
-    write_hint = "" if write_allowed else "此設定只能在伺服器本機修改，請至伺服器主機開啟此頁面完成設定。"
+    # D-32-19 已撤回：院內網路的診間電腦皆可修改設定。
+    write_allowed = True
+    write_hint = ""
 
     facility_info = {
         "code": code,
@@ -89,7 +79,6 @@ def setup_state():
 @bp.route("/api/setup", methods=["POST"])
 def save_setup():
     """儲存初次設定 (院所代碼、名稱、醫師姓名、診間清單)。"""
-    # 權限檢查由 security.py 中的 ADMIN_WRITE_ENDPOINTS 攔截 (非本機回 403)
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         return jsonify({"status": "error", "message": "請求必須為 JSON 物件"}), 422
