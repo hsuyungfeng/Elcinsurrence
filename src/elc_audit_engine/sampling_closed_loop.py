@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from elc_audit_engine import evidence_vault
+from elc_audit_engine.case_store.store import CaseNotFoundError
 from elc_audit_engine.comparator.models import (
     SUPPORT_NONE,
     SUPPORT_SUFFICIENT,

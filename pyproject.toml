@@ -62,20 +62,20 @@ markers = [
 [tool.ruff]
 target-version = "py312"
 line-length = 120
-extend-exclude = ["graphify-out", "officialdocument", "data", "doc", "research_notes", "reports"]
+extend-exclude = ["graphify-out", "officialdocument", "data", "doc", "research_notes", "reports", "SoapVoice", "Wavesample"]
 
 [tool.ruff.lint]
 # E9：語法錯誤；F：未定義名稱、未使用匯入等（抓出 NameError 類缺陷）；
 # W：空白；I：匯入排序；B：常見缺陷（含 bare except，B001／E722）。
 select = ["E9", "F", "W", "I", "B"]
 # 既有程式碼的風格約束，暫不強制（見 codeimproveplan.md）：
-# B904：raise 未加 `from`，屬例外鏈風格，列入後續整理；B008／B905／I001 需大規模改寫。
-ignore = ["B008", "B904", "B905", "I001"]
+# B904：raise 未加 `from`，屬例外鏈風格，列入後續整理；B008／B905／I001 需大規模改寫；F841/B007：未用區域變數與迴圈變數。
+ignore = ["B008", "B904", "B905", "I001", "F841", "B007"]
 
 [tool.ruff.lint.per-file-ignores]
-# 重新匯出（re-export）的 __init__.py 允許未使用匯入；測試允許以 Exception 作為斷言對象。
+# 重新匯出（re-export）的 __init__.py 允許未使用匯入；測試允許以 Exception 作為斷言對象；測試 fixture 參數允許覆寫匯入名稱。
 "**/__init__.py" = ["F401"]
-"tests/**" = ["B017"]
+"tests/**" = ["B017", "F811"]
 
 [tool.coverage.run]
 source = ["elc_audit_engine"]

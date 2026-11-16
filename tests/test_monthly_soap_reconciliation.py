@@ -12,14 +12,11 @@ from elc_audit_engine.case_store.monthly import ingest_monthly_declaration
 from elc_audit_engine.parsers.models import SubmissionCase, OrderRecord, SubmissionParseResult
 from elc_audit_engine.reconciliation.soap_reconciler import (
     reconcile_case_soap,
-    reconcile_monthly_batch,
     format_soap_to_text,
 )
 from elc_audit_engine.monthly_patient_service import (
     monthly_payload_to_sampling_case,
     monthly_payload_to_appeal_case,
-    add_sampling_case_by_patient,
-    add_appeal_case_by_patient,
 )
 
 

@@ -15,7 +15,8 @@ import re
 import sqlite3
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
+from typing import Any
 
 try:
     from config.settings import CASES_DB_PATH
@@ -29,10 +30,8 @@ from elc_audit_engine.case_store.soap_draft_states import (
     STATE_FAILED,
     STATE_PUSHED,
     STATE_QUALITY_FAILED,
-    STATE_QUEUED,
     STATE_REJECTED,
     STATE_VALIDATED,
-    TERMINAL_DRAFT_STATES,
     UnknownDraftStateError,
     assert_draft_transition_allowed,
     compute_soap_content_hash,

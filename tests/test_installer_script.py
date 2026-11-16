@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 import pytest
 
-from installer.build_installer import check_dist_dirs, compute_sha256, main
+from installer.build_installer import compute_sha256, main
 
 
 def test_inno_setup_script_contract():

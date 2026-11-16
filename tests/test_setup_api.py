@@ -1,7 +1,6 @@
 """Tests for Setup API and Rooms API (Phase 32 Plan 32-13, D2)."""
 
 import json
-from pathlib import Path
 import pytest
 
 from elc_audit_engine.api.app import create_app

@@ -1,4 +1,3 @@
-import pytest
 from elc_audit_engine.comparator.soap_comparison import (
     compare_soap_with_template,
     extract_icd10_codes,

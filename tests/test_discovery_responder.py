@@ -1,11 +1,9 @@
 """Unit tests for discovery responder (Phase 32 Plan 32-07, C2)."""
 
 import json
-import os
 import socket
 import threading
 from unittest.mock import MagicMock
-import pytest
 
 from elc_audit_engine.discovery_responder import (
     DISCOVERY_MAGIC,

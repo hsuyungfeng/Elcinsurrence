@@ -359,7 +359,7 @@ class BatchZipPackager:
 
             # 寫入 MANIFEST.txt
             manifest_lines = [
-                f"全民健保電子病歷審查批次封包清單",
+                "全民健保電子病歷審查批次封包清單",
                 f"醫事機構代碼：{facility_code}",
                 f"申報類別：{submission_type}（{'申覆送核' if submission_type == 4 else '初審送核'}）",
             ]

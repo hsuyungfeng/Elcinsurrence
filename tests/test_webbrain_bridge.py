@@ -2,9 +2,6 @@
 
 import pytest
 from elc_audit_engine.webbrain_bridge import (
-    NHICloudRecord,
-    NHILabItem,
-    NHIMedItem,
     WebBrainClient,
     build_automation_action,
     extract_nhi_cloud_history,

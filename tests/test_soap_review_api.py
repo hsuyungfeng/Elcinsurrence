@@ -1,10 +1,8 @@
-import json
 import tempfile
 import pytest
 
 from elc_audit_engine.api.app import create_app
 from elc_audit_engine.case_store import CaseStore
-from elc_audit_engine.case_store.soap_draft_states import compute_soap_content_hash
 
 
 @pytest.fixture

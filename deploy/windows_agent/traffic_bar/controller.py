@@ -171,7 +171,7 @@ class BarController:
                     return True
                 self.last_toast = f"伺服器建立循環失敗: {exc.message}"
                 return False
-            except ServerUnavailable as exc:
+            except ServerUnavailable:
                 self.server_online = False
                 self.last_toast = "伺服器無法連線"
                 return False

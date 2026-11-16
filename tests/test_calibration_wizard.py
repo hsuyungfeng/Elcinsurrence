@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import pytest
 from pathlib import Path
-from typing import Any, Dict, List
 
 from deploy.windows_agent.calibration_wizard import (
     CalibrationWizard,
     NotReadyError,
-    PROBE_TEXT,
 )
 from elc_audit_engine.his_calibration import CalibrationStore, is_ready, new_machine_id
 

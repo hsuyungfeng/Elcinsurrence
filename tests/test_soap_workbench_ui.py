@@ -11,7 +11,7 @@ import io
 import json
 import zipfile
 import pytest
-from elc_audit_engine.evidence_vault import list_vault_files, store_single_file
+from elc_audit_engine.evidence_vault import store_single_file
 
 KEY = {"X-API-Key": "valid-key-123"}
 

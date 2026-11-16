@@ -11,8 +11,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional
-from unittest.mock import MagicMock
+from typing import Dict, List
 
 import pytest
 
@@ -22,12 +21,9 @@ from deploy.windows_agent.calibration_wizard import (
     PROBE_TEXT,
 )
 from elc_audit_engine.agent_desktop_bridge import (
-    AgentDesktopRunner,
     UIElementRef,
 )
 from elc_audit_engine.his_calibration import (
-    CalibrationItem,
-    CalibrationProfile,
     CalibrationStore,
     is_ready,
 )

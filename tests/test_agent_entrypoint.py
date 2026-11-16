@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import hashlib
-import os
 import sys
 import zipfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List
 import pytest
 
 from deploy.windows_agent.config import (

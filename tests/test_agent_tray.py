@@ -1,8 +1,7 @@
 """Tests for Windows Agent system tray module (Phase 32 Plan 32-05, B5)."""
 
 import queue
-from unittest.mock import MagicMock, patch
-import pytest
+from unittest.mock import patch
 
 from deploy.windows_agent.tray import (
     TRAY_ACTIONS,

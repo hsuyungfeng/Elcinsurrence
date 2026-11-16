@@ -22,7 +22,7 @@ import shutil
 import sqlite3
 import sys
 import tempfile
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Union
 
 logger = logging.getLogger(__name__)
 

@@ -284,7 +284,7 @@ def approve_callback(case_id: str):
 @bp.route("/api/his/soapvoice-ingest", methods=["POST"])
 def ingest_soapvoice_session():
     """接收 SoapVoice 診間上傳之音訊、截圖與結構化 SOAP（Phase 24-01）。
-    
+
     支援 multipart/form-data 或 application/json：
     - multipart/form-data:
         - session_id: str
@@ -310,7 +310,7 @@ def ingest_soapvoice_session():
     audio_filename = "consultation.opus"
     image_bytes: bytes | None = None
     image_filename = "screenshot.png"
-    
+
     if "multipart/form-data" in content_type:
         form = request.form
         session_id = form.get("session_id", "").strip()
@@ -360,7 +360,7 @@ def ingest_soapvoice_session():
 
     if not id_card:
         raise ApiError("缺少必要欄位 id_card", status=400)
-    
+
     # 計算/校驗 vault_key
     computed_vault_key = vault_key_for_case(id_card, visit_date)
     if not computed_vault_key:
@@ -405,7 +405,7 @@ def ingest_soapvoice_session():
         "vault_files": vault_files_stored,
         "source": "soapvoice_lan",
     }
-    
+
     try:
         record = store.create(
             case_id=case_id,
@@ -432,7 +432,7 @@ def ingest_soapvoice_session():
     assessment_text = soap_dict.get("assessment", "") if isinstance(soap_dict, dict) else ""
     subjective_text = soap_dict.get("subjective", "") if isinstance(soap_dict, dict) else ""
     combined_diag = (assessment_text + " " + subjective_text + " " + icd10_code).lower()
-    
+
     if any(k in combined_diag for k in ("膝", "關節", "m17", "osteoarthritis", "膝痛")):
         self_pay_suggestions.append({
             "item_code": "SP-ORTHO-PRP",
@@ -966,15 +966,15 @@ def soap_search_patient():
                 },
                 "vault_key": f"{demo_id}-2608",
                 "vault_files": [
-                    {"category": "audio", "filename": f"consultation_recording_1120815.opus", "size": 328400, "mime": "audio/ogg"},
-                    {"category": "images", "filename": f"pharynx_inspection_1120815.webp", "size": 184500, "mime": "image/webp"},
-                    {"category": "reports", "filename": f"lab_cbc_report_1120815.pdf", "size": 94200, "mime": "application/pdf"},
+                    {"category": "audio", "filename": "consultation_recording_1120815.opus", "size": 328400, "mime": "audio/ogg"},
+                    {"category": "images", "filename": "pharynx_inspection_1120815.webp", "size": 184500, "mime": "image/webp"},
+                    {"category": "reports", "filename": "lab_cbc_report_1120815.pdf", "size": 94200, "mime": "application/pdf"},
                 ],
                 "files_count": 3,
                 "files": [
-                    {"category": "audio", "filename": f"consultation_recording_1120815.opus", "size": 328400, "mime": "audio/ogg"},
-                    {"category": "images", "filename": f"pharynx_inspection_1120815.webp", "size": 184500, "mime": "image/webp"},
-                    {"category": "reports", "filename": f"lab_cbc_report_1120815.pdf", "size": 94200, "mime": "application/pdf"},
+                    {"category": "audio", "filename": "consultation_recording_1120815.opus", "size": 328400, "mime": "audio/ogg"},
+                    {"category": "images", "filename": "pharynx_inspection_1120815.webp", "size": 184500, "mime": "image/webp"},
+                    {"category": "reports", "filename": "lab_cbc_report_1120815.pdf", "size": 94200, "mime": "application/pdf"},
                 ],
             },
             {
@@ -993,13 +993,13 @@ def soap_search_patient():
                 },
                 "vault_key": f"{demo_id}-2607",
                 "vault_files": [
-                    {"category": "audio", "filename": f"knee_exam_recording_1120718.opus", "size": 412000, "mime": "audio/ogg"},
-                    {"category": "images", "filename": f"knee_xray_bilateral_1120718.webp", "size": 524000, "mime": "image/webp"},
+                    {"category": "audio", "filename": "knee_exam_recording_1120718.opus", "size": 412000, "mime": "audio/ogg"},
+                    {"category": "images", "filename": "knee_xray_bilateral_1120718.webp", "size": 524000, "mime": "image/webp"},
                 ],
                 "files_count": 2,
                 "files": [
-                    {"category": "audio", "filename": f"knee_exam_recording_1120718.opus", "size": 412000, "mime": "audio/ogg"},
-                    {"category": "images", "filename": f"knee_xray_bilateral_1120718.webp", "size": 524000, "mime": "image/webp"},
+                    {"category": "audio", "filename": "knee_exam_recording_1120718.opus", "size": 412000, "mime": "audio/ogg"},
+                    {"category": "images", "filename": "knee_xray_bilateral_1120718.webp", "size": 524000, "mime": "image/webp"},
                 ],
             },
         ]

@@ -25,7 +25,7 @@ from elc_audit_engine import audit_log
 from elc_audit_engine.bridge_queue import ensure_job, get_job
 
 _MACHINE_ID_RE = re.compile(r"^[0-9a-zA-Z_-]{1,64}$")
-from elc_audit_engine.case_store import CaseNotFoundError
+from elc_audit_engine.case_store.store import CaseNotFoundError, SoapDraftRecord
 from elc_audit_engine.case_store.soap_draft_states import (
     STATE_APPROVED,
     STATE_FAILED,

@@ -11,13 +11,11 @@ Validates that:
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import subprocess
 import tempfile
 from pathlib import Path
 
-import pytest
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
 

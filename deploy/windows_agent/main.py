@@ -16,7 +16,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, List, Optional
 
 # Ensure project root and src are on sys.path
 _project_root = Path(__file__).resolve().parent.parent.parent
@@ -30,7 +30,6 @@ if _root_dir not in sys.path:
 from deploy.windows_agent.config import (
     AgentSettings,
     default_calibration_dir,
-    default_settings_path,
     load_settings,
     save_settings,
 )

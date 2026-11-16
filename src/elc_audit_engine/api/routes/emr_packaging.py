@@ -19,13 +19,11 @@ from flask import Blueprint, current_app, jsonify, request, send_from_directory
 from elc_audit_engine.api.context import case_store
 from elc_audit_engine.api.demo_data import DEMO_APPEAL_CASES, DEMO_SAMPLING_CASES
 from elc_audit_engine.api.errors import ApiError
-from elc_audit_engine.case_store.store import CaseNotFoundError
 from elc_audit_engine.packagers.emr_batch_packager import (
     BatchZipPackager,
     Emr11CodeNaming,
     EmrClassifier,
     EmrPackagingError,
-    SourceQualityValidator,
     StructuredSoapPdfBuilder,
 )
 from elc_audit_engine.reconciliation.soap_reconciler import format_soap_to_text

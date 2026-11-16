@@ -48,7 +48,7 @@ def test_soapvoice_ingest_json_payload(client):
 def test_soapvoice_ingest_multipart_files(client):
     audio_content = b"RIFFFAKEOPUSDATA12345678"
     image_content = b"\x89PNG\r\n\x1a\nFAKESCREENSHOT"
-    
+
     data = {
         "session_id": "test-session-002",
         "patient_name": "李小華",
@@ -62,13 +62,13 @@ def test_soapvoice_ingest_multipart_files(client):
         "audio_file": (io.BytesIO(audio_content), "consultation.opus"),
         "screenshot_file": (io.BytesIO(image_content), "chart_screenshot.png")
     }
-    
+
     resp = client.post("/api/his/soapvoice-ingest", data=data, content_type="multipart/form-data", headers=KEY)
     assert resp.status_code == 201
     res_json = resp.get_json()
     assert res_json["vault_key"] == "B234567890-2307"
     assert len(res_json["vault_files"]) == 2
-    
+
     # 驗證實體佐證金庫中是否已建檔
     vault_key = res_json["vault_key"]
     files = list_vault_files(vault_key)

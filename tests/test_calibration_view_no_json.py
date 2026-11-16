@@ -2,7 +2,6 @@
 
 from pathlib import Path
 from unittest.mock import MagicMock
-import pytest
 
 from deploy.windows_agent.calibration_view import (
     describe_item,

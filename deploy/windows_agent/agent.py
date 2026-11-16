@@ -21,7 +21,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
 from elc_audit_engine.agent_desktop_bridge import (
@@ -31,7 +31,6 @@ from elc_audit_engine.agent_desktop_bridge import (
     StaleRefError,
 )
 from elc_audit_engine.case_store.soap_draft_states import (
-    canonical_soap_text,
     compute_soap_content_hash,
 )
 from elc_audit_engine.his_calibration import CalibrationStore, is_ready

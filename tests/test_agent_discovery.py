@@ -6,7 +6,6 @@ from deploy.windows_agent.discovery import (
     DISCOVERY_MAGIC,
     DISCOVERY_PORT,
     EXPECTED_SERVICE_IDENTIFIER,
-    DiscoveryResult,
     default_probe,
     discover_server,
     rediscover_and_verify,

@@ -1,6 +1,5 @@
 """測試工作台第 2 階（抽樣事前預審）與第 3 階（核減事後申復）所有按鈕功能及與 WebBrain 互動之 DOM 元素支援。"""
 
-from pathlib import Path
 import pytest
 from elc_audit_engine.api.app import create_app
 

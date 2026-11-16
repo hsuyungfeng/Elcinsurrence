@@ -20,7 +20,7 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 logger = logging.getLogger("windows_agent.supervisor")
 
@@ -45,7 +45,6 @@ def assign_kill_on_close_job(proc: Any) -> bool:
 
     try:
         import ctypes
-        from ctypes import wintypes
 
         class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
             _fields_ = [

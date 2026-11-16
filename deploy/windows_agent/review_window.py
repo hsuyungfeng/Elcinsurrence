@@ -7,8 +7,7 @@ Tkinter is imported lazily inside run_review_window so this module can be safely
 from __future__ import annotations
 
 import logging
-import sys
-from typing import Any, Optional
+from typing import Optional
 
 from deploy.windows_agent.review_client import (
     DraftChangedError,

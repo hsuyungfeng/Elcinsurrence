@@ -15,11 +15,10 @@ from elc_audit_engine.case_store.soap_draft_states import (
     IllegalDraftTransitionError,
     UnknownDraftStateError,
     assert_draft_transition_allowed,
-    canonical_soap_text,
     compute_soap_content_hash,
     is_transition_allowed,
 )
-from elc_audit_engine.case_store.store import CaseNotFoundError, CaseStore
+from elc_audit_engine.case_store.store import CaseStore
 
 
 def test_draft_states_exhaustive():

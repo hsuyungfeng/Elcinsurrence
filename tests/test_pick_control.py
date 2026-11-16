@@ -1,6 +1,5 @@
 """Tests for pick_control element selection logic (Phase 32 Plan 32-04, B7)."""
 
-import pytest
 from deploy.windows_agent.pick_control import (
     element_at_point,
     selector_from_element,

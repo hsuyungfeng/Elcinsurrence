@@ -1,9 +1,7 @@
 """B6 首次啟動精靈邏輯與視窗測試 (Plan 32-17, D-32-14, D-31-03)."""
 
 from typing import Any, Dict, List
-import pytest
 from deploy.windows_agent.first_run_wizard import (
-    DEFAULT_VENDORS,
     TEXTS,
     FirstRunFlow,
     FirstRunResult,

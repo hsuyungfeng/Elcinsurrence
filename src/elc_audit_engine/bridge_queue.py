@@ -23,6 +23,7 @@ Phase 22-01 強化重點：
 from __future__ import annotations
 
 import re
+from typing import Any
 import uuid
 from datetime import UTC, datetime, timedelta
 

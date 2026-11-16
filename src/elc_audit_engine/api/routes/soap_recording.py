@@ -14,14 +14,12 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
-from flask import Blueprint, current_app, g, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from config import settings
-from elc_audit_engine import audit_log
 from elc_audit_engine.api.context import case_store
-from elc_audit_engine.api.errors import ApiError
 from elc_audit_engine.api.routes.soap_review import (
     _create_draft_record,
     _maybe_auto_accept,

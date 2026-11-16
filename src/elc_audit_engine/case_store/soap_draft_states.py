@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from typing import Any
 
 STATE_DRAFT = "draft"
@@ -105,7 +104,7 @@ def assert_draft_transition_allowed(from_state: str, to_state: str) -> None:
 
 def canonical_soap_text(soap_dict: Any) -> str:
     """將 S/O/A/P 字典正規化為確定性字串，用於雜湊計算與一致性比對。
-    
+
     規格：
     - 鍵為 's', 'o', 'a', 'p'
     - 各欄位統一換行符（\\r\\n -> \\n）並去除首尾空白

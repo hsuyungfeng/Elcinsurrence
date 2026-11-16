@@ -4,18 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import shutil
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from flask import Blueprint, current_app, jsonify, send_from_directory
 import requests
 
 from elc_audit_engine.capacity import (
-    DEFAULT_RED_DAYS,
-    DEFAULT_YELLOW_DAYS,
     classify_runway,
     days_until_full,
     directory_size_bytes,

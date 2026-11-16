@@ -1,7 +1,6 @@
 """Contract and unit tests for capacity forecast (Phase 32 Plan 32-08, D3, D5, D6)."""
 
 from pathlib import Path
-import pytest
 
 from elc_audit_engine.capacity import (
     DEFAULT_RED_DAYS,

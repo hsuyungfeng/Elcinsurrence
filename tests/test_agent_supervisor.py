@@ -1,12 +1,10 @@
 """Tests for SoapVoice Supervisor (Phase 32 Plan 32-12, B4)."""
 
-import os
 from pathlib import Path
 import sys
 import threading
 import time
 from unittest.mock import MagicMock
-import pytest
 
 from deploy.windows_agent.supervisor import (
     SoapVoiceSupervisor,

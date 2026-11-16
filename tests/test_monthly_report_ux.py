@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from elc_audit_engine.monthly_audit import (
     BatchAudit,

@@ -6,12 +6,10 @@ from typing import Any, Dict, List, Optional
 
 from deploy.windows_agent.agent import AgentConfig, UncalibratedVendorProfileError, WindowsAgent
 from elc_audit_engine.agent_desktop_bridge import (
-    AgentDesktopError,
     AgentDesktopRunner,
     HISPushAutomator,
     StaleRefError,
     UIElementRef,
-    WriteResult,
 )
 from elc_audit_engine.case_store.soap_draft_states import compute_soap_content_hash
 from elc_audit_engine.his_calibration import (

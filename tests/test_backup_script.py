@@ -8,7 +8,7 @@ import sqlite3
 import subprocess
 import pytest
 
-from elc_audit_engine.backup_job import plan_incremental, run_backup, sha256_file
+from elc_audit_engine.backup_job import plan_incremental, run_backup
 
 
 def test_backup_script_full_and_incremental(tmp_path):

@@ -10,10 +10,7 @@ from elc_audit_engine.agent_desktop_bridge import (
     process_his_push_job,
 )
 from installer.build_clinic_installer import (
-    INSTALLER_CONFIG,
     export_installer_bundle,
-    generate_inno_setup_script,
-    generate_launcher_bat,
 )
 
 

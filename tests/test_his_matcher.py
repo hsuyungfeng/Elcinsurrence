@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 from elc_audit_engine.agent_desktop_bridge import (
     AgentDesktopRunner,
     HISPushAutomator,
