@@ -96,9 +96,12 @@ When operating within the Herdr terminal workspace manager (`HERDR_ENV=1`), task
 
 | Terminal Pane | Assigned Agent | Model & Capabilities | Core Responsibilities |
 | :--- | :--- | :--- | :--- |
-| **`w7:p1`** | **Antigravity (Agy)** | `inherit` / `gemini-2.5-pro` (Central Agent) | **執行中樞、階段規劃與測試審核**<br>• GSD 階段規劃 (`/gsd-plan-phase`、`/gsd-execute-phase`)<br>• 跨 Agent 任務指派與進度監控<br>• 全套件整合測試、API 契約檢查與最終代碼合規驗收 |
-| **`w7:p2`** | **Claude** | Claude Code CLI (Executor) | **執行核心代碼實作與打包邏輯編寫**<br>• 健保 11 碼標準檔名編碼與資料屬性分類邏輯 (`emr_batch_packager.py`)<br>• A 類高畫質 PDF 書籤生成器與 500MB ZIP 動態分包實作<br>• 診間 HIS 雙向回寫與資料庫同步功能維護 |
-| **`w7:p3`** | **Hermes** | Hermes Agent / Qwen3.8-27B-FP8 | **待命狀態，負責邊界案例測試與本地模型推理比對**<br>• Qwen3.8-27B-FP8 本地大模型臨床推理與 SOAP 比對建議檢驗<br>• 異常輸入、缺欄位降級、中文檔名阻斷等邊界壓力測試<br>• 離線環境推論穩定度確認 |
+| **`w7:p6`** | **Antigravity (agy)** | Executor | **執行代碼與文件修改（依計畫逐項實作）**<br>• 只按計畫檔（如 `.planning/phases/32.1-*/32.1-PLAN.md`）修改，不自行擴大範圍<br>• 不得自行提交（commit）；完成後回報改動清單與待決疑問 |
+| **`w7:p3`** | **Hermes** | Tester | **測試與驗收，不修改程式**<br>• 全套件測試、`ruff check .`、瀏覽器 console 檢查（如 CSP 違規）<br>• 回報原始輸出與數字，不得以「應該通過」代替實測 |
+| **`w7:p1`** | **Claude Code** | Coordinator / Final check | **規劃、派工、最終核對**<br>• 撰寫計畫檔、派工給 agy、收取 Hermes 測試結果<br>• 獨立重跑測試與 ruff、審查 diff、核對文件數字<br>• 提交（commit）與推送，須經使用者確認 |
+
+**標準流程**：Claude 規劃 → agy 執行 → Hermes 測試 → Claude 最終核對 → 使用者確認後提交。
+任一環節發現問題，退回上一棒，不得跳過測試或核對直接提交。
 
 ---
 
@@ -114,7 +117,8 @@ When operating within the Herdr terminal workspace manager (`HERDR_ENV=1`), task
   - Never write to production databases (`data/db/cases.sqlite3`) in tests.
   - Use fixtures from `tests/conftest.py` (e.g., `make_api_app`) which create temporary isolated databases.
 - **Herdr Environment**:
-  - When running inside Herdr (`HERDR_ENV=1`), coordinate long-running jobs or agent tasks across assigned panes (`claude-executor` for coding/execution, `hermes-test` for tests, server panes for runtimes).
+  - When running inside Herdr (`HERDR_ENV=1`), coordinate long-running jobs or agent tasks across assigned panes: `agy` (`w7:p6`) for execution, `hermes` (`w7:p3`) for testing, and `claude` (`w7:p1`) for planning and final check. See §4 for the handoff flow.
+  - Pane IDs and agent names may change when panes are recreated; confirm with `herdr agent list` before sending work.
 
 ---
 
@@ -143,7 +147,7 @@ The production server is a **systemd user service** (not a manual terminal proce
 | Config | `~/.config/elc-audit-engine/env` (mode 600; template `deploy/elc-audit-engine.env.example`) — **never commit** |
 | Units | `~/.config/systemd/user/` (copies of `deploy/*.service|*.timer`). Re-copy and `systemctl --user daemon-reload` after editing `deploy/` |
 | Boot | Linger enabled for user `hsu` → starts at boot without login |
-| Bind | `ELC_SERVER_HOST=127.0.0.1` (local only). Do not change to `0.0.0.0` without the LAN steps below |
+| Bind | Production: `ELC_SERVER_HOST=0.0.0.0`，為院內區域網路服務的有意設定（使用者已於 2026-11-16 確認）。本機開發／測試仍用 `127.0.0.1`。 |
 
 **Operations**
 - Status / restart / logs: `systemctl --user status|restart elc-audit-engine.service`, `journalctl --user -u elc-audit-engine.service -f`
@@ -151,11 +155,11 @@ The production server is a **systemd user service** (not a manual terminal proce
 - Verify: `curl http://127.0.0.1:5000/api/health` → `{"status":"ok"}`
 
 **LAN exposure checklist (required before serving other machines)**
-1. Keep gunicorn on `127.0.0.1`; put Caddy/Nginx with TLS in front.
-2. Set `ELC_ALLOWED_HOSTS` to the LAN hostname/IP (no port).
-3. Replace the development key `clinic:dev-key-for-local-dev-001` with strong per-client keys.
+1. Bind is `0.0.0.0` by design for the clinic LAN. No TLS reverse proxy is in place; accepted as an intranet-only deployment.
+2. Host header is checked by format (`lan_trust.is_allowed_host`, anti DNS rebinding). No `ELC_ALLOWED_HOSTS` list is used.
+3. `X-API-Key` / `ELC_API_KEYS` were removed under D-32-06; no per-client key setup is needed.
 4. Ensure `DISABLE_AUTH` is unset.
-5. Firewall: allow only the LAN subnet; do not open port 5000.
+5. Firewall: **待確認**。Port 5000 is listening on all interfaces; confirm that the firewall allows only the LAN subnet (`sudo ufw status` requires root).
 6. Back up `data/` and `logs/`; `data/` contains patient-related data.
 
 **Known open items**

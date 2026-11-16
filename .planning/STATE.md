@@ -5,8 +5,8 @@ milestone_name: milestone
 current_phase: 32
 status: Phase 32 文件與程式層級完成；外部實機驗收未完成
 stopped_at: null
-last_updated: "2026-11-16T00:00:00.000Z"
-last_activity: 2026-11-16 — 撤回管理寫入限制（D-32-27）提交至 main（86a605c）；STATE 與完成報告更正
+last_updated: "2026-11-16T14:00:00.000Z"
+last_activity: 2026-11-16 — Phase 32.1 CSP style-src 嚴格化（'self'）與 Ruff 規則回復（移除 F841/B007/F811 放寬）完成
 progress:
   total_phases: 32
   completed_phases: 31
@@ -40,9 +40,9 @@ progress:
 - **Phase 30 的 30-09 探針重跑**：由 32-24 承接，尚未實際執行。
 - **Ubuntu 一鍵安裝驗證**：`deploy/install.sh` 需在乾淨 Ubuntu Server VM 上實測。
 - **Windows 打包驗證**：ElcAgent 與 `soapvoice_client.spec`（D-32-26）需在 Windows 環境建置。
-- **CSP `style-src 'unsafe-inline'`**：仍有約 292 處 inline style，尚未移除。
+- **CSP `style-src` 嚴格化（Phase 32.1 完成）**：原 292 處估計更正為實測 17 處（靜態 4 處全轉 class 獨立成檔，Python 產出 13 處為自包含離線檔不受 app CSP 約束），HTTP CSP `style-src` 已收緊為 `'self'`。
 - **Phase 33（醫師工作台 E1–E7／E9）**：目錄 `.planning/phases/33*` 尚未建立。開始前需先對照 Phase 32 已完成的 E1、E2、E5、E6、E7，避免重複。
-- **待確認裁示**：D-32-28（2GB 容量上限僅作警示）是從 OPEN-32-05 推導，需使用者確認。D-32-24 的剩餘風險是否已寫入安裝文件，尚未核對。
+- **已確認裁示**：D-32-28（2GB 容量上限僅作警示，只刪已上傳資料）已於 2026-11-16 由使用者確認。D-32-24 的剩餘風險說明已寫入 `docs/CLINIC_DEPLOYMENT_GUIDE.md` 第一節。
 
 ## 外部阻塞 (External Blockers)
 
@@ -51,7 +51,7 @@ progress:
 
 ## 已知風險 (Known Risks)
 
-- CI 的 ruff 檢查因既有 241 處歷史錯誤維持紅燈（與本 phase 無關，另案清理）。
+- CI 的 ruff 檢查放寬已於 Phase 32.1 回復（移除 F841、B007 與 tests/** F811 豁免，修復 22 處未用變數與迴圈變數，以行級 noqa 標註 fixture shadowing，全專案 `ruff check .` 通過）。
 - `config/facility.json` 含現場執行期變更，依交接規定不納入 git 提交，目前以未追蹤／未提交狀態保留。
 - 同網段任何裝置皆可修改管理設定（D-32-27 已接受之取捨，僅限院內網路）。
 - `Wavesample/`（約 227MB 訓練資料）位於專案目錄內，已被 `.gitignore` 排除，但建議移出。

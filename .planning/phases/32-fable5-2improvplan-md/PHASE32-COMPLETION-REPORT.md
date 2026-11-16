@@ -13,6 +13,7 @@
 > 4. **決策編號**：原 D-32-21 重複使用，2GB 容量裁示改為 **D-32-28**；D-32-21 僅指 SoapVoice 併入安裝檔。
 > 5. **未決事項**：原文「OPEN-32-01 至 04、06 仍需裁示」已過時，全部 OPEN 項目已於 D-32-22 至 D-32-26 裁示完畢。
 > 6. **驗收狀態**：Phase 32 的程式與文件已完成，但 **Windows 實機 12 項驗收、Ubuntu 乾淨主機 install.sh 驗證、Windows 打包驗證均尚未執行**，不得視為完全驗收通過。
+> 7. **CSP 狀態與數字修正（Phase 32.1）**：原文「尚有約 292 處 inline style」為舊版拆分前數據，實測原始碼僅 17 處（static 4 處、Python 生成 13 處）。Phase 32.1 已將 static/ 頁面樣式抽出至獨立 CSS 檔，並將 HTTP CSP 的 `style-src` 收緊為 `'self'`（已嚴格化）。Python 產生之獨立匯出／下載檔案（13 處）供離線閱覽，不受 app CSP 約束。
 
 ---
 
@@ -49,7 +50,7 @@
 | D-32-11 | 主機 exFAT，無硬連結 | 已實作 | `backup_job.py`、`tests/test_backup_script.py` |
 | D-32-12 | 探索只用 UDP 廣播 | 已實作（程式） | `deploy/windows_agent/discovery.py`；Windows 實機行為待驗證 |
 | D-32-13 | 容量門檻 黃 180 天、紅 90 天 | 已實作 | `capacity.py` |
-| D-32-14 | E8 檔案拆分優先 | 已實作（部分） | `static/js/workbench.js`、`static/css/workbench.css`；`style-src` 仍 `unsafe-inline` |
+| D-32-14 | E8 檔案拆分優先 | 已完成 | `static/js/workbench.js`、`static/css/workbench.css`；Phase 32.1 完成 `clients.css`、`status.css`、`setup.css` 拆分，`style-src` 收緊為 `'self'` |
 | D-32-15 | 第一期提交後再規劃 | 已完成 | `01e1a13` |
 | D-32-16 | 網段讀取實際遮罩（追認） | 已實作 | `lan_trust.py` |
 | D-32-17 | 排除 VPN／虛擬介面（追認） | 已實作 | `lan_trust.py`（`EXCLUDED_IFACE_PREFIXES`） |
@@ -59,9 +60,9 @@
 
 **未決事項（不得視為完成）**
 - 全部 OPEN 項目已裁示完畢（D-32-16 至 D-32-26）。原文「OPEN-32-01 至 04、06 仍需裁示」已過時。
-- 客戶端 3 個月清理與 2GB 容量上限的關係：D-32-20 與 D-32-28（原誤標為 D-32-21）。D-32-28 是從 OPEN-32-05 推導，**待使用者確認**。
+- 客戶端 3 個月清理與 2GB 容量上限的關係：D-32-20 與 D-32-28（原誤標為 D-32-21）。D-32-28 是從 OPEN-32-05 推導，**已於 2026-11-16 由使用者確認**。
 
-**CSP 的實際狀態**：`script-src` 已移除 `'unsafe-inline'`；`style-src` 仍保留 `'unsafe-inline'`（尚有約 292 處 inline style）。
+**CSP 的實際狀態**：Phase 32.1 已完成嚴格化。`script-src` 與 `style-src` 均為 `'self'`，不含 `'unsafe-inline'`。原估計之 292 處已更正為實測 17 處，`static/` 下 4 處已全數轉為 CSS class 並獨立存檔，其餘 13 處屬自包含獨立匯出／下載檔案（不受 app CSP 約束）。
 
 ## 三、自動化測試驗證結果
 
