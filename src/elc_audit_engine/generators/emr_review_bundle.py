@@ -11,6 +11,7 @@
 - HTML 與 XML 一併放入同一 ZIP 上傳。
 
 安全：病患資料只存在於產出的檔案中；本模組不寫入日誌。
+註（Phase 32.1）：產出之 HTML 為獨立匯出／封存檔案，供離線檢視，不受應用程式 HTTP CSP 標頭約束。
 """
 
 from __future__ import annotations

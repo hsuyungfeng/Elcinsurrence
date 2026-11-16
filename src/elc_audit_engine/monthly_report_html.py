@@ -7,6 +7,7 @@
 - 只列「有給付規定」且「超過門檻」的醫令，且案件醫療總點數 > 1000 才納入（見
   `monthly_audit.report_view`）。推理樹與 SOAP 清單屬後台比對，不輸出。
 - 內含身分證字號、姓名與出生日期（PHI）。報告為比對輔助，不呈現支持／裸奔或給付判定。
+- 註（Phase 32.1）：產出之 HTML 為自包含獨立匯出／下載檔案，供離線檢視，不受應用程式 HTTP CSP 標頭約束。
 """
 
 from __future__ import annotations

@@ -41,11 +41,13 @@ AUDIT_EXEMPT_ENDPOINTS = frozenset({
 
 #: P1-5 縱深防禦：即使前端某處遺漏轉義，CSP 也擋掉外部腳本與資料外送。
 #  外鏈字型已移除（D2 個資不出本機），故 default-src 收斂到 'self'。
-#  E8 已拆檔並移除 inline 事件，script 不再需要 unsafe-inline；style 仍有 292 處 inline style 屬性，待 E3 子批次（32-18）改為 class 後移除。
+#  E8 已拆檔並移除 inline 事件，script 採用 'self'；
+#  Phase 32.1 已將靜態頁 inline styles 抽出至獨立 css 檔，style-src 收緊為 'self'。
+#  Python 產生之獨立匯出／下載報表檔不受 app CSP 約束。
 CSP = "; ".join(
     (
         "default-src 'self'",
-        "style-src 'self' 'unsafe-inline'",
+        "style-src 'self'",
         "script-src 'self'",
         # blob:：佐證庫（Phase 17-02）以 fetch 取回檔案後轉 blob URL 顯示；
         # <img>/<audio> 只能用同源 blob。blob: 僅能由頁面自行建立，不外送資料。

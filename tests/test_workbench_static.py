@@ -216,7 +216,7 @@ def test_data_actions_registered_in_actions_whitelist():
 
 
 def test_csp_header_tightened_without_unsafe_inline_for_script(test_client):
-    """GET / 回應之 CSP 標頭 script-src 不含 'unsafe-inline'，style-src 保留。"""
+    """GET / 回應之 CSP 標頭 script-src 與 style-src 均為嚴格 'self'，不含 'unsafe-inline'。"""
     res = test_client.get("/")
     assert res.status_code == 200
     csp = res.headers.get("Content-Security-Policy", "")
@@ -229,15 +229,16 @@ def test_csp_header_tightened_without_unsafe_inline_for_script(test_client):
     assert "'unsafe-inline'" not in script_src, f"script-src 不得含 'unsafe-inline': {script_src}"
     assert "'self'" in script_src
 
-    # 檢查 style-src（暫留 unsafe-inline）
+    # 檢查 style-src（Phase 32.1 嚴格化：不含 'unsafe-inline'）
     style_src_m = re.search(r"style-src\s+([^;]+)", csp)
     assert style_src_m, "CSP 缺少 style-src 指令"
     style_src = style_src_m.group(1)
-    assert "'unsafe-inline'" in style_src, "style-src 於 E3 前暫保留 'unsafe-inline'"
+    assert "'unsafe-inline'" not in style_src, f"style-src 不得含 'unsafe-inline': {style_src}"
+    assert "'self'" in style_src
 
 
 def test_static_assets_http_200(test_client):
-    """GET /static/js/workbench.js 與 /static/css/workbench.css 回應 200。"""
+    """GET /static/js 與 /static/css 資源回應 200。"""
     res_js = test_client.get("/static/js/workbench.js")
     assert res_js.status_code == 200
     assert len(res_js.data) > 1000
@@ -248,3 +249,8 @@ def test_static_assets_http_200(test_client):
 
     res_clients_js = test_client.get("/static/js/clients.js")
     assert res_clients_js.status_code == 200
+
+    for extra_css in ("/static/css/clients.css", "/static/css/status.css", "/static/css/setup.css"):
+        res = test_client.get(extra_css)
+        assert res.status_code == 200, f"{extra_css} 回應狀態碼非 200"
+        assert len(res.data) > 50, f"{extra_css} 內容過短"
