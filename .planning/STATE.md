@@ -37,7 +37,7 @@ progress:
 ## 未結與承接項目 (Pending & Deferred Items)
 
 - **Windows 實機人工驗收**：依 `31-WINDOWS-MANUAL-VERIFY.md` 的 12 項逐一測試（Phase 31 與 32 共同承接）。**尚未執行。**
-- **Phase 30 的 30-09 探針重跑**：由 32-24 承接，尚未實際執行。
+- **Phase 30 的 30-09 探針重跑**：已於 2026-11-17 在 Windows 11 測試機（`C:\probe_new`）完成，寫入／讀回 SHA-256 一致，**PASS**。探針標題匹配曾因資源管理器視窗含 `MockHIS` 而誤判，已以改名遠端資料夾繞過，匹配規則尚未收緊（待辦）。
 - **Ubuntu 一鍵安裝驗證**：`deploy/install.sh` 需在乾淨 Ubuntu Server VM 上實測。
 - **Windows 打包驗證**：ElcAgent 與 `soapvoice_client.spec`（D-32-26）需在 Windows 環境建置。
 - **CSP `style-src` 嚴格化（Phase 32.1 完成）**：原 292 處估計更正為實測 17 處（靜態 4 處全轉 class 獨立成檔，Python 產出 13 處為自包含離線檔不受 app CSP 約束），HTTP CSP `style-src` 已收緊為 `'self'`。
