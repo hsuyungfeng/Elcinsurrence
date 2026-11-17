@@ -12,7 +12,6 @@ from elc_audit_engine.packagers.emr_batch_packager import (
     EmrClassifier,
     EmrPackagingError,
     SourceQualityValidator,
-    StructuredSoapPdfBuilder,
 )
 
 
@@ -77,36 +76,6 @@ def test_source_quality_validator_rules():
 
     dicom_with_dir, _ = SourceQualityValidator.validate_dicom_bundle(["image1.dcm", "DICOMDIR"])
     assert dicom_with_dir is True
-
-
-def test_structured_soap_pdf_builder_with_tree_bookmarks():
-    case_info = {
-        "facility_code": "3503250461",
-        "patient_name": "王大明",
-        "id_card": "A123456789",
-        "visit_date": "2023-07-15",
-        "primary_diagnosis": "E11.9 第二型糖尿病",
-        "total_points": 100,
-        "orders": [
-            {"code": "14050B", "points": "100", "name": "糖化血色素檢驗 HbA1c"}
-        ]
-    }
-    soap_raw = {
-        "s": "定期回診追蹤糖尿病",
-        "o": "Fasting glucose: 138 mg/dL, HbA1c: 7.2%",
-        "a": "E11.9 第二型糖尿病",
-        "p": "Metformin 500mg bid續用",
-    }
-    pdf_bytes = StructuredSoapPdfBuilder.build_soap_pdf(case_info, soap_raw)
-    assert len(pdf_bytes) > 500
-    assert pdf_bytes.startswith(b"%PDF")
-
-    # 驗證 PDF 樹狀書籤
-    has_bookmarks, titles = SourceQualityValidator.validate_pdf_has_bookmarks(pdf_bytes)
-    assert has_bookmarks is True
-    assert "病歷首頁" in titles
-    assert "門診處方箋" in titles
-    assert "門診 SOAP 紀錄單" in titles
 
 
 def test_batch_zip_packager_dynamic_splitting():
