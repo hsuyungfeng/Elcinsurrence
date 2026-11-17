@@ -26,6 +26,24 @@ from typing import Any, Dict, List, Optional, Tuple
 MOCK_HIS_TITLE_KEYWORD = "MockHIS"
 TEST_VENDOR_TITLE: Optional[str] = None  # 預設關閉；僅 --test-vendor 指定時啟用
 
+# 系統殼層視窗（資源管理器、終端機等）即使標題含 MockHIS（例如資料夾名稱）也不是測試替身，
+# 必須排除，否則會造成誤判（2026-11-17 實機：資料夾 MockHIS_new 的檔案總管被誤認為目標）。
+SHELL_WINDOW_MARKERS = (
+    "檔案總管",
+    "File Explorer",
+    "Windows PowerShell",
+    "命令提示字元",
+    "Command Prompt",
+    "Terminal",
+)
+
+
+def is_mock_his_candidate_title(title: str, keywords: List[str]) -> bool:
+    """標題是否為候選測試替身視窗：含關鍵字，且不是系統殼層視窗。"""
+    if not any(k in title for k in keywords):
+        return False
+    return not any(marker in title for marker in SHELL_WINDOW_MARKERS)
+
 
 def find_window_titles_win32() -> list[str]:
     """以 Win32 EnumWindows 列出所有頂層視窗標題（僅 Windows 有效，其他平台回傳空清單）。"""
@@ -72,7 +90,7 @@ def find_target_windows(ad_path: Path, keywords: List[str]) -> List[Dict[str, st
         if isinstance(node, dict):
             title = str(node.get("title") or node.get("name") or "")
             wid = node.get("id") or node.get("window_id")
-            if wid and any(k in title for k in keywords):
+            if wid and is_mock_his_candidate_title(title, keywords):
                 found.setdefault(str(wid), {"id": str(wid), "title": title})
             for v in node.values():
                 walk(v)
