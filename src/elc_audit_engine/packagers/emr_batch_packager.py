@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import hashlib
+import html as _html
 import io
 import os
 import re
@@ -290,6 +291,115 @@ class StructuredSoapPdfBuilder:
             else:
                 sanitized += "?"
         return sanitized
+
+
+class StructuredSoapHtmlBuilder:
+    """A 類病歷本文 HTML 產製（2026-11-17 決定改用 HTML，取代空白頁的 PDF 產製）。
+
+    輸出為單一自包含 UTF-8 HTML：病歷首頁、門診處方箋、門診 SOAP 紀錄單三段，
+    以錨點目錄取代 PDF 樹狀書籤。所有欄位一律 HTML 轉義，缺漏欄位顯示「（未提供）」，不捏造內容。
+    """
+
+    SECTION_TITLES = ("病歷首頁", "門診處方箋", "門診 SOAP 紀錄單")
+
+    @staticmethod
+    def _v(value: Any) -> str:
+        text = "" if value is None else str(value).strip()
+        return _html.escape(text) if text else "（未提供）"
+
+    @classmethod
+    def _soap_parts(cls, soap_text: str | dict) -> dict[str, str]:
+        if isinstance(soap_text, dict):
+            return {
+                "S": str(soap_text.get("s") or soap_text.get("subjective") or ""),
+                "O": str(soap_text.get("o") or soap_text.get("objective") or ""),
+                "A": str(soap_text.get("a") or soap_text.get("assessment") or ""),
+                "P": str(soap_text.get("p") or soap_text.get("plan") or ""),
+            }
+        return {"S": str(soap_text or ""), "O": "", "A": "", "P": ""}
+
+    @classmethod
+    def build_soap_html(
+        cls,
+        case_info: dict[str, Any],
+        soap_text: str | dict,
+        prescriptions: list[dict[str, Any]] | None = None,
+    ) -> bytes:
+        v = cls._v
+        parts = cls._soap_parts(soap_text)
+        secondary = case_info.get("secondary_diagnoses") or []
+        rx_rows = []
+        for o in prescriptions or []:
+            rx_rows.append(
+                "<tr><td>{code}</td><td>{name}</td><td>{points}</td></tr>".format(
+                    code=v(o.get("code")), name=v(o.get("name")), points=v(o.get("points")),
+                )
+            )
+        rx_table = (
+            "<table><thead><tr><th>醫令代碼</th><th>醫令名稱</th><th>點數</th></tr></thead>"
+            "<tbody>" + ("".join(rx_rows) if rx_rows else '<tr><td colspan="3">（未提供）</td></tr>')
+            + "</tbody></table>"
+        )
+        soap_rows = "".join(
+            "<tr><th>{k}</th><td class=\"pre\">{t}</td></tr>".format(k=k, t=v(parts[k]))
+            for k in ("S", "O", "A", "P")
+        )
+        title = f"門診病歷紀錄單 - {_html.escape(str(case_info.get('patient_name') or '未具名'))}"
+        toc = "".join(
+            f'<li><a href="#sec{i}">{t}</a></li>' for i, t in enumerate(cls.SECTION_TITLES, start=1)
+        )
+        doc = f"""<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<style>
+  body {{ font-family: "Noto Sans CJK TC", "Microsoft JhengHei", sans-serif; color:#111; margin:24px; }}
+  h1 {{ font-size:20px; border-bottom:2px solid #333; padding-bottom:6px; }}
+  h2 {{ font-size:16px; margin-top:28px; border-bottom:1px solid #999; }}
+  table {{ border-collapse:collapse; width:100%; margin-top:8px; }}
+  th, td {{ border:1px solid #888; padding:6px 8px; vertical-align:top; text-align:left; }}
+  th {{ background:#f0f0f0; width:110px; }}
+  td.pre {{ white-space:pre-wrap; }}
+  nav ul {{ list-style:none; padding:0; }}
+  nav li {{ display:inline-block; margin-right:16px; }}
+  .sign {{ margin-top:32px; }}
+  @media print {{ nav {{ display:none; }} h2 {{ page-break-before:always; }} }}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<nav aria-label="目錄"><ul>{toc}</ul></nav>
+
+<section id="sec1">
+<h2>病歷首頁</h2>
+<table>
+<tr><th>病患姓名</th><td>{v(case_info.get('patient_name'))}</td></tr>
+<tr><th>身分證字號 / 病歷號</th><td>{v(case_info.get('id_card'))}</td></tr>
+<tr><th>就醫日期</th><td>{v(case_info.get('visit_date'))}</td></tr>
+<tr><th>門診科別</th><td>{v(case_info.get('clinic'))}</td></tr>
+<tr><th>主診斷</th><td>{v(case_info.get('primary_diagnosis'))}</td></tr>
+<tr><th>次要診斷</th><td>{v(', '.join(str(x) for x in secondary) if secondary else None)}</td></tr>
+<tr><th>總點數</th><td>{v(case_info.get('total_points'))}</td></tr>
+</table>
+</section>
+
+<section id="sec2">
+<h2>門診處方箋</h2>
+{rx_table}
+</section>
+
+<section id="sec3">
+<h2>門診 SOAP 紀錄單</h2>
+<table>{soap_rows}</table>
+</section>
+
+<p class="sign">醫師簽章：__________________　日期：__________</p>
+</body>
+</html>
+"""
+        return doc.encode("utf-8")
 
 
 class BatchZipPackager:

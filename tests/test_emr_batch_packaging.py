@@ -184,3 +184,33 @@ def test_emr_batch_package_api_endpoint(make_api_app):
     resp_dl = client.get(f"/api/emr/download/{filename}", headers=auth_headers)
     assert resp_dl.status_code == 200
     assert resp_dl.data.startswith(b"PK")
+
+
+# ── 2026-11-17：A 類改用 HTML（PDF 空白頁問題）────────────────────────
+
+
+def test_soap_html_contains_soap_text_and_sections():
+    from elc_audit_engine.packagers.emr_batch_packager import StructuredSoapHtmlBuilder
+
+    case_info = {"patient_name": "王小明", "id_card": "A123456789", "visit_date": "2026-07-10",
+                 "clinic": "內科", "primary_diagnosis": "E11.9"}
+    soap = {"s": "定期回診追蹤糖尿病", "o": "Fasting glucose: 138 mg/dL", "a": "E11.9", "p": "Metformin 500mg bid"}
+    html = StructuredSoapHtmlBuilder.build_soap_html(case_info, soap,
+                                                     prescriptions=[{"code": "14050B", "name": "HbA1c", "points": "100"}]).decode("utf-8")
+    assert html.startswith("<!DOCTYPE html>")
+    for needle in ("定期回診追蹤糖尿病", "Fasting glucose: 138 mg/dL", "Metformin 500mg bid", "14050B", "E11.9"):
+        assert needle in html
+    for section in ("病歷首頁", "門診處方箋", "門診 SOAP 紀錄單"):
+        assert section in html
+    assert "%PDF" not in html
+
+
+def test_soap_html_escapes_markup_and_marks_missing_fields():
+    from elc_audit_engine.packagers.emr_batch_packager import StructuredSoapHtmlBuilder
+
+    case_info = {"patient_name": "<script>alert(1)</script>"}
+    html = StructuredSoapHtmlBuilder.build_soap_html(case_info, {"s": "<img src=x onerror=1>"}).decode("utf-8")
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;" in html
+    assert "&lt;img" in html
+    assert "（未提供）" in html  # 缺漏欄位不捏造

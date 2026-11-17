@@ -78,7 +78,7 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
   - **`installer/build_clinic_installer.py`**: Single-click clinic workstation client installer script generator (`clinic_installer.iss`, `start_clinic_client.bat`).
   - **`unified_review_report.py`**: Unified review report generator aligning Stage 2 and Stage 3 batch views with the MONTHLY-YYYYMM report format.
   - **`reconciliation/`**: Automatic month-start `TOTFA.zip` reconciliation against daily clinic outpatient voice SOAP records (`soap_reconciler.py`), populating SOAP into `CaseStore` for Stages 2 & 3.
-  - **`packagers/`**: NHI EMR batch packaging engine (`emr_batch_packager.py`) generating 11-code filenames, A/B/C/D 4-tier classification, A-tier PDF outline bookmarks, and 500MB ZIP chunking at 450MB threshold.
+  - **`packagers/`**: NHI EMR batch packaging engine (`emr_batch_packager.py`) generating 11-code filenames, A/B/C/D 4-tier classification, A-tier HTML SOAP document (`StructuredSoapHtmlBuilder`: anchored sections; the former PDF builder produced blank pages and is no longer used, 2026-11-17), and 500MB ZIP chunking at 450MB threshold.
   - **`pipeline.py`**: Pipeline coordinators (`run_presubmission_check` and `run_case_pipeline`).
   - **`rule_repository/`**: SQLite rule store, docx tree indices, and LLM mapping scripts.
   - **`parsers/`**: Parsers for XML declarations (TOTFA), deduction notifications, and outpatient SOAP text.

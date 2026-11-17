@@ -24,7 +24,7 @@ from elc_audit_engine.packagers.emr_batch_packager import (
     Emr11CodeNaming,
     EmrClassifier,
     EmrPackagingError,
-    StructuredSoapPdfBuilder,
+    StructuredSoapHtmlBuilder,
 )
 from elc_audit_engine.reconciliation.soap_reconciler import format_soap_to_text
 from elc_audit_engine.evidence_vault import list_vault_files
@@ -88,20 +88,21 @@ def create_emr_batch_package():
             "orders": c.get("orders") or [],
         }
 
-        pdf_bytes = StructuredSoapPdfBuilder.build_soap_pdf(
+        # 2026-11-17 決定：A 類改用 HTML（PDF 產製因空白頁問題停用）
+        html_bytes = StructuredSoapHtmlBuilder.build_soap_html(
             case_info=case_info,
             soap_text=soap_raw or soap_text,
             prescriptions=case_info["orders"],
         )
 
         base_a = Emr11CodeNaming.build_base_name(stage1, "A", case_class, idx)
-        soap_filename = Emr11CodeNaming.format_filename(base_a, ".pdf")
+        soap_filename = Emr11CodeNaming.format_filename(base_a, ".html")
 
         case_file_entries = [
             {
                 "filename": soap_filename,
-                "data": pdf_bytes,
-                "original_name": "門診SOAP病歷紀錄.pdf",
+                "data": html_bytes,
+                "original_name": "門診SOAP病歷紀錄.html",
                 "tier": "A",
             }
         ]
