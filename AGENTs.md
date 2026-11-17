@@ -52,9 +52,13 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
    - Access logs (`data/audit/access.log`) must adhere strictly to 6 metadata fields: `ts`, `caller_id`, `method`, `path`, `status`.
    - Never log patient names, ID numbers, birth dates, or SOAP text. Attempting to pass prohibited fields raises `AuditFieldError`.
 
-5. **Security & Authentication**
-   - Batch PHI endpoints (`GET /api/sampling/cases`, `GET /api/appeal/cases`), attachments queries/deletions, and PDF downloads mandate `X-API-Key`.
-   - `ELC_ALLOWED_HOSTS` whitelist protects against DNS rebinding.
+5. **Security & Authentication (LAN trust, D-32-06 / D-32-27)**
+   - `X-API-Key` authentication has been removed. Access is decided by source address: loopback or a trusted intranet subnet (`ELC_TRUSTED_SUBNETS`; auto-detected at runtime if unset). Other sources receive `403`.
+   - The `Host` header must be well-formed (anti DNS rebinding); malformed hosts receive `400`. `ELC_ALLOWED_HOSTS` is not used.
+   - Cross-site requests (`Sec-Fetch-Site: cross-site`) are rejected with `403`, including GET.
+   - Admin settings (auto-accept, facility, setup) may be modified from the trusted intranet (D-32-27).
+   - Accepted residual risk (D-32-24): any device in the trusted subnet can read patient data.
+   - Access audit logs record the source address as `caller_id` (`lan:<ip>`, PHI-free).
 
 ---
 

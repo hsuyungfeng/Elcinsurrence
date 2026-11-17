@@ -1,6 +1,6 @@
 """Flask app factory（IN-04）：組裝設定、服務、安全 hooks、錯誤處理與 blueprints。
 
-匯入本套件不產生任何副作用；載入 API key、建立 CaseStore、遷移舊快照等
+匯入本套件不產生任何副作用；建立 CaseStore、遷移舊快照等
 全部延後到 `create_app()` 呼叫時，測試可注入暫存資源。
 """
 

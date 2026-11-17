@@ -1,7 +1,7 @@
 """Physician SOAP Review Client & View Model (Phase 30: D-30-03, D-30-12).
 
 Pure logic client for desktop review window:
-- ReviewClient communicates with central server using operator API key.
+- ReviewClient communicates with central server over the intranet (LAN trust; no API key).
 - build_review_view_model formats draft into editable SOAP sections and read-only advisory sidebar.
 - DraftChangedError raised on HTTP 409 (content_hash mismatch) preventing silent overwrites.
 """

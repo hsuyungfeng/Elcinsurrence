@@ -103,7 +103,7 @@ def update_facility():
 def download_output(name: str):
     """下載列印端點產出的 PDF（A-CR-05）。
 
-    內容含 PHI：刻意不列入認證豁免，須帶 X-API-Key，並照常寫審計日誌。
+    內容含 PHI：刻意不列入認證豁免，僅限院內信任網段存取，並照常寫審計日誌。
     <name> 不接受斜線；send_from_directory 另以 safe_join 擋路徑穿越。只開放 .pdf。
     """
     if not name.lower().endswith(".pdf"):

@@ -6,7 +6,7 @@
 - POST /api/his/v1/cases/<case_id>/approve-callback：醫師審批結果；若設定 `HIS_WEBHOOK_URL`
   則轉送至診所 HIS，否則只存本機並明示未送出。
 
-安全：三個端點皆需 X-API-Key（不豁免）。Webhook 目的地只來自伺服器設定（環境變數），
+安全：三個端點受院內網路信任判定保護（來源位址與跨站檢查，見 security.py；不使用 API key）。Webhook 目的地只來自伺服器設定（環境變數），
 不接受請求內指定，避免被用來對任意主機發送病歷（SSRF）。日誌不記錄病歷內容。
 
 系統失敗與業務結論分離：LLM 或規則庫故障回 503 且 `status="undetermined"`，不偽裝成建議結果。
