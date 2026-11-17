@@ -129,7 +129,7 @@ Applies to `deploy/windows_agent/mock_his/`. These were learned the hard way on 
 1. **MockHIS must expose native controls.** Tkinter children are invisible to UI Automation (the snapshot only shows the title bar). Keep the Win32 EDIT/STATIC implementation; do not revert to Tkinter.
 2. **Snapshot shape (agent-desktop 2.6).** Parse `data.tree` recursively; refs are `ref_id`; text fields appear as role `textfield`, and their `name` is the field label. There is no `get-value` command: read with `get <REF> --property value` and parse `data.value`. Write with `set-value`.
 3. **Launch with `pythonw`.** A `python.exe` console window also matches `--app python` and triggers `AMBIGUOUS_TARGET`.
-4. **Fail closed.** The probe acts only on windows whose title contains `MockHIS`. Do not widen this without an explicit request.
+4. **Fail closed.** The probe acts only on windows whose title contains `MockHIS`, and never on shell windows (檔案總管, Windows PowerShell, 命令提示字元, Terminal) even if the title contains `MockHIS` (2026-11-17). Do not widen this without an explicit request.
 5. **`--test-vendor` is for demo-data test VMs only.** Never ship it in a handoff bundle, and never run it against a real HIS.
 6. **Handoff bundles** must not contain `JHISX/`, `*.mdb`, or any patient-related data. Keep the SHA-256 in the operator guide in sync with the zip.
 
@@ -159,10 +159,10 @@ The production server is a **systemd user service** (not a manual terminal proce
 2. Host header is checked by format (`lan_trust.is_allowed_host`, anti DNS rebinding). No `ELC_ALLOWED_HOSTS` list is used.
 3. `X-API-Key` / `ELC_API_KEYS` were removed under D-32-06; no per-client key setup is needed.
 4. Ensure `DISABLE_AUTH` is unset.
-5. Firewall: **待確認**。Port 5000 is listening on all interfaces; confirm that the firewall allows only the LAN subnet (`sudo ufw status` requires root).
+5. Firewall: **ufw 目前為不活動（2026-11-16 確認）**。Port 5000 listens on all interfaces; enable ufw with LAN-only rules before relying on the LAN trust model.
 6. Back up `data/` and `logs/`; `data/` contains patient-related data.
 
 **Known open items**
-- Nine pre-existing test failures (monthly SOAP pregen ×7, `test_monthly_report_ux`, `test_sampling_evidence_preview`) reproduce on the original code; not caused by deployment changes. Track separately.
+- Full suite passes: 1655 passed, 2 skipped (2026-11-17). No known pre-existing failures.
 - `logs/healthcheck.log` may show one `failed (1/3)` line at service start (startup race); harmless below the threshold.
-- Uncommitted: `pyproject.toml`, `uv.lock` (gunicorn added), `.gitignore` (`logs/`), `deploy/`, `AGENTs.md`.
+- Deployment files are committed (as of 2026-11-17). `config/facility.json` stays local-only (gitignored).

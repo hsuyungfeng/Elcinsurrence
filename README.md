@@ -84,13 +84,15 @@
 
 ## 👥 Herdr 多 Agent 協同分工體系 (Herdr Agent Team)
 
-在 Herdr 終端多 Agent 環境 (`HERDR_ENV=1`) 下，由三個終端窗格（Pane）協同分工：
+在 Herdr 終端多 Agent 環境 (`HERDR_ENV=1`) 下，由三個終端窗格（Pane）協同分工（2026-11-16 起）：
+
+**標準流程**：Claude 規劃 → agy 執行 → Hermes 測試 → Claude 最終核對 → 使用者確認後提交。
 
 | 終端窗格 (Pane) | 角色指派 | 執行模型 / 核心職責 |
 | :--- | :--- | :--- |
-| **`w7:p1`** | **Antigravity (Agy)** | **執行中樞、階段規劃與測試審核**<br>• GSD 階段規劃（`/gsd-plan-phase`、`/gsd-execute-phase`）<br>• 跨 Agent 任務調度、進度監控與架構規範把關<br>• 全套件整合測試、API 契約檢查與最終代碼合規驗收 |
-| **`w7:p2`** | **Claude** | **執行核心代碼實作與打包邏輯編寫**<br>• 健保 11 碼標準檔名編碼與資料屬性分類邏輯 (`emr_batch_packager.py`)<br>• A 類高畫質 PDF 書籤生成器與 500MB ZIP 動態分包實作<br>• 診間 HIS 雙向回寫與資料庫同步功能維護 |
-| **`w7:p3`** | **Hermes** | **邊界案例測試與本地模型推理比對**<br>• Qwen3.8-27B-FP8 本地大模型臨床推理與 SOAP 比對建議檢驗<br>• 異常輸入、缺欄位降級、中文檔名阻斷等邊界壓力測試<br>• 離線環境推論穩定度確認 |
+| **`w7:p6`** | **Antigravity (agy)** | **Executor：依計畫檔實作程式與文件**<br>• 只按計畫檔修改，不自行擴大範圍<br>• 不得自行提交；完成後回報改動清單與待決疑問 |
+| **`w7:p3`** | **Hermes** | **Tester：測試與驗收，不修改程式**<br>• 全套件測試、`ruff check .`、瀏覽器 console 檢查<br>• 回報原始輸出與數字，不以「應該通過」代替實測 |
+| **`w7:p1`** | **Claude Code** | **Coordinator／Final check：規劃、派工、最終核對**<br>• 撰寫計畫檔、派工、收取測試結果、獨立重跑測試與 ruff<br>• 提交與推送須經使用者確認 |
 
 > 兩條路徑共用 Phase 5 `compare_case`，故判定語意一致；分開的原因是**產出與副作用不同**（預審誤用整案管線會意外寫出申復草稿），對應目標架構圖 Cloud HIS 的 Review Service ／ Appeal Service 分離。
 
@@ -115,7 +117,7 @@
 ### 1. 系統對接架構與串接流程 (Architecture & Integration Steps)
 
 ```text
-+----------------------------+      HTTP REST API (X-API-Key)       +-----------------------------------+
++----------------------------+      HTTP REST API (LAN trust)       +-----------------------------------+
 |  院方 HIS / EMR 門診系統   |  =================================>  |    Elcinsurrence Core Engine      |
 |  (doctor-toolbox / 門診端)  |                                      |       (Flask / CaseStore)         |
 +----------------------------+                                      +-----------------------------------+
@@ -139,8 +141,8 @@
 #### 💡 完整 HIS 串接四步驟 (End-to-End Workflow)
 
 1. **環境設定與健康檢查 (Step 1: Auth & Healthcheck)**
-   - HIS 發送探測請求：`GET /api/health`（不含病歷資料，豁免 API Key）。
-   - 設定 Header `X-API-Key: <key>` 存取所有業務 API（於環境變數 `ELC_API_KEYS` 預先設定）。
+   - HIS 發送探測請求：`GET /api/health`（不含病歷資料）。
+   - 本系統不使用 API key。HIS 須位於院內信任網段內（見「認證」小節），無需設定認證標頭。
 
 2. **案件匯入與初始化 (Step 2: Ingest & Case Initialization)**
    - **抽審預審**：HIS 呼叫 `POST /api/sampling/import` 上傳 CSV/PDF。系統解析後寫入 `CaseStore` 持久化，狀態標記為 `imported`。
@@ -174,28 +176,20 @@ HIS 串接時常見的誤用來源：`CaseStore` 中 `case_id` 與 `case_seq` �
 
 > **案例清單端點**（`GET /api/sampling/cases`、`GET /api/appeal/cases`）：未匯入資料時回傳**示範資料**（每個案例帶 `"demo": true`），供 UI 展示工作流；**匯入後優先回傳導入資料**（`source: "csv" / "paddle" / "ocr"`）。醫令名稱一律以規則庫為準（例：`64140C`＝甲床與手指重建術，曾誤標為「手腕韌帶縫合術」，2026-08-04 修正）。匯入資料的每筆項目另附 `state`（案件狀態）與 `failure_reason`；支援 `?limit=`（1～1000，預設 1000）與 `?offset=` 分頁，回應標頭 `X-Total-Count` 為總筆數，超過 limit 時不再靜默截斷。
 
-#### 🔐 認證（2026-09 起：部分強制——批次讀出 PHI 與破壞性操作必填，其餘選填）
+#### 🔐 認證（2026-11-13 起：院內網路信任，已移除 API key）
 
-| 端點 | 是否強制 `X-API-Key` |
-|---|---|
-| `GET /` | 否（靜態頁；頁面側邊欄可輸入 API Key，存於瀏覽器 localStorage） |
-| `GET /api/health` | 否（健康檢查，供 HIS／監控探測，不含案件資料） |
-| `GET /api/sampling/cases` | **是**（批次回傳病患資料） |
-| `GET /api/appeal/cases` | **是**（同上） |
-| `GET /api/appeal/attachments/<case_id>` | **是**（附件清單） |
-| `DELETE /api/appeal/attachments/<case_id>/<id>` | **是**（破壞性操作） |
-| `GET /api/output/<檔名>.pdf` | **是**（列印產出含 PHI） |
-| `POST /api/sampling/audit`、`/api/sampling/import`、`/api/appeal/generate`、`/api/appeal/import`、`/api/appeal/attachments/upload`、`/api/deduction/print`、`/api/appeal/evidence-packet/print` | 否（選填——帶合法 key 時審計日誌記錄真實 `caller_id`，否則記 `anonymous`） |
+本系統不再使用 `X-API-Key`。來源判定改為位址與請求標頭（實作：`src/elc_audit_engine/lan_trust.py`、`api/security.py`；依使用者裁示 D-32-06、D-32-27）：
 
-- **背景**：Phase 9-01 原將業務端點設為強制認證；`fcde2c8`（2026-08-07）改為全部選填。2026-09 全專案 code review（`doc/REVIEW-A-api-store-generators.md` CR-01）指出免認證的 GET／DELETE 可被任何能連到服務的人（含 DNS rebinding）批次讀取或刪除 PHI，依使用者裁示改為上表的部分強制。
-- **Host 白名單（防 DNS rebinding）**：所有請求的 `Host` 必須在 `ELC_ALLOWED_HOSTS`（逗號分隔；未設定時僅 `127.0.0.1`／`localhost`／`[::1]`）內，否則回 `400`。對外部署時須加入實際主機名稱。
-- **機制**：服務間 API key（非 JWT／mTLS——呼叫方是 HIS 服務而非瀏覽器使用者，2026-08-05 使用者裁示）。
-- **Header**：`X-API-Key: <key>`（上表必填端點缺少或錯誤時回 401；選填端點帶了會被解析用於審計）。
-- **設定**：環境變數 `ELC_API_KEYS`，格式 `caller_id1:key1,caller_id2:key2`（多呼叫方，供審計日誌辨識「誰調閱了病歷」）；每組 key 須 >= 16 字元。**`ELC_API_KEYS` 未設定或格式錯誤時服務啟動即失敗**（fail-fast，即使業務端點不強制認證，key 表本身仍必須合法配置——用於審計辨識與 `/api/health` 之外所有端點的 caller 解析）。
-- **比對**：`hmac.compare_digest`（constant-time），不使用 `==`（時序側通道）。
-- **401 回應形狀**（上表必填端點）：`{"status": "error", "message": "認證失敗：缺少或無效的 API key"}`——與「查無資料」（200 + 空陣列）或 404 明確可區分，不得混淆。
-- **真實 key 不得進版控**（`.env` 已在 `.gitignore`；`.env.example` 僅提供格式範例）。
-- 新增端點時**預設受保護**（`before_request` 統一強制）；豁免需顯式列入 `src/elc_audit_engine/api/security.py` 的 `AUTH_EXEMPT_ENDPOINTS`（端點名為 blueprint 限定名，如 `sampling.audit_sampling_case`）。
+| 檢查 | 規則 | 不符合時 |
+|---|---|---|
+| 來源位址 | 須為 loopback，或位於信任網段（`ELC_TRUSTED_SUBNETS`；未設定則自動偵測伺服器所在網段，排除 VPN／虛擬介面） | `403`：僅限院內網路使用 |
+| Host 標頭 | 須為合法主機形式（防 DNS rebinding） | `400`：不允許的 Host |
+| 跨站請求 | `Sec-Fetch-Site: cross-site` 的請求一律拒絕（含 GET，防跨站讀取） | `403`：拒絕跨站請求 |
+| 管理設定寫入 | 院內信任網段內可直接修改（D-32-27；取代先前「僅限本機」限制） | — |
+
+- **剩餘風險（D-32-24，已接受）**：同一網段內的任何裝置皆可讀取病歷資料，系統不做逐裝置身分驗證。詳見 `docs/CLINIC_DEPLOYMENT_GUIDE.md` 第一節。
+- **稽核**：存取審計日誌的 `caller_id` 為來源位址（不含病歷內容）。
+- **部署前提**：本系統為院內專用，須置於防火牆之後，只允許院內網段連入服務埠。
 
 #### 📝 存取審計日誌（Phase 9-01：零 PHI；2026-08-08 修復豁免清單誤用）
 
@@ -371,14 +365,14 @@ uv run python server.py
 ```
 啟動後打開瀏覽器造訪 `http://127.0.0.1:5000` 即可操作預審與申復介面。
 
-**安全預設**：本服務會接觸病歷資料，故預設 **綁定 `127.0.0.1`、`debug=False`**，且需 `X-API-Key` 認證（見下方「認證」小節；`ELC_API_KEYS` 未設定時服務啟動即失敗）。需對外提供時**務必置於反向代理／VPN 之後**，再以環境變數覆寫：
+**安全預設**：本服務會接觸病歷資料，故預設 **綁定 `127.0.0.1`、`debug=False`**，並以院內網路信任判定來源（見下方「認證」小節）。需對外提供時**務必置於反向代理／VPN 之後**，再以環境變數覆寫：
 
 | 環境變數 | 預設 | 說明 |
 |---|---|---|
 | `ELC_SERVER_HOST` | `127.0.0.1` | 監聽位址 |
 | `ELC_SERVER_PORT` | `5000` | 連接埠 |
 | `ELC_SERVER_DEBUG` | 關閉 | 設為 `1`/`true` 開啟；**正式環境切勿開啟**（會回顯堆疊） |
-| `ELC_API_KEYS` | 無（**必填**） | 服務間認證 key 表，格式 `caller_id1:key1,caller_id2:key2`；未設定時服務啟動即失敗 |
+| `ELC_TRUSTED_SUBNETS` | 自動偵測（`deploy/install.sh` 安裝時寫入） | 院內信任網段（逗號分隔 CIDR）；多個不同網段或無法偵測時僅信任本機 |
 | `AUDIT_LOG_PATH` | `data/audit/access.log` | 存取審計日誌（JSON Lines，零 PHI）寫入路徑 |
 
 > 預審端點的 LLM 判定需 llama.cpp server（`localhost:8080`）可用；未啟動時判定會降級為「待判定」（`support_level: null` + `undetermined: true`），而非「裸奔」。
@@ -575,7 +569,7 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 
 #### 🔹 [GET] `/api/output/<檔名>.pdf` — 下載列印產出
 
-下載 `/api/deduction/print`、`/api/appeal/evidence-packet/print` 回傳的 `pdf_url`。內容含 PHI，**必須帶 `X-API-Key`**，並寫入存取審計日誌；僅開放 `.pdf`。
+下載 `/api/deduction/print`、`/api/appeal/evidence-packet/print` 回傳的 `pdf_url`。內容含 PHI，僅限院內信任網段存取，並寫入存取審計日誌；僅開放 `.pdf`。
 
 ---
 
@@ -617,7 +611,7 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 | `GET` | `/api/emr/packages` | 查詢已產製之 EMR 審查封包清單 (Phase 28) | 選填 |
 | `GET` | `/api/emr/download/<filename>` | 安全下載 500MB EMR 審查 ZIP 封包 (Phase 28) | 選填 |
 
-> **認證「選填」說明**：帶合法 `X-API-Key` 時審計日誌記錄真實 `caller_id`；未帶時記 `anonymous`。「必填」端點缺 key 回 401（2026-09 部分強制，詳見「認證」小節）。
+> **認證說明**：已移除 `X-API-Key`；所有端點皆以來源位址信任判定（詳見「認證」小節），審計日誌的 `caller_id` 為來源位址。
 
 ---
 
@@ -640,7 +634,7 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 位於 `deploy/windows_agent/mock_his/`，用來在 Windows 測試機上驗證「寫入 → 讀回 → 比對」流程，全程只使用假資料（`TEST-*`）。
 
 - **`mock_his.py`**：替身視窗（標題含「MockHIS」）。客戶區使用 Win32 原生 EDIT／STATIC 控制項，**不可改回 Tkinter**（Tkinter 不會被 UI 自動化讀取）。
-- **`probe_readback_check.py`**：探針，依 agent-desktop 2.6 的快照格式（`data.tree`、`ref_id`、角色 `textfield`）定位「主訴 (S)」欄位，以 `set-value` 寫入、`get <REF> --property value` 讀回並比對 SHA-256。找不到 MockHIS 視窗即中止（fail-closed）。
+- **`probe_readback_check.py`**：探針，依 agent-desktop 2.6 的快照格式（`data.tree`、`ref_id`、角色 `textfield`）定位「主訴 (S)」欄位，以 `set-value` 寫入、`get <REF> --property value` 讀回並比對 SHA-256。找不到 MockHIS 視窗即中止（fail-closed）。標題匹配會排除系統殼層視窗（檔案總管、PowerShell、命令提示字元、Terminal），避免資料夾名稱含 `MockHIS` 造成誤判（2026-11-17）。
 - **`handoff/`**：交接給他人的壓縮包與操作說明（含 SHA-256 校驗碼）。不含任何病患資料庫。
 - **測試**：`uv run pytest tests/test_phase30_probe_detection.py tests/test_phase30_probe_mock.py`
 
