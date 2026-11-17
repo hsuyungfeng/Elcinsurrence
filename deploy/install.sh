@@ -167,17 +167,49 @@ elif command -v uv >/dev/null 2>&1; then
     TRUST_JSON="$(cd "$ROOT" && uv run --no-config python -m elc_audit_engine.lan_trust --describe 2>/dev/null || true)"
 fi
 
-DETECTED_SUBNET="127.0.0.1/32"
-if [ -n "$TRUST_JSON" ]; then
-    DETECTED_SUBNET="$(echo "$TRUST_JSON" | grep -oP '(?<="detected": ")[^"]+' || echo "127.0.0.1/32")"
-    echo "偵測到本機網段: $DETECTED_SUBNET"
-fi
-
-if ! grep -q "^ELC_TRUSTED_SUBNETS=" "$ENV_FILE" 2>/dev/null; then
-    if [ "$DRY_RUN" -eq 0 ]; then
-        echo "ELC_TRUSTED_SUBNETS=$DETECTED_SUBNET" >> "$ENV_FILE"
+# 只接受恰好一個偵測結果（D-32-16 安裝人員確認；D-32-17 多候選不自動決定）。
+# 舊版以 grep 解析字串欄位，但 detected 為陣列，會靜默退回 127.0.0.1，導致診間全數被拒。
+if grep -q "^ELC_TRUSTED_SUBNETS=" "$ENV_FILE" 2>/dev/null; then
+    echo "沿用既有手動設定的信任網段（ELC_TRUSTED_SUBNETS）。"
+else
+    DETECTED_COUNT=0
+    DETECTED_SUBNET=""
+    if [ -n "$TRUST_JSON" ]; then
+        PARSED="$(echo "$TRUST_JSON" | python3 -c 'import json,sys
+d = json.load(sys.stdin)
+det = d.get("detected") or []
+print(len(det), det[0] if det else "")' 2>/dev/null || echo "0 ")"
+        DETECTED_COUNT="${PARSED%% *}"
+        DETECTED_SUBNET="${PARSED#* }"
     fi
-    echo "已設定信任網段: $DETECTED_SUBNET"
+
+    if [ "$DETECTED_COUNT" -ne 1 ]; then
+        echo "錯誤：無法自動判定唯一的院內網段（偵測結果數量：$DETECTED_COUNT）。" >&2
+        echo "請於 $ENV_FILE 手動加入 ELC_TRUSTED_SUBNETS=<院內網段，例如 192.168.68.0/24>，再重新執行安裝。" >&2
+        if [ "$DRY_RUN" -eq 0 ]; then
+            exit 1
+        fi
+    else
+        if [ "$DRY_RUN" -eq 1 ]; then
+            echo "[DRY-RUN] 偵測到院內網段 $DETECTED_SUBNET（未寫入）"
+        elif [ "$ASSUME_YES" -eq 1 ]; then
+            echo "依 --yes 採用偵測到的院內網段: $DETECTED_SUBNET"
+            echo "ELC_TRUSTED_SUBNETS=$DETECTED_SUBNET" >> "$ENV_FILE"
+            echo "已設定信任網段: $DETECTED_SUBNET"
+        else
+            read -r -p "偵測到院內網段 $DETECTED_SUBNET。診間電腦須位於此網段，是否信任此網段？[y/N] " ANS
+            case "$ANS" in
+                y|Y|yes|YES)
+                    echo "ELC_TRUSTED_SUBNETS=$DETECTED_SUBNET" >> "$ENV_FILE"
+                    echo "已設定信任網段: $DETECTED_SUBNET"
+                    ;;
+                *)
+                    echo "已取消安裝。請手動於 $ENV_FILE 設定 ELC_TRUSTED_SUBNETS 後再執行。" >&2
+                    exit 1
+                    ;;
+            esac
+        fi
+    fi
 fi
 
 # 5. 詢問備份目的端 (ask_backup_root)

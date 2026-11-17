@@ -285,6 +285,17 @@ def test_detect_local_subnets_multiple_candidates_selects_env_interface(monkeypa
     assert nets == [ipaddress.ip_network("192.168.2.0/24")]
 
 
+def test_detect_local_subnets_multiple_interfaces_same_network_selects_it(monkeypatch):
+    # 有線與無線同接一台分享器：兩個候選都在 192.168.68.0/24，不應因此退回 loopback
+    monkeypatch.delenv("ELC_TRUSTED_INTERFACE", raising=False)
+    mock_ip_data = [
+        {"ifname": "enp39s0", "flags": [], "addr_info": [{"local": "192.168.68.118", "prefixlen": 24}]},
+        {"ifname": "wlo1", "flags": [], "addr_info": [{"local": "192.168.68.116", "prefixlen": 24}]},
+    ]
+    nets = detect_local_subnets(interfaces_provider=lambda: json.dumps(mock_ip_data))
+    assert nets == [ipaddress.ip_network("192.168.68.0/24")]
+
+
 def test_is_cross_site_read():
     assert is_cross_site_read("GET", "cross-site") is True
     assert is_cross_site_read("HEAD", "cross-site") is True

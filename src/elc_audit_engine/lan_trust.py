@@ -196,7 +196,12 @@ def detect_local_subnets(
             if matched:
                 return [ipaddress.ip_network(matched[0]["network"])]
 
-        # D-32-17: 多候選由安裝人員於 install.sh 中選擇並寫入 ELC_TRUSTED_SUBNETS。
+        # 多個介面若位於同一網段（例如有線與無線同接一台分享器），不構成歧義，直接採用。
+        unique_networks = {c["network"] for c in candidates}
+        if len(unique_networks) == 1:
+            return [ipaddress.ip_network(unique_networks.pop())]
+
+        # D-32-17: 多個不同網段時由安裝人員於 install.sh 中選擇並寫入 ELC_TRUSTED_SUBNETS。
         # 未指定時 fail-closed（回傳空清單，僅信任 loopback）
         logger.warning(
             "偵測到多個候選網路介面（%s），未指定 %s 或 %s；退回僅信任本機 loopback",
