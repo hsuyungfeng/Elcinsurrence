@@ -132,6 +132,11 @@ details.rule-fulltext > summary { cursor: pointer; color: var(--accent); font-si
 pre.rule-text { white-space: pre-wrap; word-break: break-word; background: var(--box); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 13px/1.7 "Noto Sans TC", "Microsoft JhengHei", sans-serif; margin: 4px 0 0; }
 """
 _CSS = _CSS + SHARED_CSS  # SOAP 範例與佐證庫樣式與當月申報報告共用
+_CSS = _CSS + """
+.vault-link{color:inherit;text-decoration:none;}
+.vault-placeholder-tone{color:#94a3b8;border-style:dashed;background:rgba(148,163,184,0.06);}
+.soap-actions-plain{margin-top:6px;}
+"""  # 原內嵌 style 屬性抽為類別，符合 style-src 'self'
 
 # 腳本：一鍵複製 SOAP、影像燈箱（點擊放大，Esc 或點擊遮罩關閉）、開啟範例病歷彈窗。純原生 JS，無外部資源。
 # 燈箱（點擊放大，Esc 或點擊遮罩關閉）：統一報告專用。
@@ -605,25 +610,25 @@ def _case_body_html(view: ReviewCaseView) -> str:
     if img_files:
         for filename in img_files:
             url = f"/api/vault/{key_label}/files/images/{escape(filename)}"
-            vault_items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" style="color: inherit; text-decoration: none;">🖼️ 影像 {escape(filename)}</a></li>')
+            vault_items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" class="vault-link">🖼️ 影像 {escape(filename)}</a></li>')
     else:
-        vault_items.append('<li class="vault-file-item vault-file-placeholder" style="color: #94a3b8; border-style: dashed; background: rgba(148,163,184,0.06);">🖼️ 影像（預留位置／未附加）</li>')
+        vault_items.append('<li class="vault-file-item vault-file-placeholder vault-placeholder-tone">🖼️ 影像（預留位置／未附加）</li>')
 
     # 2. 檢驗報告（有檔案則列出連結，無檔案則預留槽位）
     rep_files = view.vault_files.get("reports", ())
     if rep_files:
         for filename in rep_files:
             url = f"/api/vault/{key_label}/files/reports/{escape(filename)}"
-            vault_items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" style="color: inherit; text-decoration: none;">📄 檢驗報告 {escape(filename)}</a></li>')
+            vault_items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" class="vault-link">📄 檢驗報告 {escape(filename)}</a></li>')
     else:
-        vault_items.append('<li class="vault-file-item vault-file-placeholder" style="color: #94a3b8; border-style: dashed; background: rgba(148,163,184,0.06);">📄 檢驗報告（預留位置／未附加）</li>')
+        vault_items.append('<li class="vault-file-item vault-file-placeholder vault-placeholder-tone">📄 檢驗報告（預留位置／未附加）</li>')
 
     # 3. 其他分類（錄音、病歷紀錄等，若有檔案則追加）
     for cat in ("audio", "records"):
         icon = cat_icons[cat]
         for filename in view.vault_files.get(cat, ()):
             url = f"/api/vault/{key_label}/files/{cat}/{escape(filename)}"
-            vault_items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" style="color: inherit; text-decoration: none;">{icon} {escape(filename)}</a></li>')
+            vault_items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" class="vault-link">{icon} {escape(filename)}</a></li>')
 
     for att in view.attachments:
         vault_items.append(f'<li class="vault-file-item">📎 {escape(att)}</li>')
@@ -631,7 +636,7 @@ def _case_body_html(view: ReviewCaseView) -> str:
     display_key = escape(view.vault_key) if (view.vault_key and has_real_files) else "預留"
     vault_part = (
         f'<div class="vault-box">'
-        f'<div class="vault-title">📁 佐證庫附加檔案（{display_key}）<span style="display:none">佐證庫（{display_key}）</span></div>'
+        f'<div class="vault-title">📁 佐證庫附加檔案（{display_key}）<span hidden>佐證庫（{display_key}）</span></div>'
         f'<ul class="vault-files">{"".join(vault_items)}</ul>'
         f'</div>'
     )
@@ -715,7 +720,7 @@ def _case_body_html(view: ReviewCaseView) -> str:
             "</div></details>"
         )
     else:
-        soap_html = f'<div style="margin-top:6px;">{modal_btn}</div>'
+        soap_html = f'<div class="soap-actions-plain">{modal_btn}</div>'
 
     # 7. 檢驗數據與雲端病歷（若有）
     lab_part = _section_lab(view)
@@ -727,23 +732,38 @@ def _case_body_html(view: ReviewCaseView) -> str:
     return f"{warning_part}{secondary_part}{vault_part}{item_html}{lab_part}{cloud_part}"
 
 
-def _document(title: str, body: str, *, with_lightbox: bool) -> str:
+def _document(title: str, body: str, *, with_lightbox: bool, embed_assets: bool = True) -> str:
+    """組裝完整頁面。embed_assets=True：CSS／腳本內嵌（獨立匯出檔，離線可開）；
+    False：app 直接回傳，改用同源外部檔（符合 style-src／script-src 'self'），複製按鈕改事件委派。"""
     lightbox = _LIGHTBOX if with_lightbox else ""
-    return (
+    head_assets = (
+        f"<style>{_CSS}</style>"
+        if embed_assets
+        else '<link rel="stylesheet" href="/static/css/review-report.css">'
+    )
+    tail_assets = (
+        f"<script>{_SCRIPT}</script>"
+        if embed_assets
+        else '<script src="/static/js/review-report.js"></script>'
+    )
+    doc = (
         "<!doctype html>"
         '<html lang="zh-Hant"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>{escape(title)}</title>"
-        f"<style>{_CSS}</style></head><body><main>"
+        f"{head_assets}</head><body><main>"
         f"{body}"
         f"{lightbox}"
         '<footer>本報告內含個人資料，請依院內規範保管與傳送。'
         "比對輔助；不產生支持／裸奔或給付判定，最終判定由審查人員作成。</footer>"
-        f"<script>{_SCRIPT}</script></main></body></html>"
+        f"{tail_assets}</main></body></html>"
     )
+    if not embed_assets:
+        doc = doc.replace('onclick="copySoap(this)"', 'data-copy-soap="1"')
+    return doc
 
 
-def render_unified_review_html(view: ReviewCaseView) -> str:
+def render_unified_review_html(view: ReviewCaseView, *, embed_assets: bool = True) -> str:
     """回傳自包含 HTML（已 html.escape、無外部資源），依 SECTION_ORDER 輸出。
 
     空區塊整段省略。核心區 SOAP 與佐證庫並排；給付規定與雲端病歷預設收合。
@@ -763,6 +783,7 @@ def render_unified_review_html(view: ReviewCaseView) -> str:
         f"{title} {view.case_id}",
         header + _case_body_html(view),
         with_lightbox=bool(view.vault_files.get("images")),
+        embed_assets=embed_assets,
     )
 
 
@@ -824,6 +845,7 @@ def render_aggregated_review_html(
     *,
     title: str,
     batch_label: str | None = None,
+    embed_assets: bool = True,
 ) -> str:
     """多案件聚合報告（Plan 20-01）：比照月審格式，每案一個可收合的 <details class="case-item">。
 
@@ -851,6 +873,7 @@ def render_aggregated_review_html(
         title,
         header + summary + items,
         with_lightbox=any(view.vault_files.get("images") for view in views),
+        embed_assets=embed_assets,
     )
 
 

@@ -387,7 +387,7 @@ def appeal_case_preview_html(case_id: str):
     if record.kind != "appeal":
         raise ApiError(f"案件 {case_id} 並非申復案件 (kind={record.kind})", status=400)
     view = _stage3_view(store, record, with_thumbnails=True)
-    return Response(render_unified_review_html(view), content_type="text/html; charset=utf-8")
+    return Response(render_unified_review_html(view, embed_assets=False), content_type="text/html; charset=utf-8")
 
 
 @bp.route("/api/appeal/batch-report", methods=["GET"])
@@ -404,6 +404,7 @@ def appeal_batch_report():
         views,
         title="核減事後申復批次報告",
         batch_label=", ".join(batches) or None,
+        embed_assets=False,
     )
     return Response(html, content_type="text/html; charset=utf-8")
 

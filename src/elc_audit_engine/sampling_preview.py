@@ -167,36 +167,4 @@ def _vault_card(vault_key: str | None, vault: dict[str, list[dict]] | None) -> s
     )
 
 
-def render_sampling_preview_html(
-    case_id: str,
-    payload: dict,
-    attachments: list[dict] | None = None,
-    *,
-    vault_key: str | None = None,
-    vault: dict[str, list[dict]] | None = None,
-) -> str:
-    """回傳單一抽樣案件的完整預覽 HTML（自包含、已轉義）。
-
-    vault_key／vault：由路由以 `vault_key_for_case` 推導並列出的佐證庫檔案（分類 → 檔案清單）。
-    """
-    sections = "".join([
-        _patient_card(payload),
-        _soap_card(payload),
-        _lab_card(payload),
-        _cloud_card(payload),
-        _attachment_card(attachments or []),
-        _vault_card(vault_key, vault),
-    ])
-    return (
-        "<!doctype html>"
-        '<html lang="zh-Hant"><head><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"<title>抽樣預審 {_e(case_id)}</title><style>{_CSS}</style></head><body><main>"
-        f'<header><div class="label">抽樣預審案件</div><h1 style="font-size:20px;margin:2px 0 8px;">{_e(case_id)}</h1></header>'
-        f"{sections}"
-        '<p class="muted">比對輔助預覽；不產生支持／裸奔或給付判定，最終判定由審查人員作成。</p>'
-        "</main></body></html>"
-    )
-
-
-__all__ = ["render_sampling_preview_html", "split_soap"]
+__all__ = ["split_soap"]

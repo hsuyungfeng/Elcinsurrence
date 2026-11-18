@@ -562,3 +562,26 @@ def test_script_collector_excludes_pathology(tmp_path):
     batch = _batch(_case("A", "S61.2", [_proc("25003C"), _proc("25004C", seq="2"), _proc("PROC1", seq="3")]))
     codes = [code for code, _name, _text in module.collect_general_targets(batch)]
     assert codes == ["PROC1"]
+
+
+# ── 2026-11-18：app 直接回傳的月報須符合嚴格 CSP（srcdoc 會繼承父頁 CSP）──
+
+
+def test_app_served_report_uses_external_assets_for_strict_csp():
+    batch = _batch(_case("A", "S61.2", [_proc("PROC1")]))
+    templates = {("PROC1", "S61.2"): GOOD_SOAP}
+    html = render_batch_report_html(batch, templates=templates, embed_assets=False)
+    assert "<style" not in html
+    assert "onclick=" not in html
+    assert 'href="/static/css/monthly-report.css"' in html
+    assert 'src="/static/js/monthly-report.js"' in html
+    assert "data-copy-soap" in html
+
+
+def test_exported_report_stays_self_contained_for_offline_viewing():
+    batch = _batch(_case("A", "S61.2", [_proc("PROC1")]))
+    templates = {("PROC1", "S61.2"): GOOD_SOAP}
+    html = render_batch_report_html(batch, templates=templates)  # 預設＝匯出檔，內嵌資源
+    assert "<style>" in html
+    assert 'onclick="copySoap(this)"' in html
+    assert "/static/" not in html

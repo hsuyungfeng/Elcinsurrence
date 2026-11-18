@@ -176,7 +176,7 @@ def monthly_batch_report(batch_id: str):
     if fmt == "html":
         templates = load_templates(store, report_view(audit))
         return Response(
-            render_batch_report_html(audit, templates=templates),
+            render_batch_report_html(audit, templates=templates, embed_assets=False),
             content_type="text/html; charset=utf-8",
         )
 

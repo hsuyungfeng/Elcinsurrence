@@ -242,3 +242,23 @@ def test_thumbnail_returns_none_for_non_image(tmp_path):
     bogus = tmp_path / "note.txt"
     bogus.write_text("not an image", encoding="utf-8")
     assert report.make_thumbnail_data_uri(str(bogus)) is None
+
+
+# ── 2026-11-18：app 直接回傳的審查報告須符合嚴格 CSP ──
+
+
+def test_app_served_review_report_has_no_inline_style_or_handlers():
+    view = report.ReviewCaseView(case_id="C-9", stage=2, vault_files={"images": ("x.jpg",)})
+    html = report.render_unified_review_html(view, embed_assets=False)
+    assert "<style" not in html
+    assert "style=\"" not in html
+    assert "onclick=" not in html
+    assert 'href="/static/css/review-report.css"' in html
+    assert 'src="/static/js/review-report.js"' in html
+
+
+def test_exported_review_report_stays_self_contained():
+    view = report.ReviewCaseView(case_id="C-9", stage=2, vault_files={"images": ("x.jpg",)})
+    html = report.render_unified_review_html(view)  # 預設＝匯出檔，內嵌資源
+    assert "<style>" in html
+    assert "/static/" not in html

@@ -268,6 +268,7 @@ def sampling_batch_report():
         views,
         title="抽樣預審批次報告",
         batch_label=", ".join(batches) or None,
+        embed_assets=False,
     )
     return Response(html, content_type="text/html; charset=utf-8")
 
@@ -281,7 +282,7 @@ def sampling_case_preview_html(case_id: str):
     """
     record = _sampling_case_or_404(case_id)
     view = _stage2_view(case_store(), record, with_thumbnails=True)
-    return Response(render_unified_review_html(view), content_type="text/html; charset=utf-8")
+    return Response(render_unified_review_html(view, embed_assets=False), content_type="text/html; charset=utf-8")
 
 
 @bp.route("/api/sampling/cases/<case_id>/export-xml", methods=["GET"])

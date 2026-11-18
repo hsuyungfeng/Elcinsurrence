@@ -347,7 +347,7 @@ def _render_tier_section(title: str, badge: str, cases: list[CaseAudit], templat
     )
 
 
-def render_batch_report_html(batch: BatchAudit, *, templates=None) -> str:
+def render_batch_report_html(batch: BatchAudit, *, templates=None, embed_assets: bool = True) -> str:
     """把 BatchAudit 渲染成精簡版自包含 HTML（先套用 report_view 的納入規則）。
 
     案件依醫療總費用點數降冪排序，並依 > 5000、3000-5000、1000-3000 三級距分類分組呈現。
@@ -388,12 +388,22 @@ def render_batch_report_html(batch: BatchAudit, *, templates=None) -> str:
         '<p class="meta">本批次無符合條件（醫療總點數 > 1000，且有給付規定超過門檻）的案件。</p>'
     )
 
-    return (
+    head_assets = (
+        f"<style>{_CSS}{_SOAP_CSS}</style>"
+        if embed_assets
+        else '<link rel="stylesheet" href="/static/css/monthly-report.css">'
+    )
+    tail_assets = (
+        f"<script>{_COPY_SCRIPT}</script>"
+        if embed_assets
+        else '<script src="/static/js/monthly-report.js"></script>'
+    )
+    doc = (
         "<!doctype html>"
         '<html lang="zh-Hant"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>當月申報預審 {_e(view.batch)}</title>"
-        f"<style>{_CSS}{_SOAP_CSS}</style></head><body><main>"
+        f"{head_assets}</head><body><main>"
         '<header class="hero">'
         f'<div class="batch">{_e(view.batch)}</div>'
         "<h1>當月申報預審報告</h1>"
@@ -408,8 +418,12 @@ def render_batch_report_html(batch: BatchAudit, *, templates=None) -> str:
         "<h2>案件明細</h2>"
         f"{cases_html}"
         "<footer>本報告由 elc-audit-engine 產生；內含身分證字號、姓名與出生日期（個人資料），請依院內規範保管與傳送。</footer>"
-        f"</main><script>{_COPY_SCRIPT}</script></body></html>"
+        f"</main>{tail_assets}</body></html>"
     )
+    if not embed_assets:
+        # app 直接回傳：複製按鈕改由外部腳本以事件委派處理（符合 script-src 'self'）
+        doc = doc.replace('onclick="copySoap(this)"', 'data-copy-soap="1"')
+    return doc
 
 
 __all__ = ["render_batch_report_html"]

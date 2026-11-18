@@ -389,7 +389,6 @@ def ingest_soapvoice_session():
             logger.warning("SoapVoice 截圖歸檔失敗: %s", exc)
 
     # 建立 HIS 看診個案記錄入 case_store
-    _soap_text_repr = json.dumps(soap_dict, ensure_ascii=False) if isinstance(soap_dict, dict) else str(soap_dict)
     case_id = _encounter_case_id(id_card, visit_date or "", order_code or "", session_id or "")
 
     store = case_store()
