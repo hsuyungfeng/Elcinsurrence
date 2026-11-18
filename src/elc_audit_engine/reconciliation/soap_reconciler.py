@@ -88,7 +88,6 @@ def reconcile_case_soap(
     id_card_clean = re.sub(r"[^\w]", "", str(id_card)).strip().upper()
 
     visit_date = str(case_payload.get("visit_date") or raw.get("d9") or "").strip()
-    patient_name = str(case_payload.get("patient_name") or raw.get("d49") or "").strip()
 
     if not id_card_clean or not visit_date:
         return {
@@ -108,7 +107,7 @@ def reconcile_case_soap(
     # ─────────────────────────────────────────────────────────────────
     if store is not None:
         try:
-            his_records = store.list_all(kind="his", limit=1000)
+            his_records = store.iter_all(kind="his")  # 逐頁讀取，不截斷（CR-03）
             for rec in his_records:
                 p = rec.payload or {}
                 rec_id = re.sub(r"[^\w]", "", str(p.get("id_card") or p.get("record_no") or "")).strip().upper()
@@ -138,15 +137,9 @@ def reconcile_case_soap(
     try:
         from elc_audit_engine.api.routes.his_integration import PATIENT_DB
 
-        matched_pdata = None
-        if id_card_clean in PATIENT_DB:
-            matched_pdata = PATIENT_DB[id_card_clean]
-        else:
-            # 依姓名輔助比對
-            for _, pdata in PATIENT_DB.items():
-                if patient_name and pdata.get("patient_name") == patient_name:
-                    matched_pdata = pdata
-                    break
+        # CR-05：只以身分證／病歷號精確比對。不得以姓名回退匹配，
+        # 否則同名病人的 SOAP 與佐證檔會被綁到別人的申報案件上。
+        matched_pdata = PATIENT_DB.get(id_card_clean)
 
         if matched_pdata:
             encounters = matched_pdata.get("encounters") or []
@@ -202,7 +195,7 @@ def reconcile_monthly_batch(
     facility_code: str | None = None,
 ) -> dict[str, Any]:
     """批次比對並將日常語音 SOAP 補強寫入整批當月申報案件（更新 CaseStore payload）。"""
-    records = store.list_by_batch(batch_id, limit=5000)
+    records = list(store.iter_by_batch(batch_id))  # 逐頁讀取，不截斷（CR-03）
     matched_count = 0
     updated_count = 0
 

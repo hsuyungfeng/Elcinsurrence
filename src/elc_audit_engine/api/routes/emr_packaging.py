@@ -16,9 +16,10 @@ from typing import Any
 
 from flask import Blueprint, current_app, jsonify, request, send_from_directory
 
+from elc_audit_engine.api.batch_limits import refuse_if_truncated
 from elc_audit_engine.api.context import case_store
-from elc_audit_engine.api.demo_data import DEMO_APPEAL_CASES, DEMO_SAMPLING_CASES
 from elc_audit_engine.api.errors import ApiError
+from elc_audit_engine.services.batch_reads import read_batch
 from elc_audit_engine.packagers.emr_batch_packager import (
     BatchZipPackager,
     Emr11CodeNaming,
@@ -32,6 +33,9 @@ from elc_audit_engine.evidence_vault import list_vault_files
 bp = Blueprint("emr_packaging", __name__)
 
 _SAFE_ZIP_NAME_RE = re.compile(r"^[0-9A-Za-z_-]+\.zip$")
+# 健保機構代碼為 10 碼數字；未驗證的值會進入輸出檔名，必須先擋下（CR-01）。
+_FACILITY_CODE_RE = re.compile(r"^\d{10}$")
+_DEFAULT_FACILITY_CODE = "3503250461"
 
 
 def _get_emr_output_dir() -> Path:
@@ -45,22 +49,22 @@ def create_emr_batch_package():
     """執行批次 EMR 500MB ZIP 打包。"""
     body = request.get_json(silent=True) or {}
     target = (body.get("target") or "sampling").strip().lower()
-    facility_code = str(body.get("facility_code") or "3503250461").strip()
+    facility_code = str(body.get("facility_code") or _DEFAULT_FACILITY_CODE).strip()
+    if not _FACILITY_CODE_RE.match(facility_code):
+        raise ApiError("機構代碼必須為 10 碼數字", status=400)
     submission_type = int(body.get("submission_type") or (4 if target == "appeal" else 1))
     old_accept_no = body.get("old_accept_no")
 
+    # 只打包資料庫中的真實案件；不再以展示資料（DEMO）補位，避免假病人進入申報包（CR-02）。
     store = case_store()
-    cases_records = store.list_all(kind=target, limit=1000)
-
-    # 若資料庫中尚無案件，回退使用展示案件以供即時預覽體驗
+    # CR-03：逐頁讀取；若案件數超過單次上限則以 409 拒絕，不產出不完整的送審包。
+    cases_records, meta = read_batch(store, target)
+    refuse_if_truncated(meta, what=f"{target} 案件")
     raw_cases: list[dict[str, Any]] = []
-    if cases_records:
-        for r in cases_records:
-            payload = dict(r.payload or {})
-            payload.setdefault("id", r.case_id)
-            raw_cases.append(payload)
-    else:
-        raw_cases = list(DEMO_APPEAL_CASES if target == "appeal" else DEMO_SAMPLING_CASES)
+    for r in cases_records:
+        payload = dict(r.payload or {})
+        payload.setdefault("id", r.case_id)
+        raw_cases.append(payload)
 
     if not raw_cases:
         raise ApiError(f"目前無可供打包之 {target} 案件", status=400)
@@ -74,16 +78,32 @@ def create_emr_batch_package():
         soap_raw = c.get("soap") or c.get("soap_text") or ""
         soap_text = format_soap_to_text(soap_raw) if isinstance(soap_raw, dict) else str(soap_raw)
 
+        # 必填欄位缺漏時拒絕整批打包，不以假值補齊（CR-02）。
+        required = {
+            "patient_name": c.get("patient_name") or c.get("name"),
+            "id_card": c.get("id_card") or c.get("record_no"),
+            "visit_date": c.get("visit_date") or c.get("date"),
+            "primary_diagnosis": c.get("primary_diagnosis") or c.get("d18"),
+            "total_points": c.get("total_points") or c.get("points"),
+        }
+        missing = [name for name, value in required.items() if value in (None, "")]
+        if missing:
+            raise ApiError(
+                f"案件 {case_id} 缺少必填欄位：{', '.join(missing)}",
+                status=422,
+                extra={"case_id": case_id, "missing": missing},
+            )
+
         # 1. 產生 A 類標準 SOAP 紀錄單 PDF（含三大樹狀書籤）
         case_info = {
             "facility_code": facility_code,
-            "patient_name": c.get("patient_name") or c.get("name") or "病患",
-            "id_card": c.get("id_card") or c.get("record_no") or "A123456789",
+            "patient_name": required["patient_name"],
+            "id_card": required["id_card"],
             "record_no": c.get("record_no"),
-            "visit_date": c.get("visit_date") or c.get("date"),
-            "primary_diagnosis": c.get("primary_diagnosis") or c.get("d18") or "E11.9",
+            "visit_date": required["visit_date"],
+            "primary_diagnosis": required["primary_diagnosis"],
             "secondary_diagnoses": c.get("secondary_diagnoses") or [],
-            "total_points": c.get("total_points") or c.get("points") or 100,
+            "total_points": required["total_points"],
             "case_class": case_class,
             "orders": c.get("orders") or [],
         }
@@ -157,7 +177,12 @@ def create_emr_batch_package():
     out_dir = _get_emr_output_dir()
     results = []
     for zip_name, zip_bytes, report in packages:
-        file_path = out_dir / zip_name
+        # 雙重防護：檔名白名單 + 解析後必須仍在輸出目錄內（CR-01）。
+        if not _SAFE_ZIP_NAME_RE.match(zip_name):
+            raise ApiError("產出檔名不合法", status=500)
+        file_path = (out_dir / zip_name).resolve()
+        if file_path.parent != out_dir:
+            raise ApiError("產出路徑超出允許目錄", status=500)
         file_path.write_bytes(zip_bytes)
         results.append({
             "filename": zip_name,

@@ -334,7 +334,13 @@ def build_emr_bundle(
     )
     from elc_audit_engine.generators.sampling_xml import SamplingXmlError, build_sampling_xml
 
-    records = store.list_by_batch(batch_id)
+    # CR-03：送審檔不可以不完整產出。改用逐頁讀取，避免 list_by_batch 預設上限靜默截斷。
+    records = list(store.iter_by_batch(batch_id))
+    total = store.count_by_batch(batch_id)
+    if total != len(records):
+        raise BundleError(
+            f"批次共 {total} 筆，實際讀到 {len(records)} 筆，為避免產出不完整的送審檔，已拒絕執行"
+        )
     audit_cases = {c.case_id: c for c in audit_batch(store, batch_id, rules_db_path=rules_db_path, persist=False).cases}
     bundles = []
     failures: list[dict] = []

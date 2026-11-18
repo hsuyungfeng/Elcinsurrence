@@ -502,14 +502,12 @@ def import_appeal_cases():
             zip_cat, zip_items = inspect_zip_contents(path)
             if zip_cat == "totfa":
                 totfa_res = parse_totfa_zip(path)
+                # CR-04：不再依 case_seq 去重（同批次內 case_seq 可能重複，會丟掉不同案件），
+                # 也不再以「前 50 筆」上限或失效的門檻條件靜默截斷。每筆醫令都保留，
+                # 去重鍵為（案件序號、醫令序號、醫令代碼）。
                 records = []
-                seen_cases = set()
+                seen_orders: set[tuple] = set()
                 for c in totfa_res.cases:
-                    tp = 0
-                    try:
-                        tp = int(c.raw.get("d39") or 0)
-                    except (ValueError, TypeError):  # 非數字者以 0 計，不中斷匯入
-                        pass
                     for o in c.orders:
                         pts = 0
                         try:
@@ -521,18 +519,20 @@ def import_appeal_cases():
                             price = float(o.unit_price or 0.0)
                         except (ValueError, TypeError):  # 非數字者以 0 計
                             pass
-                        if (tp > 1000 and (pts >= 350 or price >= 5.0)) or len(records) < 50:
-                            if c.case_seq not in seen_cases and len(records) < 50:
-                                seen_cases.add(c.case_seq)
-                                records.append(DeductionRecord(
-                                    non_reimbursed_amount=pts or int(price),
-                                    case_seq=c.case_seq,
-                                    visit_date=c.visit_date,
-                                    id_number=c.record_no,
-                                    order_seq=str(o.seq) if o.seq is not None else None,
-                                    order_code=o.code,
-                                    deduction_reason=f"申報總檔核對預審（主診斷：{c.primary_diagnosis}）",
-                                ))
+                        order_seq = str(o.seq) if o.seq is not None else None
+                        key = (c.case_seq, order_seq, o.code)
+                        if key in seen_orders:
+                            continue
+                        seen_orders.add(key)
+                        records.append(DeductionRecord(
+                            non_reimbursed_amount=pts or int(price),
+                            case_seq=c.case_seq,
+                            visit_date=c.visit_date,
+                            id_number=c.record_no,
+                            order_seq=order_seq,
+                            order_code=o.code,
+                            deduction_reason=f"申報總檔核對預審（主診斷：{c.primary_diagnosis}）",
+                        ))
                 from elc_audit_engine.parsers.deduction import DeductionParseResult
                 result = DeductionParseResult(records=tuple(records), rejected=())
             elif zip_cat == "csv" and zip_items:

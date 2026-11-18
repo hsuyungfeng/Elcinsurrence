@@ -123,8 +123,24 @@ def test_batch_zip_packager_dynamic_splitting():
             assert "初審送核" in manifest_text
 
 
-def test_emr_batch_package_api_endpoint(make_api_app):
-    app = make_api_app()
+def test_emr_batch_package_api_endpoint(make_api_app, tmp_path):
+    # CR-02：路由不再以展示資料補位，測試需先寫入一筆完整的真實案件。
+    from elc_audit_engine.case_store import CaseStore
+
+    store = CaseStore(db_path=str(tmp_path / "emr_cases.sqlite3"))
+    store.create(
+        case_id="CASE-EMR-0001",
+        kind="sampling",
+        payload={
+            "patient_name": "測試病人",
+            "id_card": "A100000001",
+            "visit_date": "1150301",
+            "primary_diagnosis": "E11.9",
+            "total_points": 100,
+            "soap": "S: test\nO: test\nA: test\nP: test",
+        },
+    )
+    app = make_api_app(case_store=store)
     client = app.test_client()
     auth_headers = {"X-API-Key": "valid-key-123"}
     # 測試 POST /api/emr/batch-package

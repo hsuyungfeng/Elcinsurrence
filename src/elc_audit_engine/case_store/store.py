@@ -14,6 +14,7 @@ import json
 import re
 import sqlite3
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -539,6 +540,30 @@ class CaseStore:
         finally:
             conn.close()
         return row["n"]
+
+    def iter_by_batch(self, batch: str, *, page_size: int = 500) -> Iterator[CaseRecord]:
+        """逐頁讀取申報批次內全部案件（不截斷）。
+
+        `list_by_batch` 單次最多 limit 筆；直接使用會靜默丟棄超出部分（CR-03）。
+        排序鍵 `created_at, case_id` 固定，分頁結果穩定。
+        """
+        offset = 0
+        while True:
+            page = self.list_by_batch(batch, limit=page_size, offset=offset)
+            yield from page
+            if len(page) < page_size:
+                return
+            offset += page_size
+
+    def iter_all(self, *, kind: str | None = None, page_size: int = 500) -> Iterator[CaseRecord]:
+        """逐頁讀取全部案件（可依 kind 篩選），不截斷（CR-03）。"""
+        offset = 0
+        while True:
+            page = self.list_all(kind=kind, limit=page_size, offset=offset)
+            yield from page
+            if len(page) < page_size:
+                return
+            offset += page_size
 
     def get_soap_template(
         self, order_code: str, primary_diagnosis: str, *, fallback_general: bool = True

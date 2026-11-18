@@ -59,4 +59,5 @@ def test_appeal_import_totfa_zip(app_client):
     body = res.get_json()
     assert body["status"] == "success"
     assert body["imported"] > 0
-    assert body["imported"] <= 50
+    # CR-04：不再以 50 筆上限靜默截斷；真實 TOTFA 檔應完整匯入。
+    assert body["imported"] > 50
