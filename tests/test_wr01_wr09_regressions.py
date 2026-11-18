@@ -109,3 +109,16 @@ def test_needs_review_is_terminal_and_not_requeued(client):
     assert job_id not in pending_ids
     again = client.post(f"/api/bridge/jobs/{job_id}/status", json={"status": "FAILED"}, headers=KEY)
     assert again.status_code == 409
+
+
+# ── WR-06 上線前檢查：預設設定下，新輸出目錄必須等同舊版既有封包位置 ──
+
+
+def test_default_emr_output_dir_matches_legacy_package_location(api):
+    """WR-06：舊版以相對路徑 data/output/emr_packages 存放封包（服務 WorkingDirectory=專案根目錄）。
+    新版預設必須指向同一目錄，既有封包不需搬移。"""
+    from elc_audit_engine.api.routes.emr_packaging import _get_emr_output_dir
+
+    legacy = (Path("data") / "output" / "emr_packages").resolve()
+    with api.app_context():
+        assert _get_emr_output_dir() == legacy
