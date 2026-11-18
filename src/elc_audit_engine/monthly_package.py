@@ -18,7 +18,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from elc_audit_engine.case_store import CaseStore
-from elc_audit_engine.monthly_audit import audit_batch
+from urllib.parse import quote
+
+from elc_audit_engine.monthly_audit import audit_batch, report_view
+from elc_audit_engine.monthly_report_html import render_batch_report_html
 from elc_audit_engine.comparator.soap_advice import generate_template_soap_condensed
 from elc_audit_engine.rule_repository import get_rule
 from elc_audit_engine.comparator.soap_comparison import compare_soap_with_template
@@ -191,7 +194,10 @@ def build_batch_package(
       額度用盡仍缺者標示「尚未預生成」。
     - 院所資料必須完整且已確認，否則拋出 FacilityProfileError。
 
-    ZIP 內容：`病歷/<case_id>.html`（每案一份）。
+    ZIP 內容（可離線開啟、以瀏覽器比對）：
+    - `index.html`：入口頁，連結月報與每案病歷
+    - `報告/當月申報預審報告.html`：獨立月報（資源內嵌，不需伺服器）
+    - `病歷/<case_id>.html`：每案範例病歷（每案一份）
     """
     status = profile_status(facility)
     if not status.ready:
@@ -229,11 +235,23 @@ def build_batch_package(
                     templates[key] = outcome.soap
         templates = load_templates(store, audit) | templates
 
+    report_html = render_batch_report_html(audit, templates=load_templates(store, report_view(audit)))
+    report_name = "報告/當月申報預審報告.html"
+    case_docs = [(f"病歷/{case.case_id}.html", _case_document(store, case, payload, templates)) for case, payload in no_soap]
+    links = [f'<li><a href="{quote(report_name)}">當月申報預審報告（獨立月報）</a></li>']
+    links += [f'<li><a href="{quote(name)}">{html.escape(name.split("/", 1)[1])}</a></li>' for name, _ in case_docs]
+    index_html = (
+        '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1"><title>月報下載包 '
+        f'{html.escape(batch_id)}</title></head><body><h1>月報下載包 {html.escape(batch_id)}</h1>'
+        '<p>可離線開啟；月報與每案病歷為獨立 HTML，請以瀏覽器比對。</p><ul>' + "".join(links) + '</ul></body></html>'
+    )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for case, payload in no_soap:
-            doc = _case_document(store, case, payload, templates)
-            zf.writestr(f"病歷/{case.case_id}.html", doc.encode("utf-8"))
+        zf.writestr("index.html", index_html.encode("utf-8"))
+        zf.writestr(report_name, report_html.encode("utf-8"))
+        for name, doc in case_docs:
+            zf.writestr(name, doc.encode("utf-8"))
     return buf.getvalue()
 
 

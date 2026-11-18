@@ -206,12 +206,15 @@ def test_package_after_confirmation_returns_zip_with_report_and_case_docs(make_a
     resp = client.get(f"/api/monthly/batch/{BATCH}/package", headers=KEY)
     assert resp.status_code == 200
     assert resp.mimetype == "application/zip"
-    assert f"monthly_examples_{BATCH}.zip" in resp.headers["Content-Disposition"]
+    assert f"monthly_package_{BATCH}.zip" in resp.headers["Content-Disposition"]
 
     with zipfile.ZipFile(io.BytesIO(resp.data)) as zf:
         names = zf.namelist()
-        # 下載到本機只包含範例病歷（無 SOAP 案件），不含報告
-        assert "報告.html" not in names
+        # 下載包可離線比對：入口頁、獨立月報（內嵌資源）與範例病歷
+        assert "index.html" in names
+        assert "報告/當月申報預審報告.html" in names
+        report = zf.read("報告/當月申報預審報告.html").decode("utf-8")
+        assert "<style>" in report and "/static/" not in report  # 離線可開，不依賴伺服器
         case_docs = [n for n in names if n.startswith("病歷/") and n.endswith(".html")]
         assert len(case_docs) == 2
         docs = {n: zf.read(n).decode("utf-8") for n in case_docs}

@@ -340,7 +340,7 @@ def monthly_batch_package(batch_id: str):
     except FacilityProfileError as exc:  # 理論上已於上方檢查，保留防禦
         return jsonify({"status": "error", "code": "facility_profile_required", "missing": exc.missing,
                          "confirmed": exc.confirmed, "message": str(exc)}), 412
-    filename = f"monthly_examples_{batch_id}.zip"
+    filename = f"monthly_package_{batch_id}.zip"
     return Response(
         body,
         mimetype="application/zip",
