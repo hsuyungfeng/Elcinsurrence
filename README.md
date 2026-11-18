@@ -643,6 +643,6 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 ---
 
 ## 📂 專案架構文件參考
-- **全景架構升級計畫**：[`plan-v5.md`](plan-v5.md)（深度整合 SoapVoice、Agent-Desktop 與 WebBrain）
+- **全景架構升級計畫**：[`plan-v5.md`](docs/plans/plan-v5.md)（深度整合 SoapVoice、Agent-Desktop 與 WebBrain）
 - **開發進度與里程碑**：[`progress.md`](progress.md)
 - **改進意見與架構分析**：[`deepflash4improve.md`](deepflash4improve.md)

@@ -54,7 +54,7 @@
 1. **健保合規與核刪壓力（防禦面）**：每月申報總檔（`TOTFA.zip`）、專業審查隨機抽樣（`CSV/XML`）、以及核減事後申復（`核減檔`）耗費大量醫師與行政人力；若 SOAP 病歷記載與健保支付標準（如 C 類支付規定、特殊藥品給付規定）脫鉤，即遭核刪或放大回推。
 2. **診間看診時間壓縮與自費轉換瓶頸（營收面）**：醫師在 3～5 分鐘內需同時完成問診、打字、查閱健保雲端藥歷 2.0、開立醫令與衛教，缺乏即時 AI 臨床輔助工具將症狀導向「高合規健保處置」或「高價值自費檢測/療程」。
 
-本計畫書（`plan-v5.md`）在 [`plan-v4.md`](file:///home/hsu/Desktop/Elcinsurrence/plan-v4.md) 的基礎上，結合 **Codebase Memory MCP 跨倉知識圖譜分析**（涵蓋 `Elcinsurrence` 9,693 節點與 `SoapVoice` 2,782 節點），並深度整合兩大次世代 Agent 自動化引擎——**`vercel-labs/agent-desktop`**（原生 HIS 桌面控制）與 **`webbrain-one/webbrain`**（瀏覽器活體 Session 與 VPN 藥歷萃取），打造無縫閉環的醫療 AI 作業系統。
+本計畫書（`plan-v5.md`）在 [`plan-v4.md`](plan-v4.md) 的基礎上，結合 **Codebase Memory MCP 跨倉知識圖譜分析**（涵蓋 `Elcinsurrence` 9,693 節點與 `SoapVoice` 2,782 節點），並深度整合兩大次世代 Agent 自動化引擎——**`vercel-labs/agent-desktop`**（原生 HIS 桌面控制）與 **`webbrain-one/webbrain`**（瀏覽器活體 Session 與 VPN 藥歷萃取），打造無縫閉環的醫療 AI 作業系統。
 
 ```mermaid
 flowchart TB

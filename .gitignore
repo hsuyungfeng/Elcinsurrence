@@ -67,3 +67,14 @@ TOTFA.zip
 # 使用者上傳之測試資料（2026-11-14，含 238MB 訓練 zip 與音訊，不可提交）
 Wavesample/
 config/facility.json
+
+# 發布包產物（體積大、可由原始碼重建；說明文件仍追蹤）
+deploy/release-*/*.zip
+deploy/release-*/ElcAgent-bin/
+deploy/release-*/archive/
+
+# 本機 Claude 工具設定
+.claude/
+
+# 訓練／原始資料壓縮檔：不進版本控制（公開倉庫，且體積超過 GitHub 單檔上限）
+data/**/*.zip

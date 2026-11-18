@@ -1,0 +1,5 @@
+351f7cf26ed606aabdb61235be7e23d0a95e9fa3a76e7a58faa07656dc61cc66  ElcAgent-src-2a6fea3.zip
+a9e007838c8f9a9d61f7218f84c2f059f7e6ea25e55d6b0c939d72e8de6bc326  SoapVoice-client-src-a6a9112.zip
+d274667031322e50b9c2b1ab81c2ca46835d52cc932769a5c34bd4d481fd94c3  ElcAgent-bin/bin/agent-desktop.exe
+26e471163e4b020800f4b7c7d82561a90cdd312010976f4186aa5714d6afc3c3  ElcAgent-bin/bin/agent_desktop_ffi.dll
+ae0e819aeb4c2f6a8aa33b3828fe2dc5628534290feb51f43994c69946a4c4ba  31-WINDOWS-MANUAL-VERIFY.md
