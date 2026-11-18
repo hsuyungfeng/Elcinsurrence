@@ -340,12 +340,15 @@ def test_windows_agent_ui_error():
     )
     res = agent.run_once()
     assert res is not None
-    assert res["status"] == "failed"
+    assert res["status"] == "needs_review"
     assert res["reason"] == "ui_error"
 
+    # WR-09：push 已開始後的 UI 例外不得回報 FAILED（伺服器會重新排隊而重複寫入）
     fail_reqs = [r for r in http_mock.recorded_requests if r["body"] and r["body"].get("status") == "FAILED"]
-    assert len(fail_reqs) == 1
-    assert fail_reqs[0]["body"]["reason"] == "ui_error"
+    assert fail_reqs == []
+    review_reqs = [r for r in http_mock.recorded_requests if r["body"] and r["body"].get("status") == "NEEDS_REVIEW"]
+    assert len(review_reqs) == 1
+    assert review_reqs[0]["body"]["reason"] == "ui_error"
 
 
 def test_windows_agent_phi_log_safety(caplog):

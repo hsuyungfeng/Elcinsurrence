@@ -22,8 +22,16 @@ from elc_audit_engine.case_store.store import CaseStore
 
 
 def test_draft_states_exhaustive():
-    assert len(ALL_DRAFT_STATES) == 8
+    assert len(ALL_DRAFT_STATES) == 9
     assert len(TERMINAL_DRAFT_STATES) == 3
+    # WR-09：needs_review 不是終態，但沒有任何自動轉換（不可重送）
+    assert "needs_review" in ALL_DRAFT_STATES
+    assert "needs_review" not in TERMINAL_DRAFT_STATES
+    assert is_transition_allowed("queued", "needs_review")
+    assert is_transition_allowed("needs_review", STATE_PUSHED)
+    assert is_transition_allowed("needs_review", STATE_REJECTED)
+    for to in (STATE_APPROVED, STATE_QUEUED, STATE_FAILED, STATE_VALIDATED):
+        assert not is_transition_allowed("needs_review", to)
 
     # Unknown states
     with pytest.raises(UnknownDraftStateError):

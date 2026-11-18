@@ -290,15 +290,16 @@ class WindowsAgent:
                 write_soap_only=True,
             )
         except (StaleRefError, AgentDesktopError) as exc:
+            # WR-09：push 已開始，UI 例外發生時無法確定寫入是否已生效，不得回報 FAILED（會被重新排隊）。
             reason = "ui_error"
             logger.error("UI error during writeback for job_id=%s: %s", job_id, exc)
-            self.report_job_status(job_id, "FAILED", failure_reason=reason)
-            return {"status": "failed", "job_id": job_id, "reason": reason}
+            self.report_job_status(job_id, "NEEDS_REVIEW", failure_reason=reason)
+            return {"status": "needs_review", "job_id": job_id, "reason": reason}
         except Exception as exc:
             reason = "ui_error"
             logger.exception("Unexpected error during writeback: %s", exc)
-            self.report_job_status(job_id, "FAILED", failure_reason=reason)
-            return {"status": "failed", "job_id": job_id, "reason": reason}
+            self.report_job_status(job_id, "NEEDS_REVIEW", failure_reason=reason)
+            return {"status": "needs_review", "job_id": job_id, "reason": reason}
 
         # 4. Readback verification (§8.4)
         # Extract read back actual values from each field

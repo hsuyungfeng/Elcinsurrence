@@ -448,13 +448,15 @@ def process_his_push_job(
             app_name=app_name,
             case_payload=payload,
         )
-        final_status = "SUCCESS" if push_summary.get("status") == "success" else "FAILED"
+        # WR-09：寫入已發生但結果不明確時不得回報 FAILED（會被重新排隊而重複寫入）。
+        final_status = "SUCCESS" if push_summary.get("status") == "success" else "NEEDS_REVIEW"
         report_status(store, job_id, status=final_status, expected_status="SENDING")
         return push_summary
     except Exception as exc:
         logger.exception("HIS Push failed for job %s: %s", job_id, exc)
         try:
-            report_status(store, job_id, status="FAILED", expected_status="SENDING")
+            # WR-09：push 已開始，寫入是否發生無法確定，改為需人工核對的終態。
+            report_status(store, job_id, status="NEEDS_REVIEW", expected_status="SENDING")
         except Exception:
             pass
         raise

@@ -11,8 +11,6 @@ from datetime import timedelta
 import pytest
 
 from elc_audit_engine.bridge_queue import (
-    STATUS_FAILED_PERMANENT,
-    STATUS_PENDING,
     STATUS_SENDING,
     enqueue_job,
     get_job,
@@ -37,39 +35,21 @@ def _his_job(store, *, max_retries: int = 2) -> str:
     return job["job_id"]
 
 
-def test_a5_lease_expired_job_is_reclaimed_and_can_be_claimed_again(store):
+def test_a5_lease_expired_job_is_needs_review_and_never_redispatched(store):
+    """WR-09：租約逾時 → NEEDS_REVIEW（不重新排隊、不可再認領，避免重複寫入 HIS）。"""
+    from elc_audit_engine.bridge_queue import BridgeConflictError, STATUS_NEEDS_REVIEW
+
     job_id = _his_job(store, max_retries=3)
-    claimed_at = None
-    report_status(store, job_id, status=STATUS_SENDING)  # Agent 認領
-    job = get_job(store, job_id)
-    assert job["status"] == STATUS_SENDING
-    claimed_at = job["lease_started_at"]
-
-    from datetime import datetime
-
-    later = datetime.fromisoformat(claimed_at) + timedelta(seconds=job["lease_timeout_sec"] + 1)
-    reclaimed = reclaim_expired(store, now=later)
-    assert reclaimed == 1
-
-    job = get_job(store, job_id)
-    assert job["status"] == STATUS_PENDING  # 未超過上限 → 重新排隊
-    assert job["retry_count"] >= 1
-    # 重新認領成功
-    report_status(store, job_id, status=STATUS_SENDING)
-    assert get_job(store, job_id)["status"] == STATUS_SENDING
-
-
-def test_a5_repeated_lease_expiry_becomes_permanent_failure(store):
-    from datetime import datetime
-
-    job_id = _his_job(store, max_retries=1)
     report_status(store, job_id, status=STATUS_SENDING)
     job = get_job(store, job_id)
+    from datetime import datetime
+
     later = datetime.fromisoformat(job["lease_started_at"]) + timedelta(seconds=job["lease_timeout_sec"] + 1)
-    reclaim_expired(store, now=later)
+    assert reclaim_expired(store, now=later) == 1
     job = get_job(store, job_id)
-    # 重試上限已用盡 → 永久失敗（不再重複派發）
-    assert job["status"] == STATUS_FAILED_PERMANENT
+    assert job["status"] == STATUS_NEEDS_REVIEW
+    with pytest.raises(BridgeConflictError):
+        report_status(store, job_id, status=STATUS_SENDING)
 
 
 def test_a6_draft_lifecycle_does_not_change_stage2_case_state(store):

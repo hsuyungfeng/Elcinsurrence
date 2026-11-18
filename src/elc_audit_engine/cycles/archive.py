@@ -17,6 +17,7 @@ from elc_audit_engine.api.routes.soap_review import approve_and_enqueue
 from elc_audit_engine.case_store.soap_draft_states import (
     STATE_APPROVED,
     STATE_FAILED,
+    STATE_NEEDS_REVIEW,
     STATE_PUSHED,
     STATE_QUEUED,
     STATE_VALIDATED,
@@ -405,6 +406,13 @@ def archive_cycle(
                 expect_from=(STATE_CONFIRMED, STATE_ARCHIVING),
             )
             return 409, {"status": "his_failed", "reason": reason}
+
+    # WR-09：寫入結果未知，不得重送，等待人工於 HIS 核對
+    if draft.state == STATE_NEEDS_REVIEW:
+        return 409, {
+            "status": "his_needs_review",
+            "message": "HIS 寫入結果未知，需人工於 HIS 核對後處理，系統不會自動重送",
+        }
 
     # 其餘狀態（如尚未核准之 draft 等）
     return 409, {"status": "not_confirmed", "message": f"草稿尚未進入排程 (狀態: {draft.state})"}

@@ -137,18 +137,23 @@ def report_bridge_job_status(job_id: str):
 
 
 def _sync_draft_before_report(store, draft_id: str, new_status: str, data: dict) -> None:
-    """HIS_PUSH 回報前同步草稿：SUCCESS → pushed；FAILED → failed。已處於目標狀態者略過（重送冪等）。"""
+    """HIS_PUSH 回報前同步草稿：SUCCESS → pushed；FAILED → failed；NEEDS_REVIEW → needs_review。
+    已處於目標狀態者略過（重送冪等）。"""
     try:
         draft = store.get_soap_draft(draft_id)
     except Exception as exc:  # 草稿不存在或讀取失敗：不得假裝已同步
         logger.error("HIS_PUSH 草稿讀取失敗 draft_id=%s: %s", draft_id, type(exc).__name__)
         raise ApiError("草稿狀態同步失敗（草稿不存在或讀取失敗），任務未標記成功", status=500)
-    target = "pushed" if new_status == "SUCCESS" else "failed"
+    target = {"SUCCESS": "pushed", "NEEDS_REVIEW": "needs_review"}.get(new_status, "failed")
     if draft.state == target:
         return
     try:
         if target == "pushed":
             store.update_soap_draft_state(draft_id, "pushed", agent_id=caller_id())
+        elif target == "needs_review":
+            # WR-09：寫入結果未知，草稿進入人工核對狀態，不可重送。
+            reason = str(data.get("reason") or data.get("failure_reason") or "write_result_unknown")
+            store.update_soap_draft_state(draft_id, "needs_review", reason=reason, agent_id=caller_id())
         else:
             reason = str(data.get("reason") or data.get("failure_reason") or "bridge_failed")
             store.update_soap_draft_state(draft_id, "failed", failure_reason=reason)

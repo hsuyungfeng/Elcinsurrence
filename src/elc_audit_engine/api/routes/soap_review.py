@@ -31,6 +31,7 @@ from elc_audit_engine.case_store.soap_draft_states import (
     STATE_FAILED,
     STATE_PUSHED,
     STATE_QUALITY_FAILED,
+    STATE_NEEDS_REVIEW,
     STATE_QUEUED,
     STATE_REJECTED,
     STATE_VALIDATED,
@@ -173,6 +174,9 @@ def approve_and_enqueue(
             eff_job_id = uuid.uuid4().hex
             store.set_soap_draft_his_job(draft_id, eff_job_id, machine_id)
             draft = store.get_soap_draft(draft_id)
+    elif draft.state == STATE_NEEDS_REVIEW:
+        # WR-09：HIS 寫入結果未知，禁止重送，須人工於 HIS 核對。
+        raise ApiError("HIS 寫入結果未知，需人工核對後處理，系統不會重送", status=409)
     elif draft.state == STATE_QUEUED:
         if draft.his_job_id:
             try:
@@ -606,6 +610,64 @@ def reject_draft(draft_id: str):
                 "action": "soap_review_reject",
                 "draft_id": draft.draft_id,
                 "reason_code": reason_code[:50] if reason_code else "",
+            },
+        )
+    except Exception as exc:
+        current_app.logger.warning("寫入審計日誌失敗：%s", exc)
+
+    return jsonify({"status": "success", "draft": _draft_to_dict(updated)}), 200
+
+
+@bp.route("/api/soap/drafts/needs-review", methods=["GET"])
+def list_needs_review_drafts():
+    """列出待人工核對（needs_review）的草稿：HIS 寫入結果未知，系統不會自動重送。"""
+    drafts = case_store().list_soap_drafts(state=STATE_NEEDS_REVIEW, limit=500)
+    return jsonify({"status": "success", "drafts": [_draft_to_dict(d) for d in drafts]})
+
+
+@bp.route("/api/soap/drafts/<draft_id>/resolve-needs-review", methods=["POST"])
+def resolve_needs_review_draft(draft_id: str):
+    """人工解除 needs_review（WR-09）。醫師須於 HIS 核對後選擇：
+
+    - resolution="pushed"：確認 HIS 已有此次內容 → 草稿轉為 pushed（終態）
+    - resolution="rejected"：確認 HIS 未寫入且放棄 → 草稿轉為 rejected（終態）
+
+    必須附上核對說明 note（不含病患資料）；不會重新排隊 HIS_PUSH。
+    """
+    data = _json_object()
+    draft = _draft_or_404(draft_id)
+    if draft.state != STATE_NEEDS_REVIEW:
+        raise ApiError(f"草稿狀態為 {draft.state}，僅 needs_review 可人工解除", status=409)
+
+    resolution = str(data.get("resolution") or "").strip()
+    if resolution not in ("pushed", "rejected"):
+        raise ApiError("resolution 必須為 pushed（已確認寫入）或 rejected（已確認未寫入並放棄）", status=422)
+    note = str(data.get("note") or "").strip()
+    if not note:
+        raise ApiError("人工解除必須附上核對說明（note）", status=422)
+
+    eff_reviewer = str(data.get("reviewer_id") or caller_id() or "unknown_reviewer")
+    try:
+        updated = case_store().update_soap_draft_state(
+            draft_id,
+            resolution,
+            reviewer_id=eff_reviewer,
+            decision=f"needs_review_resolved_{resolution}",
+            reason=note[:500],
+        )
+    except IllegalDraftTransitionError as exc:
+        raise ApiError(str(exc), status=409)
+
+    try:
+        audit_log.record_access(
+            caller_id=eff_reviewer,
+            method="POST",
+            path=request.path,
+            status=200,
+            detail={
+                "action": "soap_needs_review_resolve",
+                "draft_id": draft.draft_id,
+                "resolution": resolution,
             },
         )
     except Exception as exc:

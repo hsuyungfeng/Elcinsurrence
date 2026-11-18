@@ -27,6 +27,9 @@ STATE_QUEUED = "queued"
 STATE_PUSHED = "pushed"
 STATE_REJECTED = "rejected"
 STATE_FAILED = "failed"
+# WR-09／草稿：HIS 寫入結果未知（已寫入但讀回不符、UI 例外、租約逾時）。
+# 不可重送、不可自動重排；僅能由人工於 HIS 核對後轉為 pushed 或 rejected。
+STATE_NEEDS_REVIEW = "needs_review"
 
 ALL_DRAFT_STATES: frozenset[str] = frozenset(
     {
@@ -38,6 +41,7 @@ ALL_DRAFT_STATES: frozenset[str] = frozenset(
         STATE_PUSHED,
         STATE_REJECTED,
         STATE_FAILED,
+        STATE_NEEDS_REVIEW,
     }
 )
 
@@ -56,7 +60,9 @@ _DRAFT_TRANSITIONS: dict[str, frozenset[str]] = {
     # approved 後排入 HIS_PUSH 任務進入 queued；醫師亦可撤回/退回
     STATE_APPROVED: frozenset({STATE_QUEUED, STATE_REJECTED}),
     # queued 待 Agent 寫入，成功達 pushed，失敗達 failed
-    STATE_QUEUED: frozenset({STATE_PUSHED, STATE_FAILED}),
+    STATE_QUEUED: frozenset({STATE_PUSHED, STATE_FAILED, STATE_NEEDS_REVIEW}),
+    # needs_review 無任何自動轉換（不得重送）；僅人工核對後可轉 pushed（確認已寫入）或 rejected（確認未寫入並放棄）
+    STATE_NEEDS_REVIEW: frozenset({STATE_PUSHED, STATE_REJECTED}),
     # failed 允許重試（重新排隊 queued 或由醫師重新核准/退回）
     STATE_FAILED: frozenset({STATE_QUEUED, STATE_APPROVED, STATE_REJECTED}),
     # 終態不可轉出

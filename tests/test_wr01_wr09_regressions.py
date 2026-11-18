@@ -122,3 +122,128 @@ def test_default_emr_output_dir_matches_legacy_package_location(api):
     legacy = (Path("data") / "output" / "emr_packages").resolve()
     with api.app_context():
         assert _get_emr_output_dir() == legacy
+
+
+# ── WR-09 草稿層：needs_review 不可重送；租約逾時同步草稿 ──
+
+
+@pytest.fixture
+def case_store(tmp_path):
+    from elc_audit_engine.case_store import CaseStore
+
+    return CaseStore(db_path=str(tmp_path / "wr09.sqlite3"))
+
+
+def test_needs_review_draft_cannot_be_approved_or_resent(case_store):
+    from elc_audit_engine.api.errors import ApiError
+    from elc_audit_engine.api.routes.soap_review import approve_and_enqueue
+
+    draft = case_store.create_soap_draft(
+        case_id="SAMP-NR-1",
+        soap={"s": "a", "o": "b", "a": "c", "p": "d"},
+        state="queued",
+    )
+    case_store.update_soap_draft_state(draft.draft_id, "needs_review", reason="readback_mismatch")
+    with pytest.raises(ApiError) as exc:
+        approve_and_enqueue(case_store, draft_id=draft.draft_id, reviewer_id="dr-a")
+    assert exc.value.status == 409
+    assert "人工核對" in exc.value.message
+    assert case_store.get_soap_draft(draft.draft_id).state == "needs_review"
+
+
+def test_lease_expiry_marks_linked_draft_needs_review(case_store):
+    from datetime import UTC, datetime, timedelta
+
+    from elc_audit_engine.bridge_queue import STATUS_SENDING, enqueue_job, reclaim_expired, report_status
+
+    t0 = datetime(2026, 11, 18, 9, 0, 0, tzinfo=UTC)
+    draft = case_store.create_soap_draft(
+        case_id="SAMP-LE-1",
+        soap={"s": "a", "o": "b", "a": "c", "p": "d"},
+        state="queued",
+    )
+    job = enqueue_job(
+        case_store,
+        s_type_code="HIS_PUSH",
+        target_id="SAMP-LE-1",
+        extra_payload={"draft_id": draft.draft_id},
+    )
+    report_status(case_store, job["job_id"], status=STATUS_SENDING, now=t0)
+    assert reclaim_expired(case_store, now=t0 + timedelta(seconds=901)) == 1
+    assert case_store.get_soap_draft(draft.draft_id).state == "needs_review"
+
+
+# ── WR-09：人工解除 needs_review 的入口 ──
+
+
+def _needs_review_draft(store, case_id):
+    d = store.create_soap_draft(case_id=case_id, soap={"s": "a", "o": "b", "a": "c", "p": "d"}, state="queued")
+    store.update_soap_draft_state(d.draft_id, "needs_review", reason="readback_mismatch")
+    return d.draft_id
+
+
+def test_needs_review_list_endpoint_returns_only_needs_review(make_api_app, case_store):
+    did = _needs_review_draft(case_store, "SAMP-LST-1")
+    other = case_store.create_soap_draft(case_id="SAMP-LST-2", soap={"s": "x"}, state="validated")
+    client = make_api_app(case_store=case_store).test_client()
+    res = client.get("/api/soap/drafts/needs-review", headers=KEY)
+    assert res.status_code == 200
+    ids = [d["draft_id"] for d in res.get_json()["drafts"]]
+    assert did in ids
+    assert other.draft_id not in ids
+
+
+def test_resolve_needs_review_as_pushed_marks_terminal(make_api_app, case_store):
+    did = _needs_review_draft(case_store, "SAMP-RS-1")
+    client = make_api_app(case_store=case_store).test_client()
+    res = client.post(
+        f"/api/soap/drafts/{did}/resolve-needs-review",
+        json={"resolution": "pushed", "note": "已於 HIS 核對，內容一致"},
+        headers=KEY,
+    )
+    assert res.status_code == 200
+    assert res.get_json()["draft"]["state"] == "pushed"
+    # 終態不可再解除、也不可重送
+    again = client.post(
+        f"/api/soap/drafts/{did}/resolve-needs-review",
+        json={"resolution": "rejected", "note": "重複"},
+        headers=KEY,
+    )
+    assert again.status_code == 409
+
+
+def test_resolve_needs_review_as_rejected(make_api_app, case_store):
+    did = _needs_review_draft(case_store, "SAMP-RS-2")
+    client = make_api_app(case_store=case_store).test_client()
+    res = client.post(
+        f"/api/soap/drafts/{did}/resolve-needs-review",
+        json={"resolution": "rejected", "note": "HIS 無此紀錄，放棄寫入"},
+        headers=KEY,
+    )
+    assert res.status_code == 200
+    assert res.get_json()["draft"]["state"] == "rejected"
+
+
+def test_resolve_requires_note_and_valid_resolution(make_api_app, case_store):
+    did = _needs_review_draft(case_store, "SAMP-RS-3")
+    client = make_api_app(case_store=case_store).test_client()
+    no_note = client.post(f"/api/soap/drafts/{did}/resolve-needs-review", json={"resolution": "pushed"}, headers=KEY)
+    assert no_note.status_code == 422
+    bad = client.post(
+        f"/api/soap/drafts/{did}/resolve-needs-review",
+        json={"resolution": "failed", "note": "x"},
+        headers=KEY,
+    )
+    assert bad.status_code == 422
+    assert case_store.get_soap_draft(did).state == "needs_review"
+
+
+def test_resolve_rejects_drafts_not_in_needs_review(make_api_app, case_store):
+    d = case_store.create_soap_draft(case_id="SAMP-RS-4", soap={"s": "x"}, state="queued")
+    client = make_api_app(case_store=case_store).test_client()
+    res = client.post(
+        f"/api/soap/drafts/{d.draft_id}/resolve-needs-review",
+        json={"resolution": "pushed", "note": "x"},
+        headers=KEY,
+    )
+    assert res.status_code == 409
