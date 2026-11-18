@@ -90,7 +90,8 @@ def list_pending_jobs():
 def report_bridge_job_status(job_id: str):
     """地端 Agent 回報狀態。
 
-    請求：{"status": "SENDING"|"SUCCESS"|"FAILED", "sLocal_ID": ..., "sNHI_ID": ..., "NHI_Query": "A12"}
+    請求：{"status": "SENDING"|"SUCCESS"|"FAILED"|"NEEDS_REVIEW", "sLocal_ID": ..., "sNHI_ID": ..., "NHI_Query": "A12"}
+    NEEDS_REVIEW（WR-09）：HIS 已寫入但讀回不符，為終態、不會自動重送。
     狀態轉換不合法 409；NHI_Query 格式不符 422；任務不存在 404。
     """
     data = _json_object()
@@ -112,7 +113,7 @@ def report_bridge_job_status(job_id: str):
     draft_id = None
     if current.get("s_type_code") == "HIS_PUSH":
         draft_id = (current.get("extra_payload") or {}).get("draft_id")
-    if draft_id and new_status in ("SUCCESS", "FAILED"):
+    if draft_id and new_status in ("SUCCESS", "FAILED", "NEEDS_REVIEW"):
         _sync_draft_before_report(case_store(), draft_id, new_status, data)
 
     try:

@@ -64,17 +64,41 @@ class TrustConfigError(RuntimeError):
     """信任網段設定格式錯誤（啟動期 fail-fast）。"""
 
 
+# WR-07：信任網段的允許範圍。只接受私有 IPv4 且遮罩不短於 /16，
+# 拒絕 0.0.0.0/0、公網網段與 /8 等過寬範圍，避免 PHI 相關 API 對外開放。
+# 實際遮罩（如 /23、/16）仍依 D-32-16 採用；WR-02 的確認閘門在安裝程式（install.sh）端執行。
+MIN_TRUSTED_PREFIXLEN = 16
+
+
+def is_acceptable_trust_network(net: ipaddress.IPv4Network | ipaddress.IPv6Network) -> bool:
+    """網段是否可作為院內信任範圍（私有 IPv4 且 prefixlen >= MIN_TRUSTED_PREFIXLEN）。"""
+    return (
+        net.version == 4
+        and net.is_private
+        and not net.is_loopback
+        and not net.is_link_local
+        and net.prefixlen >= MIN_TRUSTED_PREFIXLEN
+    )
+
+
 def parse_trusted_subnets(raw: str) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
     """解析 `ELC_TRUSTED_SUBNETS`（逗號分隔 CIDR）。"""
     items = [item.strip() for item in raw.split(",") if item.strip()]
     networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
     for item in items:
         try:
-            networks.append(ipaddress.ip_network(item, strict=False))
+            net = ipaddress.ip_network(item, strict=False)
         except ValueError as exc:
             raise TrustConfigError(
                 f"{ENV_TRUSTED_SUBNETS} 設定錯誤：{item!r} 不是合法的網段（CIDR）寫法"
             ) from exc
+        # WR-07：拒絕公網或過寬的網段（例如 0.0.0.0/0），否則 PHI 相關 API 會對外開放。
+        if not is_acceptable_trust_network(net):
+            raise TrustConfigError(
+                f"{ENV_TRUSTED_SUBNETS} 設定錯誤：{item!r} 不允許；"
+                f"僅接受私有 IPv4 網段且遮罩不短於 /{MIN_TRUSTED_PREFIXLEN}"
+            )
+        networks.append(net)
     if not networks:
         raise TrustConfigError(f"{ENV_TRUSTED_SUBNETS} 設定錯誤：未解析出任何網段")
     return networks
@@ -166,7 +190,25 @@ def detect_local_subnets(
     local_ip: Optional[str] = None,
     interfaces_provider: Optional[Callable[[], str]] = None,
 ) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
-    """偵測伺服器所在的子網（預設信任範圍，D-32-16 & D-32-17）。"""
+    """偵測伺服器所在的子網（預設信任範圍，D-32-16 & D-32-17）。
+
+    WR-02／WR-07：不合允許範圍（過寬或非私有）的偵測結果一律丟棄並記錄警告，
+    寧可 fail-closed 只信任 loopback，也不信任整個大網段。
+    """
+    detected = _detect_local_subnets_raw(local_ip, interfaces_provider)
+    accepted = []
+    for net in detected:
+        if is_acceptable_trust_network(net):
+            accepted.append(net)
+        else:
+            logger.warning("偵測到的網段 %s 不符合允許範圍，未納入信任清單", net)
+    return accepted
+
+
+def _detect_local_subnets_raw(
+    local_ip: Optional[str] = None,
+    interfaces_provider: Optional[Callable[[], str]] = None,
+) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
     # 測試注入或相容既有調用
     if local_ip is not None:
         try:

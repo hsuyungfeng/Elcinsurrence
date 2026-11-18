@@ -32,6 +32,8 @@ details.tier-group { margin-bottom: 16px; border: 1px solid var(--line); border-
 details.tier-group > summary.tier-summary { cursor: pointer; padding: 12px 16px; font-size: 14px; background: var(--bg); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; user-select: none; }
 .tier-badge { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: var(--card); border: 1px solid var(--line); }
 .tier-content { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.vault-link { color: inherit; text-decoration: none; }
+.soap-modal-wrap { margin-top: 6px; }
 """
 _SOAP_CSS = _SOAP_CSS + SHARED_CSS  # 與統一報告共用（services/report_assets.py）
 
@@ -219,7 +221,7 @@ def _soap_example_html(finding: OrderFinding, case: CaseAudit | None, templates)
 
     # 尚未快取：提供按鈕供醫師點擊生成
     return (
-        f'<div style="margin-top:6px;">{modal_btn}</div>'
+        f'<div class="soap-modal-wrap">{modal_btn}</div>'
     )
 
 
@@ -284,7 +286,7 @@ def _case_vault_html(case: CaseAudit) -> str:
         has_real_files = True
         for f in img_files:
             url = f"/api/vault/{_e(vault_key)}/files/images/{_e(f.filename)}"
-            items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" style="color: inherit; text-decoration: none;">🖼️ 影像 {_e(f.filename)}</a></li>')
+            items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" class="vault-link">🖼️ 影像 {_e(f.filename)}</a></li>')
 
     # 2. 檢驗報告（有真實檔案才列出，1 階不顯示預留佔位）
     rep_files = files_by_cat.get("reports", [])
@@ -292,7 +294,7 @@ def _case_vault_html(case: CaseAudit) -> str:
         has_real_files = True
         for f in rep_files:
             url = f"/api/vault/{_e(vault_key)}/files/reports/{_e(f.filename)}"
-            items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" style="color: inherit; text-decoration: none;">📄 檢驗報告 {_e(f.filename)}</a></li>')
+            items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" class="vault-link">📄 檢驗報告 {_e(f.filename)}</a></li>')
 
     # 3. 其他分類（錄音、病歷紀錄等，若有檔案則追加）
     for cat in ("audio", "records"):
@@ -300,7 +302,7 @@ def _case_vault_html(case: CaseAudit) -> str:
         for f in files_by_cat.get(cat, []):
             has_real_files = True
             url = f"/api/vault/{_e(vault_key)}/files/{_e(cat)}/{_e(f.filename)}"
-            items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" style="color: inherit; text-decoration: none;">{icon} {_e(f.filename)}</a></li>')
+            items.append(f'<li class="vault-file-item"><a href="{url}" target="_blank" class="vault-link">{icon} {_e(f.filename)}</a></li>')
 
     # 1 階：若完全無真實佐證檔案，不顯示佐證庫區塊與未附加預留槽位
     if not has_real_files or not items:
@@ -309,7 +311,7 @@ def _case_vault_html(case: CaseAudit) -> str:
     key_label = _e(vault_key) if vault_key else "佐證庫"
     return (
         f'<div class="vault-box">'
-        f'<div class="vault-title">📁 佐證庫附加檔案（{key_label}）<span style="display:none">佐證庫（{key_label}）</span></div>'
+        f'<div class="vault-title">📁 佐證庫附加檔案（{key_label}）<span hidden>佐證庫（{key_label}）</span></div>'
         f'<ul class="vault-files">{"".join(items)}</ul>'
         f'</div>'
     )

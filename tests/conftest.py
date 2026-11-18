@@ -42,7 +42,7 @@ def facility_config(tmp_path, monkeypatch):
     from config import settings
 
     cfg = {
-        "code": "01015C",
+        "code": "3503250461",
         "name": "測試醫療院所",
         "address": "測試市測試區測試路1號",
         "physician_name": "測試醫師",

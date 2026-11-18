@@ -137,6 +137,9 @@ def test_profile_status_requires_fields_and_explicit_confirmation():
 
 
 def test_upload_with_foreign_facility_keeps_clinic_profile(make_api_app, facility_config, tmp_path):
+    # 本院代碼與上傳檔的機構代碼必須不同，才能測到「外院檔案不改寫本院設定」。
+    local_code = "3501189999"
+    settings.save_facility_config({"code": local_code})
     client = make_api_app().test_client()
     resp = _upload(client, _sample_zip(FAC))
     assert resp.status_code == 200, resp.get_json()
@@ -144,8 +147,8 @@ def test_upload_with_foreign_facility_keeps_clinic_profile(make_api_app, facilit
     assert body["batch"] == BATCH
     assert body["facility_code"] == FAC
     assert body["foreign_facility"] is True
-    # 本院設定（facility_config fixture 的 01015C）未被改寫
-    assert settings.load_facility_config()["code"] == facility_config["code"]
+    # 本院設定未被上傳檔改寫
+    assert settings.load_facility_config()["code"] == local_code
 
 
 def test_upload_initializes_facility_code_when_unset(make_api_app, tmp_path, monkeypatch):
@@ -170,7 +173,7 @@ def test_facility_post_stores_profile_confirmed_flag(client, facility_config):
     resp = client.post(
         "/api/facility",
         headers=KEY,
-        json={"source": "web", "code": "01015C", "name": "測試", "email": "a@b.tw", "profile_confirmed": True},
+        json={"source": "web", "code": FAC, "name": "測試", "email": "a@b.tw", "profile_confirmed": True},
     )
     assert resp.status_code == 200
     assert settings.load_facility_config()["profile_confirmed"] is True

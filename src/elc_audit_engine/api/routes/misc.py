@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 
 from flask import Blueprint, current_app, jsonify, request, send_from_directory
 
@@ -85,6 +86,9 @@ def update_facility():
         updates[PROFILE_CONFIRMED_KEY] = payload[PROFILE_CONFIRMED_KEY] is True
     if not updates:
         raise ApiError("無提供任何院所欄位進行更新")
+    # WR-08：醫事機構代碼只要有提供就必須是 10 碼數字（會進入申報檔名與表頭），不論來源為何。
+    if updates.get("code") and not re.fullmatch(r"\d{10}", updates["code"]):
+        raise ApiError("醫事機構代碼必須為 10 碼數字", status=400)
     # 若為 Web 介面儲存或指定驗證，檢查必填欄位 (code, name, email) 須填寫才可存入診所檔案
     if payload.get("source") == "web" or "email" in payload:
         if not updates.get("code"):

@@ -319,7 +319,9 @@ class WindowsAgent:
                 readback_hash,
                 push_summary.get("status"),
             )
-            self.report_job_status(job_id, "FAILED", failure_reason=reason)
+            # WR-09：寫入已發生，結果未知。若回報 FAILED 會被伺服器重新排隊，造成重複寫入 HIS；
+            # 改回報 NEEDS_REVIEW（終態，需人工核對）。
+            self.report_job_status(job_id, "NEEDS_REVIEW", failure_reason=reason)
             return {"status": "failed", "job_id": job_id, "reason": reason}
 
         # 5. Report SUCCESS (§8.5)

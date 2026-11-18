@@ -16,6 +16,7 @@ from typing import Any
 
 from flask import Blueprint, current_app, jsonify, request, send_from_directory
 
+from config import settings
 from elc_audit_engine.api.batch_limits import refuse_if_truncated
 from elc_audit_engine.api.context import case_store
 from elc_audit_engine.api.errors import ApiError
@@ -39,9 +40,17 @@ _DEFAULT_FACILITY_CODE = "3503250461"
 
 
 def _get_emr_output_dir() -> Path:
-    base = (Path(current_app.config.get("ELC_DATA_DIR", "data")) / "output" / "emr_packages").resolve()
+    # WR-06：與其他產出共用 ELC_OUTPUT_DIR／settings.OUTPUT_DIR，不再以程序工作目錄的相對路徑 "data" 為預設。
+    root = Path(current_app.config.get("ELC_OUTPUT_DIR") or settings.OUTPUT_DIR)
+    base = (root / "emr_packages").resolve()
     base.mkdir(parents=True, exist_ok=True)
     return base
+
+
+@bp.errorhandler(EmrPackagingError)
+def _handle_emr_packaging_error(exc: EmrPackagingError):
+    """WR-05：命名規則等輸入錯誤是呼叫方錯誤，回 400 而非未處理的 500。"""
+    return jsonify({"status": "error", "message": str(exc)}), 400
 
 
 @bp.route("/api/emr/batch-package", methods=["POST"])
@@ -52,7 +61,10 @@ def create_emr_batch_package():
     facility_code = str(body.get("facility_code") or _DEFAULT_FACILITY_CODE).strip()
     if not _FACILITY_CODE_RE.match(facility_code):
         raise ApiError("機構代碼必須為 10 碼數字", status=400)
-    submission_type = int(body.get("submission_type") or (4 if target == "appeal" else 1))
+    try:
+        submission_type = int(body.get("submission_type") or (4 if target == "appeal" else 1))
+    except (TypeError, ValueError):
+        raise ApiError("submission_type 必須為整數", status=400)
     old_accept_no = body.get("old_accept_no")
 
     # 只打包資料庫中的真實案件；不再以展示資料（DEMO）補位，避免假病人進入申報包（CR-02）。

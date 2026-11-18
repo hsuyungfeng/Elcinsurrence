@@ -313,9 +313,12 @@ def test_windows_agent_readback_mismatch():
     assert res["status"] == "failed"
     assert res["reason"] == "readback_mismatch"
 
+    # WR-09：HIS 已寫入但讀回不符，改回報 NEEDS_REVIEW（終態），不得回報 FAILED 以免伺服器自動重送造成重複寫入。
     fail_reqs = [r for r in http_mock.recorded_requests if r["body"] and r["body"].get("status") == "FAILED"]
-    assert len(fail_reqs) == 1
-    assert fail_reqs[0]["body"]["reason"] == "readback_mismatch"
+    assert fail_reqs == []
+    review_reqs = [r for r in http_mock.recorded_requests if r["body"] and r["body"].get("status") == "NEEDS_REVIEW"]
+    assert len(review_reqs) == 1
+    assert review_reqs[0]["body"]["reason"] == "readback_mismatch"
 
 
 def test_windows_agent_ui_error():

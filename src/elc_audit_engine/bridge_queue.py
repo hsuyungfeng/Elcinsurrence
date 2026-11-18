@@ -50,6 +50,9 @@ STATUS_SUCCESS = "SUCCESS"
 STATUS_FAILED = "FAILED"
 # 重試次數用盡後的終態；不再出現在待送清單中。
 STATUS_FAILED_PERMANENT = "FAILED_PERMANENT"
+# WR-09：HIS 已寫入但讀回驗證不符（結果未知）。終態、不自動重送，避免重複寫入同一 HIS 紀錄，
+# 須由人工於 HIS 核對後處理。
+STATUS_NEEDS_REVIEW = "NEEDS_REVIEW"
 
 # 租約預設 15 分鐘；超過即視為地端 Agent 已當機，任務可被回收重派。
 DEFAULT_LEASE_TIMEOUT_SEC = 900
@@ -59,7 +62,7 @@ DEFAULT_MAX_RETRIES = 3
 # 地端 Agent 可主動回報的轉換；PENDING→SENDING 為認領，SENDING→PENDING 僅能由系統回收。
 _TRANSITIONS: dict[str, frozenset[str]] = {
     STATUS_PENDING: frozenset({STATUS_SENDING}),
-    STATUS_SENDING: frozenset({STATUS_SUCCESS, STATUS_FAILED}),
+    STATUS_SENDING: frozenset({STATUS_SUCCESS, STATUS_FAILED, STATUS_NEEDS_REVIEW}),
 }
 
 _NHI_STATUS_RE = re.compile(r"^[A-Z]\d{2}$")
@@ -294,6 +297,14 @@ def report_status(
         updated = _requeue_or_fail(
             job, reason=f"地端回報失敗（NHI_Query={nhi_status or '未提供'}）"
         )
+    elif status == STATUS_NEEDS_REVIEW:
+        updated = {
+            **job,
+            "status": STATUS_NEEDS_REVIEW,
+            "lease_started_at": None,
+            "lease_timeout_sec": None,
+            "last_error": "HIS 已寫入但讀回驗證不符，需人工核對，系統不會自動重送",
+        }
     else:
         updated = {
             **job,
@@ -320,6 +331,7 @@ __all__ = [
     "DEFAULT_MAX_RETRIES",
     "STATUS_FAILED",
     "STATUS_FAILED_PERMANENT",
+    "STATUS_NEEDS_REVIEW",
     "STATUS_PENDING",
     "STATUS_SENDING",
     "STATUS_SUCCESS",

@@ -75,3 +75,6 @@ button.btn-copy { background: #10b981; color: #fff; border: none; border-radius:
 .vault-title { font-weight: 600; color: var(--accent); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
 .vault-files { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .vault-file-item { display: inline-flex; align-items: center; gap: 4px; background: var(--bg); padding: 2px 8px; border-radius: 4px; font-size: 12px; border: 1px solid var(--line); }
+
+.vault-link { color: inherit; text-decoration: none; }
+.soap-modal-wrap { margin-top: 6px; }
