@@ -164,12 +164,17 @@ def validate_recording_payload(form: Dict[str, Any], file_meta: Dict[str, Any]) 
         elif size_bytes > MAX_AUDIO_BYTES:
             errors.append(f"音檔大小超過 {MAX_AUDIO_BYTES // (1024 * 1024)} MB 上限")
 
-        valid_mimes = ("audio/wav", "audio/x-wav", "audio/wave")
-        is_wav_mime = any(m in content_type for m in valid_mimes)
-        is_wav_ext = filename.endswith(".wav")
+        wav_mimes = ("audio/wav", "audio/x-wav", "audio/wave")
+        opus_mimes = ("audio/opus", "audio/ogg")
+        is_wav = any(m in content_type for m in wav_mimes) or filename.endswith(".wav")
+        is_opus = any(m in content_type for m in opus_mimes) or filename.endswith(".opus")
 
-        if not (is_wav_mime or is_wav_ext):
-            errors.append("音檔格式錯誤：僅支援 audio/wav 格式之 .wav 檔案")
+        if is_opus and not filename.endswith(".wav"):
+            normalized["audio_ext"] = ".opus"
+        elif is_wav:
+            normalized["audio_ext"] = ".wav"
+        else:
+            errors.append("音檔格式錯誤：僅支援 .wav（audio/wav）或 .opus（audio/opus、audio/ogg）檔案")
 
     return normalized, errors
 
@@ -226,10 +231,11 @@ def receive_recording():
             "draft_id": existing["draft_id"],
         }), 200
 
-    # 2. Persist audio file to <DATA_DIR>/recordings/<session_id>.wav
+    # 2. Persist audio file to <DATA_DIR>/recordings/<session_id>.<ext>
     recordings_dir = Path(settings.DATA_DIR) / "recordings"
     recordings_dir.mkdir(parents=True, exist_ok=True)
-    audio_path = recordings_dir / f"{session_id}.wav"
+    audio_ext = normalized.get("audio_ext", ".wav")
+    audio_path = recordings_dir / f"{session_id}{audio_ext}"
 
     try:
         audio_file.save(str(audio_path))

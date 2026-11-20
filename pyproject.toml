@@ -32,6 +32,10 @@ ocr = [
     "paddleocr==3.7",
     "paddlex[ocr]>=3.7,<3.8",
 ]
+# 本機離線語音轉錄（Phase 33，可選）：不裝不影響核心啟動，呼叫 asr 模組時延遲載入。
+asr = [
+    "faster-whisper>=1.2.0",
+]
 
 [dependency-groups]
 dev = [

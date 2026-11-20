@@ -345,3 +345,56 @@ def test_endpoint_audio_write_failure_returns_500_and_no_orphan(app_with_db, rec
 
     rec_file = tmp_path / "recordings" / "sess_disk_fail.wav"
     assert not rec_file.exists()
+
+
+def test_endpoint_accepts_12mb_wav_within_25mb_contract(app_with_db, recording_fixture, tmp_path):
+    """Phase 33：12 MB WAV（>原 11 MB、≤25 MB）不得再被 Flask MAX_CONTENT_LENGTH 擋回 413。"""
+    client = app_with_db.test_client()
+    session_id = "sess_12mb_wav"
+    payload_bytes = b"RIFF" + b"\x00" * (12 * 1024 * 1024 - 4)
+
+    data = {
+        "session_id": session_id,
+        "visit_date": "2026-11-20",
+        "patient_ref": "PAT_12MB",
+        "soap_txt": recording_fixture["soap_txt"],
+        "audio": (io.BytesIO(payload_bytes), "visit_12mb.wav", "audio/wav"),
+    }
+    resp = client.post("/api/soap/recordings", data=data)
+    assert resp.status_code == 201
+    assert (tmp_path / "recordings" / f"{session_id}.wav").stat().st_size == len(payload_bytes)
+
+
+def test_endpoint_accepts_opus_audio_and_persists_extension(app_with_db, recording_fixture, tmp_path):
+    """Phase 33：支援壓縮 .opus（audio/opus、audio/ogg）並以 .opus 副檔名落盤。"""
+    client = app_with_db.test_client()
+    session_id = "sess_opus_ok"
+    opus_bytes = b"OggS\x00\x02OpusHead-test-payload"
+
+    data = {
+        "session_id": session_id,
+        "visit_date": "2026-11-20",
+        "patient_ref": "PAT_OPUS",
+        "soap_txt": recording_fixture["soap_txt"],
+        "audio": (io.BytesIO(opus_bytes), "visit.opus", "audio/opus"),
+    }
+    resp = client.post("/api/soap/recordings", data=data)
+    assert resp.status_code == 201
+    saved = tmp_path / "recordings" / f"{session_id}.opus"
+    assert saved.exists()
+    assert saved.read_bytes() == opus_bytes
+
+
+def test_endpoint_rejects_over_26mb_with_413(app_with_db, recording_fixture):
+    """Phase 33：超過 26 MB 全域上限仍回 413。"""
+    client = app_with_db.test_client()
+    oversize = b"0" * (26 * 1024 * 1024 + 1024)
+    data = {
+        "session_id": "sess_over_26mb",
+        "visit_date": "2026-11-20",
+        "patient_ref": "PAT_OVER",
+        "soap_txt": recording_fixture["soap_txt"],
+        "audio": (io.BytesIO(oversize), "huge.wav", "audio/wav"),
+    }
+    resp = client.post("/api/soap/recordings", data=data)
+    assert resp.status_code == 413

@@ -90,3 +90,34 @@ def test_llm_exception_is_error_status_not_a_conclusion(monkeypatch):
 def test_empty_or_non_object_reply_falls_back(monkeypatch, reply):
     _model_reply(monkeypatch, reply)
     assert generate_soap_advice("X", "x", "")["status"] == "fallback"
+
+
+def test_clinical_transcript_prompt_forbids_placeholders():
+    prompt = soap_advice._CLINICAL_TRANSCRIPT_SOAP_PROMPT
+    assert "not documented" in prompt
+    assert "NEVER write placeholder" in prompt
+
+
+def test_generate_clinical_soap_from_transcript_uses_clinical_profile(monkeypatch):
+    long_reply = (
+        '{"s": "Patient presents with chronic right shoulder pain for 3 months, aggravated by overhead reaching and dressing.", '
+        '"o": "Physical examination demonstrates tenderness over the posterior shoulder capsule and restricted abduction. '
+        'Ultrasound shows mild supraspinatus tendon thickening with focal calcific deposit.", '
+        '"a": "Calcific tendinitis of right shoulder (ICD-10: M75.3), with secondary subacromial irritation.", '
+        '"p": "Performed ultrasound-guided intra-articular injection with steroid and local anesthetic. '
+        'Prescribed oral NSAIDs for 7 days and instructed gentle pendulum range-of-motion exercises. Follow up in 2 weeks.", '
+        '"conversation_summary": "病患右肩疼痛三個月，超音波顯示鈣化性肌腱炎，接受超音波導引注射並衛教復健運動。"}'
+    )
+    _model_reply(monkeypatch, long_reply)
+    res = soap_advice.generate_clinical_soap_from_transcript("醫師：右肩痛多久了？病患：三個月了。")
+    assert res["status"] == "success"
+    assert res["quality"]["pass"] is True
+    assert res["quality"]["quality_score"] == 100
+    assert any(c["code"] == "M75.3" and c["known"] for c in res["icd10_checks"])
+    assert "鈣化性肌腱炎" in res["conversation_summary"]
+
+
+def test_generate_clinical_soap_empty_transcript_returns_error():
+    res = soap_advice.generate_clinical_soap_from_transcript("   ")
+    assert res["status"] == "error"
+    assert res["quality"]["pass"] is False
