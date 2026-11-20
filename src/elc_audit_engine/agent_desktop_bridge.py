@@ -150,7 +150,8 @@ class AgentDesktopRunner:
         if self._mock_driver:
             return self._mock_driver("snapshot", app_name=app_name)
 
-        cmd = [self.executable_path, "snapshot", "--app", app_name, "-i", "--json"]
+        # agent-desktop v2.6 起 snapshot 預設輸出 JSON，且不接受 --json（會回 INVALID_ARGS，exit 2）。
+        cmd = [self.executable_path, "snapshot", "--app", app_name, "-i"]
         res = _run_agent_desktop(cmd)
         if res.returncode != 0:
             raise AgentDesktopError(

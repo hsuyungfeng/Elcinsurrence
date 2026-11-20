@@ -59,6 +59,13 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
    - Admin settings (auto-accept, facility, setup) may be modified from the trusted intranet (D-32-27).
    - Accepted residual risk (D-32-24): any device in the trusted subnet can read patient data.
    - Access audit logs record the source address as `caller_id` (`lan:<ip>`, PHI-free).
+6. **Unverified HIS writes never auto-retry (WR-09, 2026-11-19)**
+   - A write whose outcome is unknown (readback mismatch, UI exception after the write started, lease expiry) must end as `NEEDS_REVIEW` (job) / `needs_review` (draft). Never report `FAILED` or requeue these: that can write the same HIS record twice.
+   - `needs_review` has no automatic transitions. Only a human resolution (`POST /api/soap/drafts/<id>/resolve-needs-review`, with a `note`) may move it to `pushed` or `rejected`.
+   - `FAILED` is reserved for failures that happen before any write, where a retry is safe.
+7. **Trusted subnet bounds (WR-07, 2026-11-19)**
+   - `ELC_TRUSTED_SUBNETS` entries must be private IPv4 networks with prefix `/16` or narrower. Broader or public ranges (e.g., `0.0.0.0/0`, `10.0.0.0/8`) are rejected at startup, and detected networks outside this range are dropped.
+   - `deploy/install.sh --yes` only auto-adopts a `/24`; any other detected network requires a manual `ELC_TRUSTED_SUBNETS` entry.
 
 ---
 
@@ -136,6 +143,8 @@ Applies to `deploy/windows_agent/mock_his/`. These were learned the hard way on 
 4. **Fail closed.** The probe acts only on windows whose title contains `MockHIS`, and never on shell windows (檔案總管, Windows PowerShell, 命令提示字元, Terminal) even if the title contains `MockHIS` (2026-11-17). Do not widen this without an explicit request.
 5. **`--test-vendor` is for demo-data test VMs only.** Never ship it in a handoff bundle, and never run it against a real HIS.
 6. **Handoff bundles** must not contain `JHISX/`, `*.mdb`, or any patient-related data. Keep the SHA-256 in the operator guide in sync with the zip.
+7. **agent-desktop 2.6 rejects `--json` on `snapshot`** (`INVALID_ARGS`, exit 2). The bridge (`agent_desktop_bridge.py` `snapshot()`) must call `snapshot --app <app> -i` only. Calling it with `--json` makes calibration fail with `returncode 2`.
+8. **Test-only shortcuts do not count as verification.** Bypassing the calibration gate (e.g., monkeypatching `_writeback_allowed`) or simulating a UI exception only verifies the server-side state machine. Real UI-exception and calibration verification must run on the Windows test machine with a logged-in desktop.
 
 ## 6. Deployment & Service Stability (systemd)
 

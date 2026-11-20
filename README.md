@@ -404,7 +404,7 @@ uv run python -m elc_audit_engine.rule_repository.mapping.build_mapping
 uv run pytest -q
 ```
 
-目前基線：**460 passed / 2 skipped**（Milestone v1.1 shipped 2026-08-11，milestone-close 稽核缺陷修復 2026-08-12）。測試零 LLM 依賴（判定與生成皆以替身注入），故不需啟動 llama.cpp 即可全數執行；OCR 表格結構化測試以替身覆蓋，不需 GPU。
+目前基線：**1695 passed / 2 skipped**（2026-11-19，`fix/wr-01-09` 分支；先前 460 passed 為 Milestone v1.1 的紀錄）。測試零 LLM 依賴（判定與生成皆以替身注入），故不需啟動 llama.cpp 即可全數執行；OCR 表格結構化測試以替身覆蓋，不需 GPU。
 
 ---
 
@@ -610,6 +610,8 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 | `POST` | `/api/emr/batch-package` | 批次標準 11 碼重命名與 500MB ZIP 分包產製 (Phase 28) | 選填 |
 | `GET` | `/api/emr/packages` | 查詢已產製之 EMR 審查封包清單 (Phase 28) | 選填 |
 | `GET` | `/api/emr/download/<filename>` | 安全下載 500MB EMR 審查 ZIP 封包 (Phase 28) | 選填 |
+| `GET` | `/api/soap/drafts/needs-review` | 列出待人工核對（`needs_review`）的 SOAP 草稿（WR-09） | 選填 |
+| `POST` | `/api/soap/drafts/<draft_id>/resolve-needs-review` | 人工解除 `needs_review`：`resolution` 為 `pushed` 或 `rejected`，必附 `note`（WR-09） | 選填 |
 
 > **認證說明**：已移除 `X-API-Key`；所有端點皆以來源位址信任判定（詳見「認證」小節），審計日誌的 `caller_id` 為來源位址。
 
@@ -628,6 +630,23 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 | `routes/` | `misc`（首頁、健康檢查、PDF 下載）、`sampling`、`appeal`、`attachments`、`printing` 五個 blueprint |
 
 測試以 `create_app(..., case_store=CaseStore(tmp), migrate_legacy=False)` 建立隔離實例（見 `tests/conftest.py` 的 `make_api_app`），不再 monkeypatch 模組全域變數。
+
+### 6. 寫入結果未知時的處理：`NEEDS_REVIEW`（WR-09，2026-11-19）
+
+HIS 寫入的結果可能無法確定（已寫入但讀回不符、UI 例外、地端 Agent 租約逾時）。這些情況**不得**回報 `FAILED` 或重新排隊，否則會重複寫入 HIS。
+
+| 情境 | 任務狀態 | 草稿狀態 | 說明 |
+|---|---|---|---|
+| 讀回不符（已寫入） | `NEEDS_REVIEW` | `needs_review` | 代理回報 `NEEDS_REVIEW`，不回報 `FAILED` |
+| 寫入開始後的 UI 例外（`StaleRefError`／`AgentDesktopError`／其他例外） | `NEEDS_REVIEW` | `needs_review` | 寫入是否已生效無法判斷 |
+| 租約逾時（代理當機） | `NEEDS_REVIEW` | `needs_review` | 不再由 `reclaim_expired` 重新排隊 |
+| 寫入前失敗（例如病人不符） | `FAILED` | `failed` | 尚未寫入，可安全重送 |
+
+- `needs_review` 沒有任何自動轉換，承接草稿的 `approve` 與循環封存會回 409。
+- 人工處理：醫師於 HIS 核對後，呼叫 `POST /api/soap/drafts/<draft_id>/resolve-needs-review`，`resolution` 為 `pushed`（確認已寫入）或 `rejected`（確認未寫入並放棄），必須附 `note`（不含病患資料），並寫入審計日誌。
+- 待辦清單：`GET /api/soap/drafts/needs-review`。
+
+> 注意：repo 內尚無前端畫面；目前只能透過 API 操作。
 
 ## 🪟 Windows 端 MockHIS 校正探針（Phase 30-09）
 
