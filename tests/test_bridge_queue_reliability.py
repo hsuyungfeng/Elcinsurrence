@@ -9,6 +9,7 @@ import pytest
 from elc_audit_engine.bridge_queue import (
     DEFAULT_LEASE_TIMEOUT_SEC,
     STATUS_FAILED_PERMANENT,
+    STATUS_NEEDS_REVIEW,
     STATUS_PENDING,
     STATUS_SENDING,
     STATUS_SUCCESS,
@@ -82,49 +83,50 @@ def test_claim_records_lease_start_and_timeout(store):
     assert job["lease_timeout_sec"] == DEFAULT_LEASE_TIMEOUT_SEC == 900
 
 
-def test_expired_sending_job_is_reclaimed_to_pending(store):
+def test_expired_sending_job_becomes_needs_review_not_pending(store):
+    """WR-09：租約逾時無法得知 HIS 寫入是否完成，不得重新排隊（會重複寫入）。"""
     job_id = _job(store)["job_id"]
     report_status(store, job_id, status=STATUS_SENDING, now=T0)
 
-    # 未逾時：不回收
+    # 未逾時：不處理
     assert reclaim_expired(store, now=T0 + timedelta(seconds=899)) == 0
     assert get_job(store, job_id)["status"] == STATUS_SENDING
 
-    # 逾時：回收為 PENDING，遞增 retry_count，清空租約
+    # 逾時：轉入 NEEDS_REVIEW 終態，retry_count 不變，清空租約
     assert reclaim_expired(store, now=T0 + timedelta(seconds=900)) == 1
     job = get_job(store, job_id)
-    assert job["status"] == STATUS_PENDING
-    assert job["retry_count"] == 1
+    assert job["status"] == STATUS_NEEDS_REVIEW
+    assert job["retry_count"] == 0
     assert job["lease_started_at"] is None
-    assert "租約逾時" in job["last_error"]
+    assert "人工核對" in job["last_error"]
 
 
-def test_list_pending_reclaims_expired_lease_so_restarted_agent_can_claim(store):
+def test_list_pending_never_redispatches_expired_lease(store):
     job_id = _job(store)["job_id"]
     report_status(store, job_id, status=STATUS_SENDING, now=T0)
     later = T0 + timedelta(seconds=DEFAULT_LEASE_TIMEOUT_SEC + 1)
-    pending = list_pending(store, now=later)
-    assert [job["job_id"] for job in pending] == [job_id]
+    assert list_pending(store, now=later) == []
+    assert get_job(store, job_id)["status"] == STATUS_NEEDS_REVIEW
 
 
-def test_reclaimed_job_can_be_claimed_again(store):
+def test_needs_review_job_cannot_be_claimed_again(store):
     job_id = _job(store)["job_id"]
     report_status(store, job_id, status=STATUS_SENDING, now=T0)
     later = T0 + timedelta(seconds=1000)
-    list_pending(store, now=later)  # 觸發回收
-    job = report_status(store, job_id, status=STATUS_SENDING, now=later)
-    assert job["status"] == STATUS_SENDING
-    assert job["retry_count"] == 1
+    list_pending(store, now=later)  # 觸發回收 → NEEDS_REVIEW
+    with pytest.raises(BridgeConflictError):
+        report_status(store, job_id, status=STATUS_SENDING, now=later)
+    assert get_job(store, job_id)["status"] == STATUS_NEEDS_REVIEW
 
 
 def test_sending_job_without_lease_is_treated_as_expired(store):
-    """舊版資料沒有 lease_started_at，無法證明仍在傳送，應回收而非永久卡住。"""
+    """舊版資料沒有 lease_started_at，無法證明仍在傳送，應轉入人工核對而非永久卡住。"""
     job_id = _job(store)["job_id"]
     payload = get_job(store, job_id)
     payload.update({"status": STATUS_SENDING, "lease_started_at": None})
     store.update_payload(job_id, payload)
     assert reclaim_expired(store, now=T0) == 1
-    assert get_job(store, job_id)["status"] == STATUS_PENDING
+    assert get_job(store, job_id)["status"] == STATUS_NEEDS_REVIEW
 
 
 # ---------------------------------------------------------------- P1-2：重試上限
@@ -153,17 +155,6 @@ def test_permanently_failed_job_is_no_longer_dispatched(store):
     report_status(store, job_id, status="FAILED", now=T0)
     assert get_job(store, job_id)["status"] == STATUS_FAILED_PERMANENT
     assert list_pending(store, now=T0 + timedelta(days=1)) == []
-
-
-def test_expired_lease_counts_toward_max_retries(store):
-    job_id = _job(store, max_retries=2)["job_id"]
-    report_status(store, job_id, status=STATUS_SENDING, now=T0)
-    reclaim_expired(store, now=T0 + timedelta(seconds=901))  # retry_count 1
-    report_status(store, job_id, status=STATUS_SENDING, now=T0 + timedelta(seconds=902))
-    reclaim_expired(store, now=T0 + timedelta(seconds=2000))  # retry_count 2 == max
-    job = get_job(store, job_id)
-    assert job["status"] == STATUS_FAILED_PERMANENT
-    assert job["retry_count"] == 2
 
 
 def test_max_retries_must_be_positive(store):
@@ -206,26 +197,22 @@ def test_expected_status_match_allows_report(store):
     assert job["status"] == STATUS_SUCCESS
 
 
-def test_stale_agent_cannot_overwrite_after_lease_was_reclaimed_and_reclaimed_again(store):
-    """舊 Agent 的 lease 已被回收並由新 Agent 重新認領後，舊 Agent 的回報必須被拒絕（ABA 防護）。"""
+def test_stale_agent_cannot_overwrite_after_lease_was_reclaimed(store):
+    """舊 Agent 的租約已被回收（轉為 NEEDS_REVIEW）後，其依舊快照寫入 SUCCESS 必須被拒絕。"""
     job_id = _job(store)["job_id"]
     report_status(store, job_id, status=STATUS_SENDING, now=T0)  # 舊 Agent 認領
     stale = get_job(store, job_id)
 
     later = T0 + timedelta(seconds=1000)
-    list_pending(store, now=later)  # 回收
-    report_status(store, job_id, status=STATUS_SENDING, now=later)  # 新 Agent 認領
+    list_pending(store, now=later)  # 回收 → NEEDS_REVIEW
 
-    # 舊 Agent 依舊快照（status=SENDING、lease=T0）寫入 SUCCESS：status 雖相同，lease 已不同，必須失敗
     stale_success = {**stale, "status": STATUS_SUCCESS}
     assert store.cas_update_payload(
         job_id,
         stale_success,
         expect={"status": STATUS_SENDING, "lease_started_at": T0.isoformat()},
     ) is False
-    current = get_job(store, job_id)
-    assert current["status"] == STATUS_SENDING
-    assert current["lease_started_at"] == later.isoformat()
+    assert get_job(store, job_id)["status"] == STATUS_NEEDS_REVIEW
 
 
 def test_cas_update_payload_returns_false_on_mismatch_and_missing_case(store):

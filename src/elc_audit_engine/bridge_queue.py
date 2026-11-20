@@ -22,12 +22,15 @@ Phase 22-01 強化重點：
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 import uuid
 from datetime import UTC, datetime, timedelta
 
 from elc_audit_engine.case_store import DuplicateCaseError, _UNSET_MACHINE
+
+logger = logging.getLogger(__name__)
 
 _JOB_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
@@ -50,6 +53,9 @@ STATUS_SUCCESS = "SUCCESS"
 STATUS_FAILED = "FAILED"
 # 重試次數用盡後的終態；不再出現在待送清單中。
 STATUS_FAILED_PERMANENT = "FAILED_PERMANENT"
+# WR-09：HIS 已寫入但讀回驗證不符（結果未知）。終態、不自動重送，避免重複寫入同一 HIS 紀錄，
+# 須由人工於 HIS 核對後處理。
+STATUS_NEEDS_REVIEW = "NEEDS_REVIEW"
 
 # 租約預設 15 分鐘；超過即視為地端 Agent 已當機，任務可被回收重派。
 DEFAULT_LEASE_TIMEOUT_SEC = 900
@@ -59,7 +65,7 @@ DEFAULT_MAX_RETRIES = 3
 # 地端 Agent 可主動回報的轉換；PENDING→SENDING 為認領，SENDING→PENDING 僅能由系統回收。
 _TRANSITIONS: dict[str, frozenset[str]] = {
     STATUS_PENDING: frozenset({STATUS_SENDING}),
-    STATUS_SENDING: frozenset({STATUS_SUCCESS, STATUS_FAILED}),
+    STATUS_SENDING: frozenset({STATUS_SUCCESS, STATUS_FAILED, STATUS_NEEDS_REVIEW}),
 }
 
 _NHI_STATUS_RE = re.compile(r"^[A-Z]\d{2}$")
@@ -211,20 +217,42 @@ def _compare_and_swap(store, job_id: str, expected: dict, new_payload: dict) -> 
 
 
 def reclaim_expired(store, *, now: datetime | None = None) -> int:
-    """回收租約逾時的 SENDING 任務；回傳成功回收的筆數。
+    """回收租約逾時的 SENDING 任務；回傳成功處理的筆數。
 
+    WR-09：租約逾時代表地端 Agent 在寫入 HIS 途中可能已當機，寫入是否完成無法得知。
+    因此不再重新排隊（會造成重複寫入），改為 NEEDS_REVIEW 終態，並同步將對應草稿標為 needs_review。
     每筆以 CAS 寫入，併發的其他回收或回報若已改動任務則略過，不會重複計數。
     """
     now = now or _utc_now()
-    reclaimed = 0
+    handled = 0
     for record in store.list_bridge_jobs(status=STATUS_SENDING, limit=10_000):
         job = dict(record.payload or {})
         if not _lease_expired(job, now):
             continue
-        new_payload = _requeue_or_fail(job, reason="租約逾時，任務已由系統回收")
+        new_payload = {
+            **job,
+            "status": STATUS_NEEDS_REVIEW,
+            "lease_started_at": None,
+            "lease_timeout_sec": None,
+            "last_error": "租約逾時，HIS 寫入結果未知，需人工核對，系統不會自動重送",
+        }
         if _compare_and_swap(store, job["job_id"], job, new_payload):
-            reclaimed += 1
-    return reclaimed
+            handled += 1
+            _mark_draft_needs_review(store, job)
+    return handled
+
+
+def _mark_draft_needs_review(store, job: dict) -> None:
+    """HIS_PUSH 任務轉入 NEEDS_REVIEW 時，同步草稿狀態（失敗僅記錄，不影響任務終態）。"""
+    draft_id = (job.get("extra_payload") or {}).get("draft_id")
+    if not draft_id or job.get("s_type_code") != "HIS_PUSH":
+        return
+    try:
+        draft = store.get_soap_draft(draft_id)
+        if draft.state != "needs_review":
+            store.update_soap_draft_state(draft_id, "needs_review", reason="lease_expired")
+    except Exception as exc:  # 草稿同步失敗不得回滾任務終態；人工核對時仍會看到 NEEDS_REVIEW
+        logger.error("草稿 needs_review 同步失敗 draft_id=%s: %s", draft_id, type(exc).__name__)
 
 
 def list_pending(
@@ -294,6 +322,14 @@ def report_status(
         updated = _requeue_or_fail(
             job, reason=f"地端回報失敗（NHI_Query={nhi_status or '未提供'}）"
         )
+    elif status == STATUS_NEEDS_REVIEW:
+        updated = {
+            **job,
+            "status": STATUS_NEEDS_REVIEW,
+            "lease_started_at": None,
+            "lease_timeout_sec": None,
+            "last_error": "HIS 已寫入但讀回驗證不符，需人工核對，系統不會自動重送",
+        }
     else:
         updated = {
             **job,
@@ -320,6 +356,7 @@ __all__ = [
     "DEFAULT_MAX_RETRIES",
     "STATUS_FAILED",
     "STATUS_FAILED_PERMANENT",
+    "STATUS_NEEDS_REVIEW",
     "STATUS_PENDING",
     "STATUS_SENDING",
     "STATUS_SUCCESS",

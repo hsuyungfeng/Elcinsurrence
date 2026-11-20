@@ -190,6 +190,17 @@ print(len(det), det[0] if det else "")' 2>/dev/null || echo "0 ")"
             exit 1
         fi
     else
+        # WR-02：非 /24 網段（例如 /16）不得以 --yes 自動採用；必須由安裝人員手動設定。
+        case "$DETECTED_SUBNET" in
+            */24) ;;
+            *)
+                echo "錯誤：偵測到的網段 $DETECTED_SUBNET 不是 /24，不自動採用。" >&2
+                echo "請於 $ENV_FILE 手動加入 ELC_TRUSTED_SUBNETS=<院內 /24 網段> 後再重新執行。" >&2
+                if [ "$DRY_RUN" -eq 0 ]; then
+                    exit 1
+                fi
+                ;;
+        esac
         if [ "$DRY_RUN" -eq 1 ]; then
             echo "[DRY-RUN] 偵測到院內網段 $DETECTED_SUBNET（未寫入）"
         elif [ "$ASSUME_YES" -eq 1 ]; then

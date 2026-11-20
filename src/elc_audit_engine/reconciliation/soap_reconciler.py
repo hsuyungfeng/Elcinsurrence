@@ -210,8 +210,10 @@ def reconcile_monthly_batch(
         if result["found"]:
             matched_count += 1
             if result.get("soap") or result.get("vault_key"):
-                payload["soap"] = result["soap"]
-                payload["soap_text"] = result["soap_text"]
+                # WR-03：僅佐證檔匹配（無 SOAP）時不得以空字串覆寫既有 SOAP。
+                if result.get("soap"):
+                    payload["soap"] = result["soap"]
+                    payload["soap_text"] = result["soap_text"]
                 payload["vault_key"] = result["vault_key"]
                 payload["vault_files"] = result["vault_files"]
                 payload["reconciled_source"] = result["source"]
