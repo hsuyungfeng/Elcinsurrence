@@ -94,6 +94,19 @@
 - **給付規定精簡預覽（[`rule_summary.py`](src/elc_audit_engine/services/rule_summary.py)）**：
   - 當月預審與二／三階報告的 `📜 給付規定（payment_text）` 改為確定性原文重點摘要（~160–180 字），與下方折疊的 `📜 檢視完整給付規定條文` 明確區隔且絕不捏造。
 
+### 7. 規則庫安全更新、唯讀品質稽核、臨床 SOAP 強化與診所維運速查卡 (Phase 35–37)
+- **規則庫安全原子同步與四重防誤觸（[`sync_latest_rules.py`](src/elc_audit_engine/rule_repository/scripts/sync_latest_rules.py)、[`rules.py`](src/elc_audit_engine/api/routes/rules.py)）**：
+  - 新增 `GET /api/rules/status` 檢視規則庫列數與最新來源 CSV；`POST /api/rules/upload` 單路由放寬上限至 **65 MB**（其餘路由維持 26 MB）。
+  - 同步流程導入 `O_EXCL` 獨占鎖檔（`data/db/rules.sqlite3.lock`）、SQLite 側車檢查（`-wal`/`-shm`/`-journal` 存在時回 `409` 且絕不自動刪除）、雙表 staging 原子替換，以及依檔名時間戳輪替備份（上限 5 份）。
+  - **四重 `replace=True` 防誤觸**：函式層（最前端檢查）、API 層（缺／錯確認碼優先回 `422`）、CLI（`--replace --confirm REPLACE_RULES`）與前端（`static/index.html` 整表更新按鈕加上 `advanced-only` 於醫師模式隱藏，並以 `prompt()` 強制輸入 `REPLACE_RULES`）；日常建議優先採用「🔄 增量同步（保留舊碼）」。
+  - 本倉庫直接收錄零 PHI 之公開健保規則庫 **`data/db/rules.sqlite3`**（5,752 筆給付項目＋11,472 筆藥品，字面占位 0；含個資之 `data/db/cases.sqlite3` 維持 `.gitignore` 嚴格排除）。
+- **唯讀規則 CSV 品質稽核與 8 類舊碼差異分析（[`audit_csv.py`](src/elc_audit_engine/rule_repository/audit_csv.py)）**：
+  - 提供唯讀品質掃描（占位字串、AI 預填標記、中文緊鄰非標準尾碼／缺碼引用）與 `--stale-vs-db` 8 類舊碼分類分析；嚴守絕不自動刪除原則（`stale_count > 0` 一律建議 `upsert`）。
+  - `_csv_table.py` 統一將 `null`／`none`／`未找到給付規定` 寫入 SQLite `NULL`；`OrderJudgment.llm_failed` 精準區分官方 `NULL` 條文（業務待人工 `reviewed`）與 LLM 故障（`failed`）。
+- **臨床 SOAP 品質與一鍵部署收尾**：
+  - `soap_advice.py` 支援單次定向重試去除佔位詞、空繁中摘要自動補齊，以及臨床 `pending` 兩步防繞過檢核（放行明確檢驗追蹤語境，攔截診斷／計畫待定佔位）；`deploy/install.sh` 整合 `elc-llama-server.service` 與 `--check-asr-models`／`--check-llama-cache` 檢查。
+  - 新增一頁式非工程師《診所主機維運速查卡》：[`docs/CLINIC_SERVER_OPS_QUICKCARD.md`](docs/CLINIC_SERVER_OPS_QUICKCARD.md)。
+
 ---
 
 ## 👥 Herdr 多 Agent 協同分工體系 (Herdr Agent Team)
@@ -409,7 +422,7 @@ uv run python -m elc_audit_engine.rule_repository.scripts.build_chroma_index
 uv run python -m elc_audit_engine.rule_repository.mapping.build_mapping
 ```
 
-> 產物皆寫入 `data/`（已 gitignore）：`data/db/rules.sqlite3`、`data/db/docx_trees.json`、`data/rag/`。
+> 規則庫建置產物預設寫入 `data/`：其中公開健保規則庫 **`data/db/rules.sqlite3`**（零 PHI，5,752 筆給付＋11,472 筆藥品）已納入版控方便開箱即用；`data/db/cases.sqlite3`（含病患資料）、`data/db/rules.sqlite3.bak.*`、`data/rag/` 與 `data/output/` 維持 `.gitignore` 嚴格排除。
 > 步驟 4 具版本追蹤（`source_version`）與增量建置，中斷後可續跑，不需全部重來。
 
 ### 3. 執行單元與端到端測試套件
@@ -418,7 +431,7 @@ uv run python -m elc_audit_engine.rule_repository.mapping.build_mapping
 uv run pytest -q
 ```
 
-目前基線：**460 passed / 2 skipped**（Milestone v1.1 shipped 2026-08-11，milestone-close 稽核缺陷修復 2026-08-12）。測試零 LLM 依賴（判定與生成皆以替身注入），故不需啟動 llama.cpp 即可全數執行；OCR 表格結構化測試以替身覆蓋，不需 GPU。
+目前基線：**1,763 passed / 3 skipped / 1 deselected / 0 failed**（Phase 37 驗收，2026-11-23）。測試零 LLM 依賴（判定與生成皆以替身注入）且全域隔離正式 `data/db/cases.sqlite3` 與 `data/audit/access.log`，不需啟動 llama.cpp 即可全數執行；OCR 表格結構化測試以替身覆蓋，不需 GPU。
 
 ---
 
@@ -624,6 +637,9 @@ PDF 輸出於 `data/output/*`（已 `.gitignore`，含 PHI 絕不進版控）。
 | `POST` | `/api/emr/batch-package` | 批次標準 11 碼重命名與 500MB ZIP 分包產製 (Phase 28) | 選填 |
 | `GET` | `/api/emr/packages` | 查詢已產製之 EMR 審查封包清單 (Phase 28) | 選填 |
 | `GET` | `/api/emr/download/<filename>` | 安全下載 500MB EMR 審查 ZIP 封包 (Phase 28) | 選填 |
+| `GET` | `/api/rules/status` | 查詢規則庫列數、佔位檢查與最新來源 CSV (Phase 36) | 院內信任 |
+| `POST` | `/api/rules/upload` | 上傳官方給付／藥品規則 CSV（單路由上限 65 MB，Phase 36） | 院內信任 |
+| `POST` | `/api/rules/sync` | 原子同步規則庫（預設 `upsert`；`replace: true` 須帶 `confirm: "REPLACE_RULES"`，Phase 36–37） | 院內信任 |
 
 > **認證說明**：已移除 `X-API-Key`；所有端點皆以來源位址信任判定（詳見「認證」小節），審計日誌的 `caller_id` 為來源位址。
 

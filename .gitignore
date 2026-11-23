@@ -53,11 +53,13 @@ data/samples/
 data/phi/
 data/sampleimage/
 
-# 病患個資佐證庫與本機資料庫（PHI & Local DBs）—— 示範佐證留本機供 Dashboard 讀取，絕不進版控
+# 病患個資佐證庫與本機資料庫（PHI & Local DBs）—— 含病患資料之 cases.sqlite3 與輪替備份絕不進版控；
+# 公開健保給付／藥品規則庫 data/db/rules.sqlite3（零 PHI）經核准納入版控，方便新機開箱即用
 data/evidence_vault/
 *.sqlite3
 data/*.sqlite3
 data/db/*.sqlite3
+!data/db/rules.sqlite3
 
 # Windows 打包產物（內含 clinic 金鑰，禁止提交）
 ElcAgent-win64*.zip

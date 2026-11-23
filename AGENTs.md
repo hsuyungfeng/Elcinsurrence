@@ -41,7 +41,7 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
      - ❌ **裸奔 (`support_level == "裸奔"`)**: Record was examined and lacks required evidence (Clinical conclusion).
      - ⏳ **待判定 (`support_level is None and undetermined is True`)**: LLM failed, timed out, or crashed (System failure).
      - ❓ **查無規則 (`support_level is None and rule_found is False`)**: Order code has no matching NHI payment rule.
-   - If an LLM call fails, the case state transitions to `failed`, NEVER to `reviewed`.
+   - If an LLM call fails (`OrderJudgment.llm_failed is True`), the case state transitions to `failed`, NEVER to `reviewed`. Conversely, an official rule row with `payment_text IS NULL` (no published restriction text) is a valid manual-review business outcome (`reviewed`), NOT an LLM failure (Phase 36).
 
 3. **`case_id` is the ONLY Global Primary Key**
    - `case_id` is a content-hash or globally unique ID (`SAMP-...` / `APP-...`). It is immutable and collision-proof.
@@ -60,6 +60,12 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
    - Accepted residual risk (D-32-24): any device in the trusted subnet can read patient data.
    - Access audit logs record the source address as `caller_id` (`lan:<ip>`, PHI-free).
 
+6. **Rules Sync Safety & Zero Auto-Deletion (Phase 35–37)**
+   - Never auto-delete existing NHI payment/drug rules or silently drop codes absent from a newer CSV. `analyze_stale_payment_codes()` MUST recommend `"upsert"` whenever `stale_count > 0`.
+   - `replace=True` full-table replacement is gated by 4 layers requiring explicit confirmation token `REPLACE_RULES`: (1) `sync_latest_rules()` function top (before `pick_latest`, lock, and sidecar checks), (2) `POST /api/rules/sync` returning `422` before any lock/sidecar/write, (3) CLI `--replace --confirm REPLACE_RULES`, and (4) frontend `advanced-only` button with `prompt()` confirmation.
+   - `sync_latest_rules` uses an exclusive `O_EXCL` `.lock` file and rejects active SQLite sidecars (`-wal`, `-shm`, `-journal`) with `409`; NEVER auto-delete `.lock` or sidecar files in code.
+   - **Database git policy**: Public NHI rules DB `data/db/rules.sqlite3` (5,752 payment / 11,472 drug rows, **zero PHI**) is tracked in git for out-of-the-box deployment; `data/db/cases.sqlite3` (contains patient PHI) and `data/db/rules.sqlite3.bak.*` MUST remain strictly gitignored.
+
 ---
 
 ## 3. Architecture & Codebase Map
@@ -72,6 +78,7 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
     - `emr_packaging`: `/api/emr/*` (11-code standard packaging, 500MB ZIP chunking, package listings & downloads)
     - `attachments`: `/api/appeal/attachments/*`
     - `print`: `/api/deduction/print`, `/api/appeal/evidence-packet/print`
+    - `rules`: `/api/rules/status`, `/api/rules/upload` (65 MB single-route override in `api/security.py`), `/api/rules/sync` (`upsert` default; `replace: true` requires `confirm == "REPLACE_RULES"` else `422`)
     - `security`: Authentication, host whitelisting, and authorization hooks.
   - **`case_store/`**: SQLite-backed case repository with ACID transitions and collision detection (supports `kind='monthly'|'sampling'|'appeal'`).
   - **`attachment_store.py`**: SQLite-indexed attachment manager keyed by `case_id`.
@@ -85,9 +92,10 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
   - **`packagers/`**: NHI EMR batch packaging engine (`emr_batch_packager.py`) generating 11-code filenames, A/B/C/D 4-tier classification, A-tier HTML SOAP document (`StructuredSoapHtmlBuilder`: anchored sections; the former PDF builder produced blank pages and is no longer used, 2026-11-17), and 500MB ZIP chunking at 450MB threshold.
   - **`pipeline.py`**: Pipeline coordinators (`run_presubmission_check` and `run_case_pipeline`).
   - **`asr/`**: Local offline dual-backend speech recognition (`sherpa_backend.py` as **default** `sherpa-onnx` SenseVoice int8 + OpenCC `s2twp` + optional `num_clusters=2` speaker diarization; `transcriber.py` unified dispatcher with `ELC_ASR_BACKEND=sherpa|whisper` and `faster-whisper` + PyAV 19 compatible decoder as fallback; shared `config/asr_hotwords.json` specialty hotwords; lazy-loaded optional extras `asr-sherpa` / `asr`; strict fail-closed `ASRUnavailableError` & PHI-safe logging).
-  - **`comparator/`**: Three-way evidence judger (`judger.py`), reinforcement narratives (`narratives.py`), bilingual & clinical SOAP generation (`soap_advice.py` with `validate_soap_quality(..., profile="template"|"clinical")`), and local ICD-10 semantic mismatch validator (`icd10_validator.py` — advisory warnings only, never silently rewrites codes).
+  - **`comparator/`**: Three-way evidence judger (`judger.py`), reinforcement narratives (`narratives.py`), bilingual & clinical SOAP generation (`soap_advice.py` with `validate_soap_quality(..., profile="template"|"clinical")`, single targeted placeholder retry, empty `summary_zh` backfill, and two-step clinical `pending` bypass guard), and local ICD-10 semantic mismatch validator (`icd10_validator.py` — advisory warnings only, never silently rewrites codes).
   - **`services/rule_summary.py`**: Deterministic verbatim summary extractor for `payment_text` previews so report cards stay concise and never duplicate `<details class="rule-fulltext">`.
-  - **`rule_repository/`**: SQLite rule store, docx tree indices, and LLM mapping scripts.
+  - **`rule_repository/`**: SQLite rule store (`data/db/rules.sqlite3`, zero PHI, tracked in git), unified placeholder-to-SQL-`NULL` CSV loaders (`loaders/_csv_table.py`), readonly quality & 8-category stale-code analyzer (`audit_csv.py`, CLI `--stale-vs-db`), atomic locked sync pipeline (`scripts/sync_latest_rules.py` with `O_EXCL` `.lock`, sidecar `409` check, filename-timestamp backup rotation max 5, `REPLACE_CONFIRM_TOKEN`), docx tree indices, and LLM mapping scripts.
+  - **`docs/CLINIC_SERVER_OPS_QUICKCARD.md`**: One-page non-engineer clinic server operations quickcard (verified by `tests/test_ops_quickcard_doc.py`).
   - **`parsers/`**: Parsers for XML declarations (TOTFA), deduction notifications, and outpatient SOAP text.
   - **`generators/`**: Builders for appeal drafts, Big5 XML (`appeal_xml.py`, `sampling_xml.py`), tracking tables, ODT/PDF templates, and evidence packets.
 
@@ -121,8 +129,8 @@ When operating within the Herdr terminal workspace manager (`HERDR_ENV=1`), task
   - Run tests: `ELC_ALLOW_NO_AUTH_FOR_TESTS=1 uv run pytest -q tests doc/tests`
   - Dependency pitfall: the user's global `~/.config/uv/uv.toml` sets `constraint-dependencies = ["pydantic<2.11"]`, which silently downgrades pydantic on `uv add`/`uv lock`. Lock with `uv lock --no-config` (or `--no-config` on `uv add`) so only the intended package changes; verify with `git diff uv.lock`.
 - **Testing Guardrails**:
-  - Never write to production databases (`data/db/cases.sqlite3`) in tests.
-  - Use fixtures from `tests/conftest.py` (e.g., `make_api_app`) which create temporary isolated databases.
+  - Never write to production databases (`data/db/cases.sqlite3`, `data/db/rules.sqlite3`) or `data/audit/access.log` in tests.
+  - `tests/conftest.py` enforces global autouse isolation (`_isolate_prod_runtime_paths`) redirecting `CASES_DB_PATH` and `AUDIT_LOG_PATH` away from `data/`; always use `make_api_app` / `tmp_path` fixtures for isolated databases.
 - **Herdr Environment**:
   - When running inside Herdr (`HERDR_ENV=1`), coordinate long-running jobs or agent tasks across assigned panes: `agy` (`w7:p6`) for execution, `hermes` (`w7:p3`) for testing, and `claude` (`w7:p1`) for planning and final check. See §4 for the handoff flow.
   - Pane IDs and agent names may change when panes are recreated; confirm with `herdr agent list` before sending work.
@@ -171,6 +179,7 @@ The production server is a **systemd user service** (not a manual terminal proce
 6. Back up `data/` and `logs/`; `data/` contains patient-related data.
 
 **Known open items**
-- Full suite passes: 1655 passed, 2 skipped (2026-11-17). No known pre-existing failures.
+- Full suite passes: **1,763 passed, 3 skipped, 1 deselected, 0 failed** (2026-11-23, Phase 37). No known pre-existing failures.
+- `deploy/install.sh` includes `elc-llama-server.service` plus `--check-asr-models` / `--check-llama-cache` health checks; clean Ubuntu Server VM end-to-end verification and Windows 12-item manual verification remain pending.
 - `logs/healthcheck.log` may show one `failed (1/3)` line at service start (startup race); harmless below the threshold.
-- Deployment files are committed (as of 2026-11-17). `config/facility.json` stays local-only (gitignored).
+- Deployment files and public NHI rules DB (`data/db/rules.sqlite3`, zero PHI) are committed; `config/facility.json`, `data/db/cases.sqlite3` (PHI), `E4Btest.md`, and `Wavesample/` stay local-only (gitignored).
