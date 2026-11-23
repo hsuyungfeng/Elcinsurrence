@@ -145,6 +145,7 @@ Full phase details, success criteria, and requirements: [`milestones/v1.1-ROADMA
 | 35. 規則庫只讀品質稽核與 NULL 契約統一、SOAP 定向強化、一鍵部署收尾與測試隔離修復 | v1.3 | 1/1 | Complete | 2026-11-23 |
 | 36. 工作台移除步驟列釋放空間、規則更新機能升級（套用 261119/261028）、NULL 條文語意修正與臨床 `pending` 精準化 | v1.3 | 1/1 | Complete | 2026-11-23 |
 | 37. 正式規則庫安全復原（5,752 碼）、舊碼唯讀分類分析、四重整表防誤觸與《診所主機維運速查卡》 | v1.3 | 1/1 | Complete | 2026-11-23 |
+| 38. 零 LLM 官方完整給付規定條文建置（`rule_mapping` 8,302 筆）、全文展開優化與 `sync_latest_rules` 自動連動 | v1.3 | 1/1 | Complete | 2026-11-23 |
 
 ## Out of Roadmap Scope
 

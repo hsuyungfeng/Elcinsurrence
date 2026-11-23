@@ -359,7 +359,13 @@ def _stage3_view(store, record, *, with_thumbnails: bool):
                 if r.payment_text:
                     rules_list.append(RuleBlock(label="給付規定（payment_text）", text=r.payment_text, is_payment_text=True))
                 if r.article_full_text:
-                    rules_list.append(RuleBlock(label="條文全文（article_full_text）", text=r.article_full_text))
+                    rules_list.append(
+                        RuleBlock(
+                            label="條文全文（article_full_text）",
+                            text=r.article_full_text,
+                            location=r.article_location,
+                        )
+                    )
         except RuleRepositoryError as exc:
             # 規則庫故障僅降級為無規則文字並留下警告；其他例外照常拋出（P1-11）。
             current_app.logger.warning("stage3 view: rule lookup degraded: %s", exc)

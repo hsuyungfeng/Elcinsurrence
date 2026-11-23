@@ -158,11 +158,31 @@ def test_rule_full_text_is_serialized_only_on_request():
 
 
 def test_html_expandable_block_contains_full_regulation_text():
-    case = audit_case("MON-h", _payload([_order("TSTLONG")]), lookup=_lookup)
-    batch = BatchAudit(batch="MONTHLY-202307", cases_total=1, cases=(case,), report=aggregate_batch(1, (case,)))
-    html = render_batch_report_html(batch)
-    assert '<details class="rule-fulltext"><summary>📜 檢視完整給付規定條文</summary>' in html
-    assert LONG_TEXT in html
+    case_long = audit_case("MON-h", _payload([_order("TSTLONG")]), lookup=_lookup)
+    batch_long = BatchAudit(
+        batch="MONTHLY-202307",
+        cases_total=1,
+        cases=(case_long,),
+        report=aggregate_batch(1, (case_long,)),
+    )
+    html_long = render_batch_report_html(batch_long)
+    # payment_text 直接完整展開（不截斷），無 article_full_text 時不重複輸出折疊框
+    assert '<div class="rule-payment">' in html_long
+    assert LONG_TEXT in html_long
+    assert '<details class="rule-fulltext">' not in html_long
+
+    # 同時具備 payment_text 與 article_full_text 時：上方直接展開 payment_text，下方折疊僅含 article_full_text
+    case_both = audit_case("MON-b", _payload([_order("TSTBOTH")]), lookup=_lookup)
+    batch_both = BatchAudit(
+        batch="MONTHLY-202307",
+        cases_total=1,
+        cases=(case_both,),
+        report=aggregate_batch(1, (case_both,)),
+    )
+    html_both = render_batch_report_html(batch_both)
+    assert '<div class="rule-payment">' in html_both
+    assert '<details class="rule-fulltext"><summary>📜 檢視完整給付規定條文</summary>' in html_both
+    assert "條文全文：另一版本。" in html_both
 
 
 # ── 空項目隱藏 ─────────────────────────────────────────────────

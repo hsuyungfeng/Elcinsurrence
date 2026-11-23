@@ -129,6 +129,8 @@ class OrderFinding:
     official_unit_price: str | None = None  # 藥品官方支付價（顯示用）
     # 完整給付規定條文（payment_text 優先，否則 article_full_text）；只在 to_dict(include_rule_text=True) 輸出。
     rule_full_text: str | None = None
+    # 官方條文出處位置（來自 rule_mapping.article_location，Phase 38 顯示於展開區標題）。
+    article_location: str | None = None
 
     @property
     def label(self) -> str:
@@ -416,6 +418,7 @@ def evaluate_order(
         evidence=tuple(evidence),
         source_texts=tuple(usable),
         rule_full_text=usable[0][1],
+        article_location=rule.article_location,
         price_source=price_source,
         official_unit_price=rule.unit_price,
         **base,

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: milestone
-current_phase: 37
-status: paused — Phase 33–37 已全部完成、文件與規則庫基線同步入庫，已建立 .planning/.continue-here.md 交接點（1,763 passed, 0 failed）
-stopped_at: 2026-11-23 Phase 37 完成後收尾暫停（交接檔：.planning/.continue-here.md）
-last_updated: "2026-11-23T16:46:00+08:00"
-last_activity: 2026-11-23 — 更新 README.md、AGENTs.md、納入零 PHI 規則庫 data/db/rules.sqlite3（5,752/11,472）至版控，並執行 /gsd-pause-work 寫入 .planning/.continue-here.md 交接點
+current_phase: 38
+status: Phase 33–38 已完成並通過獨立 Claude Plan Checker 與 Tester 雙重 PASS（1,766 passed, 0 failed）
+stopped_at: null
+last_updated: "2026-11-23T17:14:00+08:00"
+last_activity: 2026-11-23 — Phase 38 完成零 LLM 確定性官方完整給付規定條文建置器（build_fulltext_mapping.py，冷啟動 1.27s 建置 8,302 筆 rule_mapping：藥品 5,453 筆＋診療項目 2,849 筆）、一二三階全文展開區出處與不重複優化，以及 sync_latest_rules 自動連動與防洗空保護
 progress:
-  total_phases: 37
-  completed_phases: 37
-  total_plans: 29
-  completed_plans: 29
+  total_phases: 38
+  completed_phases: 38
+  total_plans: 30
+  completed_plans: 30
   percent: 100
 ---
 
@@ -29,6 +29,10 @@ progress:
 - **Phase 37（已完成，Claude Plan Checker PASS、全套件 1,763 passed / 0 failed，5,752 碼重建基準獲使用者核准）**：
   - Wave 1：正式 `data/db/rules.sqlite3` 經確定性等價重建為 5,752 筆給付＋11,472 筆藥品（`sha256: 81de3061...`，並留存 4,967 碼事故快照與不受輪替影響的 5,752 碼固定快照）；擴充 `audit_csv.py` 新增唯讀 8 類舊碼差異分析（`classify_payment_code_category`、`analyze_stale_payment_codes`、`format_stale_markdown`、`--stale-vs-db`），驗證 `stale_count > 0` 一律建議 `upsert`。
   - Wave 2：建立函式層／API（422）／CLI（`--confirm REPLACE_RULES`）／前端（`advanced-only`＋`prompt` 確認詞）四重整表防誤觸；新增一頁式非工程師《診所主機維運速查卡》（`docs/CLINIC_SERVER_OPS_QUICKCARD.md`）與自動檢核測試（`tests/test_ops_quickcard_doc.py`），並同步 `README.md` 索引。
+- **Phase 38（已完成，Claude Plan Checker & Tester 雙重 PASS，1,766 passed / 0 failed）**：
+  - Wave 1：新增零 LLM 確定性官方全文建置器 `rule_repository/mapping/build_fulltext_mapping.py`（純 Python 標準庫解析 `完整給付規定1140221.odt` 附表／章節、21 份官方 `.docx` 跨段落審查注意事項與手術節表格、`261119` CSV `備註`），冷啟動 1.27s（熱快取 0.53s）為正式 `data/db/rules.sqlite3` 建置 **8,302 筆** `rule_mapping`（藥品 5,453 筆解開 303 字截斷＋診療項目 2,849 筆，原 5,752／11,472 主表零遺失）。
+  - Wave 2：`rule_summary.py` 避免 ≤140 字短結構文無意義上下重複；`monthly_report_html.py`、`report_renderer.py`、`sampling_service.py`、`appeal.py` 統一於「📜 檢視完整給付規定條文」優先呈現帶官方出處（`article_location`）之 100% 未截斷全文。
+  - Wave 3：`sync_latest_rules.py` 於暫存庫原子同步時自動連動 `build_fulltext_mapping`（缺官方目錄時保留既有列不洗空，`replace=True` 時清理孤立列），`/api/rules/status` 新增回報 `rule_mapping_rows`。
 
 ## 未結與承接項目 (Pending & Deferred Items)
 

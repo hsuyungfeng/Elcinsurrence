@@ -125,21 +125,24 @@ def test_not_found_items_are_hidden_entirely():
 
 def test_only_items_with_regulation_get_fulltext_expander():
     html = _sample_html()
-    # 案 1 的 TSTX、TSTY；案 3 的 TSTX（案 2 因總點數不足不納入）
-    assert html.count('<details class="rule-fulltext">') == 3
-    assert "📜 檢視完整給付規定條文" in html
+    # 案 1 的 TSTX、TSTY；案 3 的 TSTX（案 2 因總點數不足不納入）均直接展開完整 payment_text
+    assert html.count('<div class="rule-payment">') == 3
+    assert "📜 給付規定（payment_text）" in html
+    # 僅有 payment_text、無額外 article_full_text 時不重複輸出空的折疊條文框
+    assert '<details class="rule-fulltext">' not in html
 
 
 def test_item_card_shows_amount_line_and_expander_only():
     html = _sample_html()
     assert '<div class="amounts">單價: 1 元 · 點數: 400 點 · 總量: 1.0</div>' in html
-    assert "<details class=\"rule-fulltext\"><summary>📜 檢視完整給付規定條文</summary>" in html
+    assert '<div class="rule-payment-title">📜 給付規定（payment_text）</div>' in html
 
 
 def test_no_regulation_text_block_when_rule_has_no_text():
     batch = _batch([("MON-n", _payload([_po("TSTNONE", points="400")]))])
     html = render_batch_report_html(batch)
     assert "TSTNONE" not in html  # 無規則：整列隱藏
+    assert '<div class="rule-payment">' not in html
     assert '<details class="rule-fulltext">' not in html
 
 
@@ -147,7 +150,8 @@ def test_no_markers_rule_is_included_because_official_text_exists():
     batch = _batch([("MON-p", _payload([_po("TSTP", points="400")]))])
     html = render_batch_report_html(batch)
     assert "TSTP" in html
-    assert '<details class="rule-fulltext">' in html
+    assert '<div class="rule-payment">' in html
+    assert PLAIN_TEXT in html
 
 
 # ── 納入門檻：醫療總點數 > 1000 ──────────────────────────────────

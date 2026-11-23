@@ -26,7 +26,6 @@ from elc_audit_engine.rule_repository.icd_titles import get_icd_chinese_title
 from elc_audit_engine.monthly_pregen import is_procedure_finding
 from elc_audit_engine import evidence_vault
 from elc_audit_engine.services.report_assets import SHARED_CSS, SHARED_SCRIPT, soap_modal_button
-from elc_audit_engine.services.rule_summary import summarize_payment_text
 
 _SOAP_CSS = """
 details.tier-group { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); overflow: hidden; }
@@ -160,37 +159,53 @@ def _amount_text(finding: OrderFinding) -> str:
 
 
 def _rule_fulltext_html(finding: OrderFinding) -> str:
-    """📜 規則重點與全文展開區：
-    - 給付規定（payment_text）：以 .rule-payment 顯示精簡重點摘要（嚴格不與完整條文重複）。
-    - 完整給付規定條文：以 <details class="rule-fulltext"> 折疊，按壓 summary 展開 100% 原文全文。
+    """📜 給付規定直接展開＋官方完整條文折疊區（Phase 38 使用者確認版）：
+    - 上方（.rule-payment，自動展開免點擊）：完整呈現 `payment_text` 原文，不經簡要截斷。
+    - 下方（<details class="rule-fulltext">，須按下才展開）：僅包含非 `payment_text` 之
+      官方完整條文（如 `article_full_text` 及其 `article_location` 出處），不重複包含
+      `payment_text`；若無額外官方完整條文則不輸出空白折疊框。
     """
     if not finding.source_texts:
         return ""
 
     payment_boxes = []
-    blocks = []
+    fulltext_blocks = []
+
     for name, text in finding.source_texts:
-        label = _SOURCE_LABELS.get(name, name)
+        clean = (text or "").strip()
+        if not clean:
+            continue
         if name == "payment_text":
-            summary = summarize_payment_text(text)
-            if summary:
-                payment_boxes.append(
-                    f'<div class="rule-payment">'
-                    f'<div class="rule-payment-title">📜 給付規定（payment_text）</div>'
-                    f'<div class="rule-payment-text">{_e(summary)}</div>'
-                    f'</div>'
-                )
-        blocks.append(
+            payment_boxes.append(
+                f'<div class="rule-payment">'
+                f'<div class="rule-payment-title">📜 給付規定（payment_text）</div>'
+                f'<div class="rule-payment-text">{_e(clean)}</div>'
+                f'</div>'
+            )
+            continue
+        if name == "article_full_text":
+            label = (
+                f"官方條文全文（{finding.article_location}）"
+                if finding.article_location
+                else _SOURCE_LABELS.get(name, name)
+            )
+        else:
+            label = _SOURCE_LABELS.get(name, name)
+        fulltext_blocks.append(
             f'<div class="rule-src"><div class="src">{_e(label)}</div>'
             f'<pre class="rule-text">{_e(text)}</pre></div>'
         )
 
     expander = (
         '<details class="rule-fulltext"><summary>📜 檢視完整給付規定條文</summary>'
-        f'<div class="rule-body">{"".join(blocks)}</div></details>'
+        f'<div class="rule-body">{"".join(fulltext_blocks)}</div></details>'
+        if fulltext_blocks
+        else ""
     )
-    if payment_boxes:
+    if payment_boxes and expander:
         return f'<div class="rule-blocks">{"".join(payment_boxes)}{expander}</div>'
+    if payment_boxes:
+        return f'<div class="rule-blocks">{"".join(payment_boxes)}</div>'
     return expander
 
 

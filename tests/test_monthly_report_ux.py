@@ -98,7 +98,7 @@ def test_index_html_tab_order_and_sidebar_width():
 
 
 def test_payment_text_summary_is_concise_and_distinct_from_fulltext():
-    """給付規定（payment_text）預覽區必須簡潔，不可與下方完整給付規定條文相同。"""
+    """驗證 summarize_payment_text 工具行為，以及報表直接展開完整 payment_text、折疊區僅含官方條文全文（不含 payment_text）。"""
     import re
     from elc_audit_engine.services.rule_summary import summarize_payment_text
 
@@ -122,6 +122,7 @@ def test_payment_text_summary_is_concise_and_distinct_from_fulltext():
     assert "**" not in summary
     assert "申報條件" in summary and "應檢附文件" in summary
 
+    official_article = "【西醫基層醫療費用審查注意事項-外科.docx > (十三)】\n脂肪瘤如在皮下以62010C申報。"
     case = CaseAudit(
         case_id="MON-62010c",
         batch="MONTHLY-202307",
@@ -142,7 +143,10 @@ def test_payment_text_summary_is_concise_and_distinct_from_fulltext():
                 flags=("points_over_350",),
                 rule_status=STATUS_RESTRICTION,
                 rule_name="臉部以外皮膚及皮下腫瘤摘除術",
-                source_texts=(("payment_text", full_62010c),),
+                source_texts=(
+                    ("payment_text", full_62010c),
+                    ("article_full_text", official_article),
+                ),
             ),
         ),
     )
@@ -158,10 +162,13 @@ def test_payment_text_summary_is_concise_and_distinct_from_fulltext():
     )
     html = render_batch_report_html(batch)
     m_pay = re.search(r'<div class="rule-payment-text">(.*?)</div>', html, re.S)
-    m_full = re.search(r'<pre class="rule-text">(.*?)</pre>', html, re.S)
-    assert m_pay and m_full
-    assert m_pay.group(1) != m_full.group(1)
-    assert len(m_pay.group(1)) < len(m_full.group(1)) // 2
+    m_full = re.findall(r'<pre class="rule-text">(.*?)</pre>', html, re.S)
+    assert m_pay and len(m_full) == 1
+    # Phase 38：payment_text 自動完整展開（不經簡要截斷），折疊區僅含官方條文全文（不含 payment_text）
+    assert "必須為惡性腫瘤" in m_pay.group(1)
+    assert "同一病患於同一腫瘤部位" in m_pay.group(1)
+    assert "西醫基層醫療費用審查注意事項-外科.docx" in m_full[0]
+    assert "同一病患於同一腫瘤部位" not in m_full[0]
 
-    # 單句極短文字不可在兩處重複顯示
+    # 單句極短文字 summarize_payment_text 回 None
     assert summarize_payment_text("一般說明文字。") is None

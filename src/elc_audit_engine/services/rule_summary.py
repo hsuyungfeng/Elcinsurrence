@@ -131,6 +131,10 @@ def summarize_payment_text(text: str | None, *, max_chars: int = 180) -> str | N
     structured = _extract_structured_points(raw, max_chars=max_chars)
     if structured:
         summary = "\n".join(structured)
+        # 若原文已極短（≤140 字）且擷取結果長度仍達原文 85% 以上（僅去掉標題或換項目符號），
+        # 視為無法實質精簡，回傳 None 以免與下方完整條文幾乎重複顯示（Phase 38）。
+        if len(raw) <= 140 and len(summary) >= len(raw) * 0.85:
+            return None
         if summary != raw and len(summary) < len(raw):
             return summary
 

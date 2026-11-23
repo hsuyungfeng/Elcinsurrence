@@ -37,6 +37,7 @@ from elc_audit_engine.rule_repository.audit_csv import audit_rule_csv
 from elc_audit_engine.rule_repository.loaders._csv_table import PLACEHOLDER_TEXTS, RuleCsvFormatError
 from elc_audit_engine.rule_repository.loaders.drug_loader import load_drug_csv_full
 from elc_audit_engine.rule_repository.loaders.payment_loader import load_payment_csv
+from elc_audit_engine.rule_repository.mapping.build_fulltext_mapping import build_fulltext_mapping
 
 DRUG_PATTERN = "藥品項查詢項目檔*.csv"
 PAYMENT_PATTERN = "醫療服務給付項目*.csv"
@@ -99,6 +100,7 @@ class SyncResult:
     replaced: bool = False
     backup_file: str | None = None
     audit: dict[str, Any] | None = None
+    rule_mapping_rows: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -108,6 +110,7 @@ class SyncResult:
             "payment_rows": self.payment_rows,
             "drug_stale_not_in_source": self.drug_stale,
             "payment_stale_not_in_source": self.payment_stale,
+            "rule_mapping_rows": self.rule_mapping_rows,
             "mode": "replace" if self.replaced else "upsert",
             "backup_file": self.backup_file,
         }
@@ -255,6 +258,7 @@ def rules_status(
         "drug_rows": 0,
         "drug_null_rows": 0,
         "drug_literal_placeholder_rows": 0,
+        "rule_mapping_rows": 0,
     }
     if db_info["exists"]:
         uri = Path(target).resolve().as_uri() + "?mode=ro"
@@ -274,6 +278,12 @@ def rules_status(
                     ).fetchone()[0]
                 except sqlite3.OperationalError:
                     pass
+            try:
+                db_info["rule_mapping_rows"] = conn.execute(
+                    "SELECT COUNT(*) FROM rule_mapping WHERE article_full_text IS NOT NULL AND trim(article_full_text) != ''"
+                ).fetchone()[0]
+            except sqlite3.OperationalError:
+                pass
         finally:
             conn.close()
 
@@ -304,6 +314,8 @@ def sync_latest_rules(
     backup: bool = True,
     max_backups: int = 5,
     include_audit: bool = True,
+    official_docs_dir: str | None = None,
+    rebuild_fulltext: bool = True,
 ) -> SyncResult:
     """執行原子同步：更新 `drug_rules`（含支付價、AI 摘要）與 `payment_rules`。
 
@@ -336,6 +348,27 @@ def sync_latest_rules(
 
         drug_rows = load_drug_csv_full(staging, drug_file, replace=replace)
         payment_rows = load_payment_csv(staging, payment_file, replace=replace)
+
+        rule_mapping_rows = 0
+        if rebuild_fulltext:
+            ft_stats = build_fulltext_mapping(
+                staging,
+                payment_csv_path=payment_file,
+                drug_csv_path=drug_file,
+                official_docs_dir=official_docs_dir,
+                prune_orphans=replace,
+            )
+            rule_mapping_rows = ft_stats.rule_mapping_rows
+        else:
+            conn_cnt = sqlite3.connect(staging)
+            try:
+                rule_mapping_rows = conn_cnt.execute(
+                    "SELECT COUNT(*) FROM rule_mapping WHERE article_full_text IS NOT NULL AND trim(article_full_text) != ''"
+                ).fetchone()[0]
+            except sqlite3.OperationalError:
+                rule_mapping_rows = 0
+            finally:
+                conn_cnt.close()
 
         # 確認 staging 寫入後無殘留側車檔
         for suf in _SIDECAR_SUFFIXES:
@@ -384,6 +417,7 @@ def sync_latest_rules(
         replaced=replace,
         backup_file=backup_file,
         audit=audit_summary,
+        rule_mapping_rows=rule_mapping_rows,
     )
 
 
