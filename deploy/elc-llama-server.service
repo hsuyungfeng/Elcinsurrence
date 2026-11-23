@@ -1,0 +1,31 @@
+[Unit]
+Description=ELC Local LLM Server (llama.cpp - Gemma 4 E4B Q4_K_M + mmproj)
+Documentation=file://@ROOT@/deploy/README.md
+After=default.target
+# 短時間內反覆崩潰即停止重試，避免無限重啟迴圈
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=@ROOT@
+ExecStart=%h/.local/bin/llama serve \
+  -hf unsloth/gemma-4-E4B-it-GGUF:Q4_K_M \
+  --offline \
+  --mmproj-auto \
+  --alias gemma-4-E4B-it-Q4_K_M \
+  --jinja \
+  --kv-unified \
+  --host 127.0.0.1 \
+  --port 8080 \
+  --ctx-size 131072 \
+  -ngl 99
+Restart=always
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

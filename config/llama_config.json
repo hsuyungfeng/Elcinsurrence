@@ -5,7 +5,7 @@
     "quantization": "Q4_K_M"
   },
   "inference": {
-    "n_ctx": 32768,
+    "n_ctx": 131072,
     "max_tokens": 1024,
     "temperature": 0.7
   },

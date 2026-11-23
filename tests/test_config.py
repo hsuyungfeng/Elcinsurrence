@@ -18,7 +18,7 @@ def test_llama_config_defaults():
 def test_load_llama_config_returns_locked_values():
     """load_llama_config() 應回傳含 D2/Phase 33 鎖定值的 dict（非佔位值）。"""
     cfg = settings.load_llama_config()
-    assert cfg["inference"]["n_ctx"] == 32768
+    assert cfg["inference"]["n_ctx"] == 131072
     assert cfg["model"]["name"] == "gemma-4-E4B-it-Q4_K_M"
 
 
