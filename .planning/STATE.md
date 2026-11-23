@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: milestone
-current_phase: 32
-status: Phase 32 文件與程式層級完成；外部實機驗收未完成
+current_phase: 34
+status: Phase 33–34 已完成並合併至 main（Claude Tester 獨立驗收 PASS ＋ 實音冒煙通過）
 stopped_at: null
-last_updated: "2026-11-16T14:00:00.000Z"
-last_activity: 2026-11-16 — Phase 32.1 CSP style-src 嚴格化（'self'）與 Ruff 規則回復（移除 F841/B007/F811 放寬）完成
+last_updated: "2026-11-23T12:30:00.000Z"
+last_activity: 2026-11-23 — Phase 33（Gemma 4 E4B 128K、Whisper ASR、26MB/Opus、臨床 SOAP 分流、payment_text 精簡預覽）上線；Phase 34（sherpa-onnx SenseVoice int8 + OpenCC + num_clusters=2 可選說者分離）實作完成待驗收
 progress:
   total_phases: 32
   completed_phases: 31

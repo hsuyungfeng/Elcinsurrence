@@ -127,9 +127,36 @@ def _load_whisper_model(model_name: str, device: str, compute_type: str, cpu_thr
     return model
 
 
+def _decode_audio_16k(path: Path) -> Any:
+    """以 PyAV 將任意音檔解碼為 16 kHz mono float32 陣列（相容 PyAV 19+，避開 faster-whisper 舊參數 bug）。"""
+    try:
+        import av
+        import numpy as np
+    except ImportError as exc:
+        raise ASRUnavailableError(
+            "音訊解碼套件（av / numpy）未安裝，無法執行本機語音轉錄（請安裝：uv sync --extra asr-sherpa）"
+        ) from exc
+
+    container = av.open(str(path))
+    try:
+        resampler = av.audio.resampler.AudioResampler(format="s16", layout="mono", rate=16000)
+        chunks = []
+        for frame in container.decode(audio=0):
+            for resampled in resampler.resample(frame):
+                chunks.append(resampled.to_ndarray().reshape(-1))
+    finally:
+        container.close()
+    if not chunks:
+        return np.zeros(0, dtype=np.float32)
+    return np.concatenate(chunks).astype(np.float32) / 32768.0
+
+
 def transcribe_audio(
     audio_path: str | Path,
     *,
+    backend: str | None = None,
+    diarize: bool = False,
+    num_clusters: int = 2,
     model_name: str | None = None,
     device: str | None = None,
     compute_type: str | None = None,
@@ -137,20 +164,38 @@ def transcribe_audio(
     hotword_config: HotwordConfig | None = None,
     model_factory: Callable[[str, str, str, int], Any] | None = None,
 ) -> TranscriptionResult:
-    """使用本機 faster-whisper + Silero VAD + 熱詞表轉錄音檔。
+    """本機語音轉錄統一入口：預設 `sherpa`（SenseVoice int8 + OpenCC + 可選說者分離），`whisper` 為備援。
 
     Args:
         audio_path: 本機音檔路徑（.wav / .opus 等 PyAV 支援格式）。
-        model_name: 模型名（預設讀 ``ELC_ASR_MODEL`` 或 ``large-v3-turbo``）。
+        backend: `"sherpa"`（預設）或 `"whisper"`（重雜訊／口音備援）；未提供時讀環境變數
+            ``ELC_ASR_BACKEND``（預設 `"sherpa"`；若明確注入 Whisper `model_factory` 則走 Whisper 路徑）。
+        diarize: 僅 ``backend="sherpa"`` 生效，是否啟用離線說者分離（預設 False）。
+        num_clusters: 說者分離聚類人數（預設 2：醫師／病患）。
+        model_name: Whisper 模型名（預設讀 ``ELC_ASR_MODEL`` 或 ``large-v3-turbo``）。
         device: 推論裝置（預設 ``cpu``）。
         compute_type: 量化型別（預設 ``int8``）。
         cpu_threads: CPU 執行緒數（預設讀 ``ELC_ASR_THREADS`` 或 8）。
         hotword_config: 注入的熱詞設定；未提供則自動載入 ``config/asr_hotwords.json``。
-        model_factory: 測試用模型工廠注入點（零真實模型依賴）。
+        model_factory: Whisper 測試用模型工廠注入點（零真實模型依賴）。
     """
+    eff_backend = (backend or os.environ.get("ELC_ASR_BACKEND") or "sherpa").strip().lower()
+    if model_factory is None and eff_backend == "sherpa":
+        from elc_audit_engine.asr.sherpa_backend import transcribe_audio_sherpa
+
+        return transcribe_audio_sherpa(
+            audio_path,
+            diarize=diarize,
+            num_clusters=num_clusters,
+            cpu_threads=cpu_threads,
+            hotword_config=hotword_config,
+        )
+    if eff_backend not in ("whisper", "sherpa"):
+        raise ASRTranscriptionError(f"不支援的 ASR 後端：{eff_backend!r}（僅支援 'sherpa' 或 'whisper'）")
+
     path = Path(audio_path)
     if not path.is_file():
-        raise ASRTranscriptionError(f"音檔不存在：{path}")
+        raise ASRTranscriptionError("音檔不存在，無法執行本機語音轉錄")
 
     eff_model = model_name or os.environ.get("ELC_ASR_MODEL", "large-v3-turbo")
     eff_device = device or os.environ.get("ELC_ASR_DEVICE", "cpu")
@@ -165,8 +210,9 @@ def transcribe_audio(
 
     t0 = time.monotonic()
     try:
+        audio_input: Any = str(path) if model_factory is not None else _decode_audio_16k(path)
         segments_iter, info = model.transcribe(
-            str(path),
+            audio_input,
             language="zh",
             initial_prompt=initial_prompt,
             vad_filter=True,

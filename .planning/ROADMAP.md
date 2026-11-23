@@ -160,3 +160,11 @@ The following material from 電子抽審.md is background/context only and is NO
 Plans:
 
 - [ ] TBD (run /gsd:plan-phase 32 to break down)
+
+### Phase 33: 本機 Whisper ASR・Gemma 4 E4B（128K）落地・錄音上限修正與 SOAP 品質分流
+
+- [x] Phase 33: 完成（2026-11-20～2026-11-23，`a9021e7`、`6c64a51`、`107c673`）— 本機 `faster-whisper` 模組與熱詞表、`elc-llama-server.service`（Gemma 4 E4B `Q4_K_M` + `mmproj-BF16`, 128K）、API `26 MB`/`.opus`、`clinical` SOAP 品質分流、`icd10_validator`、`payment_text` 精簡預覽。
+
+### Phase 34: `sherpa-onnx`（SenseVoice int8 ＋ OpenCC ＋ `num_clusters=2` 可選說者分離）整合
+
+- [x] Phase 34: 完成（2026-11-23，Claude Tester 獨立驗收 PASS，`.planning/phases/34-sherpa-onnx-sensevoice-diarization/34-PLAN.md`）— 整合 `sherpa_backend.py`（預設 `sherpa` 後端、可選 `num_clusters=2` 說者分離）、統一 `ELC_ASR_BACKEND=sherpa|whisper` 入口、PyAV 19 相容解碼修復、`.gitignore` 排除 `E4Btest.md`。

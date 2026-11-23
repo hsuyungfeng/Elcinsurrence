@@ -84,12 +84,15 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
   - **`reconciliation/`**: Automatic month-start `TOTFA.zip` reconciliation against daily clinic outpatient voice SOAP records (`soap_reconciler.py`), populating SOAP into `CaseStore` for Stages 2 & 3.
   - **`packagers/`**: NHI EMR batch packaging engine (`emr_batch_packager.py`) generating 11-code filenames, A/B/C/D 4-tier classification, A-tier HTML SOAP document (`StructuredSoapHtmlBuilder`: anchored sections; the former PDF builder produced blank pages and is no longer used, 2026-11-17), and 500MB ZIP chunking at 450MB threshold.
   - **`pipeline.py`**: Pipeline coordinators (`run_presubmission_check` and `run_case_pipeline`).
+  - **`asr/`**: Local offline dual-backend speech recognition (`sherpa_backend.py` as **default** `sherpa-onnx` SenseVoice int8 + OpenCC `s2twp` + optional `num_clusters=2` speaker diarization; `transcriber.py` unified dispatcher with `ELC_ASR_BACKEND=sherpa|whisper` and `faster-whisper` + PyAV 19 compatible decoder as fallback; shared `config/asr_hotwords.json` specialty hotwords; lazy-loaded optional extras `asr-sherpa` / `asr`; strict fail-closed `ASRUnavailableError` & PHI-safe logging).
+  - **`comparator/`**: Three-way evidence judger (`judger.py`), reinforcement narratives (`narratives.py`), bilingual & clinical SOAP generation (`soap_advice.py` with `validate_soap_quality(..., profile="template"|"clinical")`), and local ICD-10 semantic mismatch validator (`icd10_validator.py` — advisory warnings only, never silently rewrites codes).
+  - **`services/rule_summary.py`**: Deterministic verbatim summary extractor for `payment_text` previews so report cards stay concise and never duplicate `<details class="rule-fulltext">`.
   - **`rule_repository/`**: SQLite rule store, docx tree indices, and LLM mapping scripts.
   - **`parsers/`**: Parsers for XML declarations (TOTFA), deduction notifications, and outpatient SOAP text.
   - **`generators/`**: Builders for appeal drafts, Big5 XML (`appeal_xml.py`, `sampling_xml.py`), tracking tables, ODT/PDF templates, and evidence packets.
 
-- **`server.py`**: WSGI entrypoint (`server:app`) delegating to `elc_audit_engine.api.create_app()`. Production runs it via gunicorn under systemd (see §6); `python server.py` is development-only (Flask dev server, debug-capable).
-- **`deploy/`**: Production service files — `gunicorn.conf.py`, systemd user units (`elc-audit-engine.service`, healthcheck `.service`/`.timer`), `healthcheck.sh`, env template, and `README.md` (LAN guidance).
+- **`server.py`**: WSGI entrypoint (`server:app`) delegating to `elc_audit_engine.api.create_app()` (Flask `MAX_CONTENT_LENGTH = 26 MB` aligned with `/api/soap/recordings` 25 MB `.wav`/`.opus` contract; non-recording uploads retain 10 MB per-route limits).
+- **`deploy/`**: Production service files — `gunicorn.conf.py`, systemd user units (`elc-audit-engine.service`, `elc-llama-server.service` for 128K Gemma 4 E4B `Q4_K_M` + `mmproj-BF16`, healthcheck `.service`/`.timer`, `elc-backup.*`), `healthcheck.sh`, env template, and `README.md` (LAN guidance).
 - **`scripts/`**: CLI builders for appeal print, XML, deduction sheets, and evidence packets.
 
 ---
@@ -144,6 +147,7 @@ The production server is a **systemd user service** (not a manual terminal proce
 | Item | Value |
 | :--- | :--- |
 | Service | `elc-audit-engine.service` (gunicorn 26.2.0, `server:app`, 1 worker × 8 threads) |
+| Local LLM | `elc-llama-server.service` (`llama serve`, Gemma 4 E4B `Q4_K_M` + `mmproj-BF16`, `127.0.0.1:8080`, `--ctx-size 131072 --kv-unified --offline -ngl 99`) |
 | Restart | `Restart=always`, `RestartSec=3`; start-limit 10 failures / 300 s |
 | Crash record | `logs/crash.log` (written on every stop: `result`, `exit_code`, `exit_status`) |
 | Logs | `logs/access.log`, `logs/error.log` (gunicorn + Python tracebacks), `logs/healthcheck.log` |

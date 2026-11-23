@@ -80,3 +80,5 @@ deploy/release-*/archive/
 data/**/*.zip
 data/DoctorToolbox_SOAP_training_*/
 data/**/*.wav
+# 本機含真實門診譯文之實測報告（含 PHI，不可提交）
+E4Btest.md

@@ -80,6 +80,20 @@
   - `GET /api/emr/packages`：列出已產製之 EMR 封包清單。
   - `GET /api/emr/download/<filename>`：安全下載 500MB ZIP 封包。
 
+### 6. 本機 Gemma 4 E4B（128K）推論・離線雙後端語音辨識・臨床 SOAP 與報告精簡化 (Phase 33–34)
+- **常駐本機 LLM 服務（`elc-llama-server.service`）**：
+  - 預設模型：`unsloth/gemma-4-E4B-it-GGUF:Q4_K_M`（附掛 `mmproj-BF16.gguf`，`--ctx-size 131072 --kv-unified --offline -ngl 99`，綁定 `127.0.0.1:8080`；高配機房可選用 `config/llama_config.q8.example.json`）。
+  - 30 組健保金標準（`scripts/replay_gold_standard.py`）實測達 **100%（30/30）**、零引文幻覺；完整評測見 [`compare.md`](compare.md)。
+- **本機離線雙後端 ASR（[`src/elc_audit_engine/asr/`](src/elc_audit_engine/asr/)）**：
+  - **`sherpa` 後端（Phase 34，預設快速 ASR 後端）**：`sherpa-onnx` SenseVoice int8 ＋ OpenCC `s2twp` 台灣繁化 ＋ [`config/asr_hotwords.json`](config/asr_hotwords.json) 專科熱詞校正 ＋ 可選離線雙人說者分離（`diarize=True, num_clusters=2`）。純 CPU 實測達 **42.8× 即時速度**（RTF `0.023`）、**0% 重複迴圈**；選配依賴 `uv sync --extra asr-sherpa`。
+  - **`whisper` 後端（Phase 33，重雜訊／台語口音備援）**：`faster-whisper large-v3-turbo`（`int8`、Silero VAD、`condition_on_previous_text=False`、PyAV 19 相容解碼）；選配依賴 `uv sync --extra asr`。
+  - 預設走 `sherpa`，可透過 `ELC_ASR_BACKEND=sherpa|whisper` 或 `transcribe_audio(..., backend=...)` 切換，全程 100% 離線不外送音檔，日誌零 PHI。
+- **錄音 API 上限與品質分流**：
+  - `POST /api/soap/recordings` 支援 `.wav` 與 `.opus`（上限 25 MB，Flask `MAX_CONTENT_LENGTH` 已對齊為 **26 MB**；非錄音端點維持各自 10 MB 防線）。
+  - `validate_soap_quality(soap, profile="template"|"clinical")` 區分短版預生成範例（200–500 字）與真實門診錄音 SOAP（200–2000 字），並整合 [`icd10_validator.py`](src/elc_audit_engine/comparator/icd10_validator.py) 偵測高風險 ICD-10 語意誤碼（僅出警告，絕不擅自改碼）。
+- **給付規定精簡預覽（[`rule_summary.py`](src/elc_audit_engine/services/rule_summary.py)）**：
+  - 當月預審與二／三階報告的 `📜 給付規定（payment_text）` 改為確定性原文重點摘要（~160–180 字），與下方折疊的 `📜 檢視完整給付規定條文` 明確區隔且絕不捏造。
+
 ---
 
 ## 👥 Herdr 多 Agent 協同分工體系 (Herdr Agent Team)

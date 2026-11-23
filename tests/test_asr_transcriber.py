@@ -94,4 +94,72 @@ def test_missing_faster_whisper_raises_unavailable_error(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "faster_whisper", None)
 
     with pytest.raises(ASRUnavailableError):
-        transcribe_audio(wav)
+        transcribe_audio(wav, backend="whisper")
+
+
+def test_decode_audio_16k_missing_av_raises_unavailable_error(tmp_path, monkeypatch):
+    wav = tmp_path / "visit.wav"
+    wav.write_bytes(b"RIFF....WAVEfmt ")
+
+    from elc_audit_engine.asr import transcriber
+
+    monkeypatch.setitem(sys.modules, "av", None)
+    with pytest.raises(ASRUnavailableError):
+        transcriber._decode_audio_16k(wav)
+
+
+def test_decode_audio_16k_calls_av_open_without_metadata_errors(tmp_path, monkeypatch):
+    wav = tmp_path / "visit.wav"
+    wav.write_bytes(b"RIFF....WAVEfmt ")
+
+    from elc_audit_engine.asr import transcriber
+
+    open_kwargs: dict = {}
+
+    class _FakeArray:
+        def reshape(self, *_):
+            return self
+
+        def astype(self, _):
+            return self
+
+        def __truediv__(self, _):
+            return [0.25, -0.25]
+
+    class _FakeFrame:
+        def to_ndarray(self):
+            return _FakeArray()
+
+    class _FakeResampler:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def resample(self, frame):
+            return [_FakeFrame()]
+
+    class _FakeContainer:
+        def decode(self, audio=0):
+            return [object()]
+
+        def close(self):
+            pass
+
+    def _fake_open(path, **kwargs):
+        open_kwargs.update(kwargs)
+        return _FakeContainer()
+
+    fake_av = SimpleNamespace(
+        open=_fake_open,
+        audio=SimpleNamespace(resampler=SimpleNamespace(AudioResampler=_FakeResampler)),
+    )
+    fake_np = SimpleNamespace(
+        float32="float32",
+        concatenate=lambda chunks: chunks[0],
+        zeros=lambda n, dtype=None: [],
+    )
+    monkeypatch.setitem(sys.modules, "av", fake_av)
+    monkeypatch.setitem(sys.modules, "numpy", fake_np)
+
+    out = transcriber._decode_audio_16k(wav)
+    assert "metadata_errors" not in open_kwargs
+    assert out == [0.25, -0.25]
