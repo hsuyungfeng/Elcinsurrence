@@ -193,14 +193,22 @@ def test_sync_replace_validation_conflict_lock_and_sidecars(client, rules_dir, a
     journal_path = db_path + "-journal"
     with open(journal_path, "wb") as f:
         f.write(b"journal")
-    r_j = client.post("/api/rules/sync", headers=KEY, json={"replace": True})
+    r_j = client.post(
+        "/api/rules/sync",
+        headers=KEY,
+        json={"replace": True, "confirm": "REPLACE_RULES"},
+    )
     assert r_j.status_code == 409
     assert os.path.exists(journal_path)
     os.remove(journal_path)
 
-    # 5. 上傳新版移除 P1、新增 P2，以 replace=True 整表替換並產生備份
+    # 5. 上傳新版移除 P1、新增 P2，以 replace=True + confirm 整表替換並產生備份
     _upload(client, "醫療服務給付項目_測試261119.csv", _csv([PAYMENT_HEADER, "P2,新項目,新規定,20260101,29101231"]))
-    r_rep = client.post("/api/rules/sync", headers=KEY, json={"replace": True})
+    r_rep = client.post(
+        "/api/rules/sync",
+        headers=KEY,
+        json={"replace": True, "confirm": "REPLACE_RULES"},
+    )
     assert r_rep.status_code == 200
     b_rep = r_rep.get_json()
     assert b_rep["mode"] == "replace"
@@ -211,6 +219,42 @@ def test_sync_replace_validation_conflict_lock_and_sidecars(client, rules_dir, a
 
     assert not get_rule("P1", db_path=db_path).found
     assert get_rule("P2", db_path=db_path).found
+
+
+def test_sync_replace_requires_confirm_before_sidecars_and_db_write(client, rules_dir, app):
+    """Phase 37：replace=True 缺少或錯誤 confirm 一律先回 422（即使存在 -journal 側車檔），且不改動 DB。"""
+    from elc_audit_engine.rule_repository import get_rule
+
+    _upload(client, DRUG_NAME, _csv([DRUG_HEADER, "TST1,測試藥,限使用,1091201,9991231,2.50,AI"]))
+    _upload(client, PAYMENT_NAME, _csv([PAYMENT_HEADER, "P1,舊項目,舊規定,20200101,29101231"]))
+    assert client.post("/api/rules/sync", headers=KEY, json={"replace": False}).status_code == 200
+
+    _upload(client, "醫療服務給付項目_測試261119.csv", _csv([PAYMENT_HEADER, "P2,新項目,新規定,20260101,29101231"]))
+    db_path = app.config["ELC_RULES_DB_PATH"]
+
+    for payload in (
+        {"replace": True},
+        {"replace": True, "confirm": ""},
+        {"replace": True, "confirm": "replace_rules"},
+        {"replace": True, "confirm": True},
+    ):
+        resp = client.post("/api/rules/sync", headers=KEY, json=payload)
+        assert resp.status_code == 422
+        assert "REPLACE_RULES" in resp.get_json()["message"]
+
+    # 即使存在 -journal 側車檔，缺 confirm 仍應在鎖檔／側車檢查之前優先回 422 而非 409
+    journal_path = db_path + "-journal"
+    with open(journal_path, "wb") as f:
+        f.write(b"journal")
+    try:
+        resp_j = client.post("/api/rules/sync", headers=KEY, json={"replace": True})
+        assert resp_j.status_code == 422
+        assert os.path.exists(journal_path)
+    finally:
+        os.remove(journal_path)
+
+    assert get_rule("P1", db_path=db_path).found
+    assert not get_rule("P2", db_path=db_path).found
 
 
 def test_sync_staging_failure_preserves_original_db_and_backup_rotation(tmp_path):
@@ -233,7 +277,7 @@ def test_sync_staging_failure_preserves_original_db_and_backup_rotation(tmp_path
     (rdir / "醫療服務給付項目_20261119_bad8.csv").unlink()
 
     (rdir / DRUG_NAME).write_bytes(_csv([DRUG_HEADER, "D1,原藥,原規定,1091201,9991231,1.00,AI"]))
-    sync_latest_rules(db_path=db_path, rules_dir=str(rdir), replace=True)
+    sync_latest_rules(db_path=db_path, rules_dir=str(rdir), replace=True, confirm="REPLACE_RULES")
     assert get_rule("D1", db_path=db_path).name == "原藥"
 
     # 故意放入壞掉的新版給付 CSV（缺必要欄位），藥品新版合法 → 整庫必須維持原狀（無半切換）
@@ -242,7 +286,7 @@ def test_sync_staging_failure_preserves_original_db_and_backup_rotation(tmp_path
     )
     (rdir / "醫療服務給付項目支付標準261201壞表頭.csv").write_bytes(_csv(["錯誤欄位"]))
     with pytest.raises(RuleCsvFormatError):
-        sync_latest_rules(db_path=db_path, rules_dir=str(rdir), replace=True)
+        sync_latest_rules(db_path=db_path, rules_dir=str(rdir), replace=True, confirm="REPLACE_RULES")
     assert get_rule("D1", db_path=db_path).name == "原藥"  # 未半切換
     assert not os.path.exists(db_path + ".lock")
     (rdir / "醫療服務給付項目支付標準261201壞表頭.csv").unlink()

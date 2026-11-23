@@ -109,13 +109,27 @@ def test_doctor_mode_elements():
 
 
 def test_stepper_removed_and_empty_state_preserved():
-    """Phase 36：已移除頂部 3 步驟導引列釋放空間，並保留空白狀態引導與規則管理面板。"""
+    """Phase 36–37：已移除頂部 3 步驟導引列，保留空白狀態引導與規則面板，且整表更新按鈕受 advanced-only 與確認詞保護。"""
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     assert 'id="workflow-stepper"' not in html
     assert 'id="empty-state-guide"' in html
     assert "目前尚無申報資料，請先上傳本月申報檔" in html
     assert 'id="rulesCurrentInfo"' in html
     assert 'data-action="syncRulesReplace"' in html
+
+    # Phase 37：整表更新按鈕加上 advanced-only（醫師模式隱藏），增量同步按鈕不加 advanced-only
+    sync_replace_m = re.search(r'<button[^>]*data-action="syncRulesReplace"[^>]*>', html)
+    assert sync_replace_m, "找不到 syncRulesReplace 按鈕"
+    assert "advanced-only" in sync_replace_m.group(0)
+
+    sync_upsert_m = re.search(r'<button[^>]*data-action="syncRules"[^>]*>', html)
+    assert sync_upsert_m, "找不到 syncRules 按鈕"
+    assert "advanced-only" not in sync_upsert_m.group(0)
+
+    js = (STATIC_DIR / "js" / "workbench.js").read_text(encoding="utf-8")
+    replace_fn_m = re.search(r"function syncRulesReplace\s*\([\s\S]*?\n\s*\}", js)
+    assert replace_fn_m, "找不到 syncRulesReplace 函式"
+    assert "REPLACE_RULES" in replace_fn_m.group(0)
 
 
 def test_doctor_mode_js_logic():

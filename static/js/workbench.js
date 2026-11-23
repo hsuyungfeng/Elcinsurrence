@@ -419,13 +419,15 @@
       }
     }
 
-    async function syncRules(replace = false) {
+    async function syncRules(replace = false, confirmToken = null) {
       setRulesStatus(replace ? '整表更新中 …' : '增量同步中 …');
       try {
+        const payload = { replace: Boolean(replace) };
+        if (replace && confirmToken) payload.confirm = confirmToken;
         const resp = await authFetch('/api/rules/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ replace: Boolean(replace) }),
+          body: JSON.stringify(payload),
         });
         const body = await resp.json();
         if (!resp.ok) {
@@ -451,11 +453,16 @@
     }
 
     function syncRulesReplace() {
-      const ok = confirm(
+      const typed = prompt(
         '確定要執行「整表更新」嗎？\n' +
-        '系統會先自動備份舊規則庫，再以最新來源檔整表取代（來源檔中不存在的舊代碼將被移除）。'
+        '系統會先自動備份舊規則庫，但來源檔中不存在的舊代碼將被移除。\n' +
+        '若已確認，請輸入 REPLACE_RULES 以繼續：'
       );
-      if (ok) syncRules(true);
+      if (typed === 'REPLACE_RULES') {
+        syncRules(true, 'REPLACE_RULES');
+      } else if (typed !== null) {
+        setRulesStatus('已取消整表更新（確認碼不符，未更動規則庫）。');
+      }
     }
 
     function escapeHtml(str) {

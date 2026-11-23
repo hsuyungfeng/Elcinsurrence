@@ -4,10 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from pathlib import Path
 
+import pytest
+
 from elc_audit_engine.rule_repository import get_rule
-from elc_audit_engine.rule_repository.audit_csv import audit_rule_csv, format_audit_markdown, main as audit_cli_main
+from elc_audit_engine.rule_repository.audit_csv import (
+    analyze_stale_payment_codes,
+    audit_rule_csv,
+    classify_payment_code_category,
+    format_audit_markdown,
+    format_stale_markdown,
+    main as audit_cli_main,
+)
+from elc_audit_engine.rule_repository.db import SCHEMA_PAYMENT
 from elc_audit_engine.rule_repository.loaders.drug_loader import load_drug_csv
 from elc_audit_engine.rule_repository.loaders.payment_loader import load_payment_csv
 
@@ -132,3 +143,147 @@ def test_audit_csv_cjk_adjacent_code_ref_and_official_prefix_not_flagged(tmp_pat
     found_refs = [item["non_standard_refs"] for item in rep["anomalies"]["non_standard_suffix_ref"]]
     assert ["51002D"] in found_refs
     assert ["92043D"] in found_refs
+
+
+def test_classify_payment_code_category_all_8_categories():
+    """Phase 37：驗證 8 類互斥分類與大小寫／空白正規化（含 ASCII 純數字與非純數字特項碼）。"""
+    assert classify_payment_code_category(" 08037c ") == "C類一般診療項目"
+    assert classify_payment_code_category("05204D") == "D類（門診藥事服務費／助產）"
+    assert classify_payment_code_category("00101E") == "E類"
+    assert classify_payment_code_category("pt101") == "復健／職能／語言治療計畫碼（PT/OT/ST）"
+    assert classify_payment_code_category("OT202") == "復健／職能／語言治療計畫碼（PT/OT/ST）"
+    assert classify_payment_code_category("ST303") == "復健／職能／語言治療計畫碼（PT/OT/ST）"
+    assert classify_payment_code_category("P1407A") == "P專案計畫碼（慢性病／家醫／牙醫／安寧等）"
+    assert classify_payment_code_category("PA001") == "P專案計畫碼（慢性病／家醫／牙醫／安寧等）"
+    assert classify_payment_code_category("N001") == "N類專案／護理／長照碼"
+    assert classify_payment_code_category("01") == "預防保健／篩檢純數字碼（兒童衛教／癌症篩檢等）"
+    # 非純數字（含全形數字或尾碼 P）不得誤判為純數字預防保健碼
+    assert classify_payment_code_category("48027P") == "其他特項碼（K/F/G/H/Q/CH等非純數字碼）"
+    assert classify_payment_code_category("１２３") == "其他特項碼（K/F/G/H/Q/CH等非純數字碼）"
+
+
+def test_analyze_stale_payment_codes_upsert_no_stale_and_readonly(tmp_path):
+    """Phase 37：stale_count > 0 一律推薦 upsert（即使僅含其他特項碼），stale_count == 0 回 no_stale，且嚴格唯讀。"""
+    db_path = tmp_path / "rules.sqlite3"
+    conn = sqlite3.connect(db_path)
+    conn.execute(SCHEMA_PAYMENT)
+    conn.executemany(
+        "INSERT INTO payment_rules (code, name, payment_text, effective_from, effective_to) VALUES (?, ?, ?, ?, ?)",
+        [
+            ("00101C", "保留項目", "正常條文", "2020-01-01", "2910-12-31"),
+            ("48027p", "專案特項", "審查原則：(2025-01-01) **AI預填**", "2020-01-01", "2910-12-31"),
+            ("05204D", "藥事服務", None, "2020-01-01", "2910-12-31"),
+            ("N100", "長照碼", "既有一般文字", "2020-01-01", "2910-12-31"),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    before_sha = _sha256(db_path)
+    csv_partial = tmp_path / "pay_partial.csv"
+    csv_partial.write_text(
+        "\ufeff診療項目代碼,中文項目名稱,支付規定,生效起日,生效迄日\n"
+        " 00101c ,保留項目,新條文,20200101,29101231\n",
+        encoding="utf-8",
+    )
+
+    rep = analyze_stale_payment_codes(db_path, csv_partial)
+    assert _sha256(db_path) == before_sha
+    assert rep["stale_count"] == 3
+    assert rep["recommended_mode"] == "upsert"
+    assert rep["ai_prefill_count"] == 1
+    assert rep["null_text_count"] == 1
+    assert rep["other_text_count"] == 1
+    assert sum(rep["by_category"].values()) == 3
+    md = format_stale_markdown(rep)
+    assert "48027P" in md and "upsert" in md
+
+    # 僅餘 1 筆「其他特項碼」仍須維持 recommended_mode == "upsert"（絕不建議自動刪除）
+    csv_only_other_stale = tmp_path / "pay_other_stale.csv"
+    csv_only_other_stale.write_text(
+        "\ufeff診療項目代碼,中文項目名稱,支付規定,生效起日,生效迄日\n"
+        "00101C,保留,條文,20200101,29101231\n"
+        "05204D,藥事,條文,20200101,29101231\n"
+        "N100,長照,條文,20200101,29101231\n",
+        encoding="utf-8",
+    )
+    rep_other = analyze_stale_payment_codes(db_path, csv_only_other_stale)
+    assert rep_other["stale_count"] == 1
+    assert rep_other["recommended_mode"] == "upsert"
+
+    # CSV 涵蓋 DB 全數代碼 → stale_count == 0, recommended_mode == "no_stale"
+    csv_all = tmp_path / "pay_all.csv"
+    csv_all.write_text(
+        "\ufeff診療項目代碼,中文項目名稱,支付規定,生效起日,生效迄日\n"
+        "00101C,保留,條文,20200101,29101231\n"
+        "48027P,專案,條文,20200101,29101231\n"
+        "05204D,藥事,條文,20200101,29101231\n"
+        "N100,長照,條文,20200101,29101231\n",
+        encoding="utf-8",
+    )
+    rep_none = analyze_stale_payment_codes(db_path, csv_all)
+    assert rep_none["stale_count"] == 0
+    assert rep_none["recommended_mode"] == "no_stale"
+    assert _sha256(db_path) == before_sha
+
+
+def test_analyze_stale_payment_codes_error_boundaries_and_cli(tmp_path, capsys):
+    """Phase 37：驗證缺檔、損毀 DB、缺 payment_rules 表、誤傳藥品 CSV 與 CLI 參數錯誤邊界。"""
+    pay_csv = tmp_path / "pay.csv"
+    pay_csv.write_text("\ufeff診療項目代碼,中文項目名稱,支付規定,生效起日,生效迄日\n00101C,項,文,20200101,29101231\n", encoding="utf-8")
+
+    # 1. DB 或 CSV 不存在 -> FileNotFoundError
+    with pytest.raises(FileNotFoundError):
+        analyze_stale_payment_codes(tmp_path / "missing.sqlite3", pay_csv)
+
+    # 2. 損毀非 SQLite 檔 -> ValueError（不可拋裸 sqlite3.DatabaseError）
+    corrupt_db = tmp_path / "corrupt.sqlite3"
+    corrupt_db.write_bytes(b"not a valid sqlite database bytes")
+    with pytest.raises(ValueError, match="損毀或非有效 SQLite"):
+        analyze_stale_payment_codes(corrupt_db, pay_csv)
+
+    # 3. 合法 SQLite 但缺 payment_rules 表 -> ValueError
+    empty_db = tmp_path / "empty.sqlite3"
+    sqlite3.connect(empty_db).close()
+    with pytest.raises(ValueError, match="payment_rules"):
+        analyze_stale_payment_codes(empty_db, pay_csv)
+
+    # 4. 傳入藥品 CSV（缺「診療項目代碼」）-> ValueError
+    valid_db = tmp_path / "valid.sqlite3"
+    conn = sqlite3.connect(valid_db)
+    conn.execute(SCHEMA_PAYMENT)
+    conn.execute("INSERT INTO payment_rules VALUES ('00101C','項','文','2020-01-01','2910-12-31')")
+    conn.commit()
+    conn.close()
+
+    drug_csv = tmp_path / "drug.csv"
+    drug_csv.write_text("\ufeff藥品代號,藥品中文名稱,給付規定,有效起日,有效迄日\nD1,藥,文,1120101,1991231\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="診療項目代碼"):
+        analyze_stale_payment_codes(valid_db, drug_csv)
+
+    # 5. CLI --stale-vs-db 缺 --csv 或給 2 份 --csv -> 退出碼 1
+    assert audit_cli_main(["--stale-vs-db", str(valid_db)]) == 1
+    assert audit_cli_main(["--stale-vs-db", str(valid_db), "--csv", str(pay_csv), "--csv", str(pay_csv)]) == 1
+    assert audit_cli_main(["--stale-vs-db", str(corrupt_db), "--csv", str(pay_csv)]) == 1
+    _ = capsys.readouterr()
+
+    # 6. CLI 正常執行寫出 json 與 md -> 退出碼 0
+    json_out = tmp_path / "stale.json"
+    md_out = tmp_path / "stale.md"
+    assert (
+        audit_cli_main(
+            [
+                "--stale-vs-db",
+                str(valid_db),
+                "--csv",
+                str(pay_csv),
+                "--json-out",
+                str(json_out),
+                "--md-out",
+                str(md_out),
+            ]
+        )
+        == 0
+    )
+    assert json.loads(json_out.read_text(encoding="utf-8"))["recommended_mode"] == "no_stale"
+    assert "no_stale" in md_out.read_text(encoding="utf-8")

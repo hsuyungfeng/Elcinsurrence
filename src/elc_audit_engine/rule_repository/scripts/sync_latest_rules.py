@@ -48,6 +48,7 @@ PAYMENT_REQUIRED_COLUMNS = ("診療項目代碼", "中文項目名稱", "支付�
 
 _VERSION_RE = re.compile(r"(?<!\d)\d{6}(?!\d)")
 _SIDECAR_SUFFIXES = ("-wal", "-shm", "-journal")
+REPLACE_CONFIRM_TOKEN = "REPLACE_RULES"
 
 
 class RulesSyncConflictError(RuntimeError):
@@ -299,6 +300,7 @@ def sync_latest_rules(
     rules_dir: str | None = None,
     *,
     replace: bool = False,
+    confirm: str | None = None,
     backup: bool = True,
     max_backups: int = 5,
     include_audit: bool = True,
@@ -307,10 +309,16 @@ def sync_latest_rules(
 
     預設 **upsert**：來源有的代碼覆寫，來源沒有的舊列保留，並於結果回報
     `*_stale_not_in_source` 數量。自動刪除規則不可接受，是否下架需由人工決定，
-    因此 `replace=True` 必須明確指定。
+    因此 `replace=True` 必須同時明確傳入 `confirm="REPLACE_RULES"`，否則於任何
+    鎖檔、側車檢查或寫入之前即拋出 `ValueError`。
 
     雙表先寫入暫存庫再以 `os.replace` 整庫原子替換，避免半切換；全程持 `O_EXCL` 鎖檔。
     """
+    if replace and confirm != REPLACE_CONFIRM_TOKEN:
+        raise ValueError(
+            f"整表取代須明確提供 confirm={REPLACE_CONFIRM_TOKEN!r} 以防誤刪既有規則"
+        )
+
     directory = rules_dir if rules_dir is not None else default_rules_dir()
     target = db_path if db_path is not None else default_db_path()
 
@@ -379,18 +387,28 @@ def sync_latest_rules(
     )
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description="同步 data/rules/ 最新規則到 rules.sqlite3")
     parser.add_argument(
         "--replace",
         action="store_true",
-        help="整表取代（會刪除來源檔沒有的代碼）；預設為 upsert，不刪除任何既有規則。",
+        help="整表取代（會刪除來源檔沒有的代碼，必須同時搭配 --confirm REPLACE_RULES）；預設為 upsert。",
+    )
+    parser.add_argument(
+        "--confirm",
+        default=None,
+        help="搭配 --replace 使用之明確確認碼（須為 REPLACE_RULES）。",
     )
     args = parser.parse_args(argv)
 
-    result = sync_latest_rules(replace=args.replace)
+    try:
+        result = sync_latest_rules(replace=args.replace, confirm=args.confirm)
+    except ValueError as exc:
+        print(f"[sync_latest_rules] 錯誤：{exc}", file=sys.stderr)
+        return 1
+
     print(
         f"[sync_latest_rules] 藥品：{os.path.basename(result.drug_file)} → {result.drug_rows} 筆"
         f"（DB 中不在來源檔的代碼：{result.drug_stale}）；"
@@ -399,7 +417,8 @@ def main(argv: list[str] | None = None) -> None:
         f"模式：{'整表取代' if args.replace else 'upsert'}；備份：{result.backup_file or '無'}",
         file=sys.stderr,
     )
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

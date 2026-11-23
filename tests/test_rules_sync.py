@@ -25,6 +25,8 @@ from elc_audit_engine.rule_repository.loaders.drug_loader import load_drug_csv_f
 from elc_audit_engine.rule_repository.loaders.payment_loader import load_payment_csv
 from elc_audit_engine.rule_repository.models import RuleResult, not_found
 from elc_audit_engine.rule_repository.scripts.sync_latest_rules import (
+    REPLACE_CONFIRM_TOKEN,
+    main as sync_cli_main,
     pick_latest,
     rule_csv_kind,
     sync_latest_rules,
@@ -218,11 +220,42 @@ def test_sync_replace_mode_is_explicit(tmp_path, drug_csv):
     _write_csv(rules_dir / "醫療服務給付項目_測試260801.csv", [PAYMENT_HEADER, "KEEP1,保留,新,20200101,29101231"])
     db = str(tmp_path / "rules.sqlite3")
     _seed_db(db)
-    result = sync_latest_rules(db_path=db, rules_dir=str(rules_dir), replace=True)
+    result = sync_latest_rules(
+        db_path=db,
+        rules_dir=str(rules_dir),
+        replace=True,
+        confirm=REPLACE_CONFIRM_TOKEN,
+    )
     assert result.to_dict()["mode"] == "replace"
     conn = sqlite3.connect(db)
     assert {r[0] for r in conn.execute("SELECT code FROM payment_rules")} == {"KEEP1"}
     conn.close()
+
+
+def test_sync_replace_requires_confirm_token_before_pick_lock_or_write(tmp_path):
+    """Phase 37：函式層 replace=True 未帶 confirm='REPLACE_RULES' 須立即拋 ValueError（先於找檔與鎖檔）。"""
+    empty_rules_dir = tmp_path / "empty_rules"
+    empty_rules_dir.mkdir()
+    db = str(tmp_path / "rules.sqlite3")
+    _seed_db(db)
+
+    # 即使規則目錄為空（原本會拋 FileNotFoundError），缺 confirm 仍應最優先拋 ValueError
+    with pytest.raises(ValueError, match="REPLACE_RULES"):
+        sync_latest_rules(db_path=db, rules_dir=str(empty_rules_dir), replace=True)
+
+    with pytest.raises(ValueError, match="REPLACE_RULES"):
+        sync_latest_rules(db_path=db, rules_dir=str(empty_rules_dir), replace=True, confirm="WRONG")
+
+    conn = sqlite3.connect(db)
+    assert {r[0] for r in conn.execute("SELECT code FROM payment_rules")} == {"KEEP1", "STALE1"}
+    conn.close()
+
+
+def test_sync_cli_replace_without_confirm_exits_nonzero(capsys):
+    """Phase 37：CLI --replace 未搭配 --confirm REPLACE_RULES 回傳退出碼 1（不觸碰任何 DB）。"""
+    rc = sync_cli_main(["--replace"])
+    assert rc == 1
+    assert "REPLACE_RULES" in capsys.readouterr().err
 
 
 def test_sync_without_sources_raises_file_not_found(tmp_path):

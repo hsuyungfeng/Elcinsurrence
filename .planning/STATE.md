@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: milestone
-current_phase: 36
-status: Phase 33–36 已完成並通過獨立 Claude Plan Checker 與 Tester 驗收（1,755 passed, 0 failed）
+current_phase: 37
+status: Phase 33–37 已完成並通過獨立 Claude Plan Checker 與全套件驗收（1,763 passed, 0 failed）
 stopped_at: null
-last_updated: "2026-11-23T15:46:00+08:00"
-last_activity: 2026-11-23 — Phase 36 完成移除 3 步驟導引列釋放空間、規則更新功能升級（GET /api/rules/status、65MB 單路由上傳、O_EXCL 鎖檔＋原子替換＋備份輪替＋套用 261119/261028）、audit_csv 中文緊鄰正則精準化、臨床 pending 兩步防繞過檢核暨 NULL 條文業務語意修正（1,755 passed, 0 failed）
+last_updated: "2026-11-23T16:40:00+08:00"
+last_activity: 2026-11-23 — Phase 37 完成正式規則庫安全等價重建至 5,752 筆（已獲使用者核准為正式基準並留存固定快照）、audit_csv 舊碼唯讀 8 類分類工具、函式／API／CLI／前端四重整表防誤觸（advanced-only＋REPLACE_RULES 確認碼），以及一頁式《診所主機維運速查卡》（docs/CLINIC_SERVER_OPS_QUICKCARD.md）與自動檢核測試（1,763 passed, 0 failed）
 progress:
-  total_phases: 36
-  completed_phases: 36
-  total_plans: 28
-  completed_plans: 28
+  total_phases: 37
+  completed_phases: 37
+  total_plans: 29
+  completed_plans: 29
   percent: 100
 ---
 
@@ -26,13 +26,16 @@ progress:
   - Wave 1：移除工作台頂部 3 步驟導引列（`workflow-stepper`）釋放垂直版面空間。
   - Wave 2：精準化 `audit_csv.py`（中文緊鄰醫令碼正則＋避免誤報官方「審查原則：」）、新增 `GET /api/rules/status`、`/api/rules/upload` 單路由放寬至 65 MB、`sync_latest_rules` 升級為 `O_EXCL` 行程鎖＋側車檢查（`-wal`/`-shm`/`-journal`）＋整庫原子替換＋依檔名時間戳備份輪替（上限 5 份）＋唯讀稽核摘要；升級前端 `📚 規則` 面板；本機 `data/db/rules.sqlite3` 以安全 `upsert` 套用最新 `261119`（4,967 筆＋785 保留舊碼 ＝ 5,752 筆）＋ `261028`（11,472 筆）；修正 `OrderJudgment.llm_failed` 區分官方 `NULL` 條文（業務待人工 `reviewed`）與 LLM 系統故障（`failed`）。
   - Wave 3：`soap_advice.py` 臨床 `pending` 兩步防繞過精準化（放行明確檢驗追蹤語境，嚴格攔截 10 組診斷／計畫／`problem` 待定繞過與裸佔位）。
+- **Phase 37（已完成，Claude Plan Checker PASS、全套件 1,763 passed / 0 failed，5,752 碼重建基準獲使用者核准）**：
+  - Wave 1：正式 `data/db/rules.sqlite3` 經確定性等價重建為 5,752 筆給付＋11,472 筆藥品（`sha256: 81de3061...`，並留存 4,967 碼事故快照與不受輪替影響的 5,752 碼固定快照）；擴充 `audit_csv.py` 新增唯讀 8 類舊碼差異分析（`classify_payment_code_category`、`analyze_stale_payment_codes`、`format_stale_markdown`、`--stale-vs-db`），驗證 `stale_count > 0` 一律建議 `upsert`。
+  - Wave 2：建立函式層／API（422）／CLI（`--confirm REPLACE_RULES`）／前端（`advanced-only`＋`prompt` 確認詞）四重整表防誤觸；新增一頁式非工程師《診所主機維運速查卡》（`docs/CLINIC_SERVER_OPS_QUICKCARD.md`）與自動檢核測試（`tests/test_ops_quickcard_doc.py`），並同步 `README.md` 索引。
 
 ## 未結與承接項目 (Pending & Deferred Items)
 
-- **Windows 實機人工驗收**：依 `deploy/release-20261116/31-WINDOWS-MANUAL-VERIFY.md` 的 12 項逐一實測（Phase 31–36 共同承接）。**尚未執行。**
+- **Windows 實機人工驗收**：依 `deploy/release-20261116/31-WINDOWS-MANUAL-VERIFY.md` 的 12 項逐一實測（Phase 31–37 共同承接）。**尚未執行。**
 - **Windows 打包驗證**：以最新 `deploy/windows_agent/ElcAgent.spec` 與 `soapvoice_client.spec`（D-32-26）於 Windows 環境建置。
 - **Ubuntu 乾淨 VM 一鍵安裝驗證**：`deploy/install.sh` 需於獨立乾淨 Ubuntu Server VM 實測。
-- **785 筆不在 `261119` 的舊給付碼人工確認**：已採 `upsert` 保留於 `rules.sqlite3` 並產出清單於對照報告，待人工確認是否下架後再執行整表更新。
+- **785 筆不在 `261119` 的舊給付碼人工確認**：已完成唯讀 8 類分類分析（確認含專案計畫碼、門診藥事服務費、疫苗處置等，維持 `upsert` 保留；整表更新已收納至進階模式並需 `REPLACE_RULES` 確認）。
 - **Phase 10（健保 VPN／`NHI_EIIAPI` 實機串接）**：阻塞於外部院所 VPN 與 SAM 卡環境。
 
 ## 維運與已知風險註記

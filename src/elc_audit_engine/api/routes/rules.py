@@ -14,6 +14,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from elc_audit_engine.rule_repository.loaders._csv_table import RuleCsvFormatError
 from elc_audit_engine.rule_repository.scripts.sync_latest_rules import (
+    REPLACE_CONFIRM_TOKEN,
     RulesSyncConflictError,
     default_rules_dir,
     rule_csv_kind,
@@ -98,9 +99,11 @@ def get_rules_status():
 def sync_rules():
     """執行每月規則同步：自規則目錄取最新藥品與給付項目 CSV，原子更新 rules.sqlite3。
 
-    可選 JSON body：`{"replace": true|false}`（未傳預設 false = upsert）。
+    可選 JSON body：`{"replace": false}`（預設 upsert）或
+    `{"replace": true, "confirm": "REPLACE_RULES"}`（整表取代須明確提供確認碼）。
     """
     replace = False
+    confirm: str | None = None
     if request.is_json:
         body = request.get_json(silent=True)
         if not isinstance(body, dict):
@@ -109,13 +112,24 @@ def sync_rules():
             if not isinstance(body["replace"], bool):
                 raise ApiError("replace 欄位必須為布林值", status=422)
             replace = body["replace"]
+        if "confirm" in body:
+            confirm = body["confirm"] if isinstance(body["confirm"], str) else None
+
+    if replace and confirm != REPLACE_CONFIRM_TOKEN:
+        raise ApiError(
+            f"整表取代須明確提供 confirm={REPLACE_CONFIRM_TOKEN!r} 以防誤刪既有規則",
+            status=422,
+        )
 
     try:
         result = sync_latest_rules(
             db_path=current_app.config.get("ELC_RULES_DB_PATH"),
             rules_dir=_rules_dir(),
             replace=replace,
+            confirm=confirm,
         )
+    except ValueError as exc:
+        raise ApiError(str(exc), status=422)
     except FileNotFoundError:
         raise ApiError("找不到規則來源檔（請先上傳藥品與給付項目 CSV）")
     except RuleCsvFormatError as exc:
