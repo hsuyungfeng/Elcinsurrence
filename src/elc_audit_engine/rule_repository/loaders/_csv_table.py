@@ -24,6 +24,19 @@ _INSERT = {
 }
 _DELETE = {"payment_rules": "DELETE FROM payment_rules", "drug_rules": "DELETE FROM drug_rules"}
 
+# 來源 CSV 中代表「沒有官方給付規定」的純占位字串（大小寫不敏感；對齊 drug_loader._PLACEHOLDER_TEXTS）
+PLACEHOLDER_TEXTS = frozenset({"", "null", "none", "n/a", "nan", "未找到給付規定"})
+
+
+def _normalize_rule_text(raw: str | None) -> str | None:
+    """將純占位字串統一轉為 SQLite NULL（None），與 RuleResult.payment_text: str | None 契約一致。"""
+    if raw is None:
+        return None
+    stripped = raw.strip()
+    if stripped.lower() in PLACEHOLDER_TEXTS:
+        return None
+    return raw
+
 
 class RuleCsvFormatError(ValueError):
     """來源 CSV 缺少必要欄位。"""
@@ -52,7 +65,7 @@ def load_rule_csv(
             (
                 record[code_col],
                 record[name_col],
-                record[text_col],
+                _normalize_rule_text(record[text_col]),
                 parse_flexible_date(record[from_col]),
                 parse_flexible_date(record[to_col]),
             )

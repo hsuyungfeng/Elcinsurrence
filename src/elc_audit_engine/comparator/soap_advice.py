@@ -342,10 +342,98 @@ _CLINICAL_TRANSCRIPT_SOAP_PROMPT = (
 )
 
 
+_CLINICAL_SOAP_RETRY_PROMPT = (
+    "You are an expert clinical documentation specialist and Taiwan outpatient physician.\n"
+    "Revise the previous SOAP JSON to fix ONLY the specific quality issues listed below, "
+    "strictly verifying every clinical fact against the original consultation transcript.\n\n"
+    "HARD CONSTRAINTS:\n"
+    "1. NEVER fabricate symptoms, exam findings, lab values, imaging results, diagnoses, or procedures "
+    "not explicitly mentioned in the transcript.\n"
+    "2. Remove all placeholder or meta-commentary phrases ('not documented', 'not recorded', 'pending', "
+    "'missing', 'N/A', 'TBD', '[...]'). Simply omit unmentioned items instead.\n"
+    "3. `s`, `o`, `a`, `p` MUST be entirely in professional Medical English (no Chinese characters), "
+    "total length 300–1500 characters, each section 40–600 characters.\n"
+    "4. `conversation_summary` MUST be written in Traditional Chinese (繁體中文，約 60–120 字).\n\n"
+    "Output ONLY one valid JSON object with keys s, o, a, p, conversation_summary.\n"
+    + DATA_ISOLATION_NOTICE
+)
+
+_CLINICAL_SUMMARY_BACKFILL_PROMPT = (
+    "You are a Taiwan outpatient clinical documentation assistant.\n"
+    "Write a concise Traditional Chinese (繁體中文) summary (60–120 characters) of the doctor-patient "
+    "consultation transcript below.\n"
+    "HARD CONSTRAINT: Include ONLY facts explicitly stated in the transcript. NEVER fabricate symptoms, "
+    "diagnoses, lab values, or medications. Output plain Traditional Chinese text only (no JSON, no markdown).\n"
+    + DATA_ISOLATION_NOTICE
+)
+
+
+def _retry_clinical_soap_once(
+    cleaned_tr: str,
+    prev_soap: dict[str, str],
+    prev_quality: dict[str, Any],
+    *,
+    max_tokens: int,
+) -> tuple[dict[str, str], str, dict[str, Any], str] | None:
+    """針對未通過 clinical 品質檢核的 SOAP 進行最多 1 次定向修正（強制對照原始逐字稿）。"""
+    issues_text = "\n".join(
+        f"- [{it.get('section', '?')}] {it.get('code', '')}: {it.get('detail', '')}"
+        for it in (prev_quality.get("issues") or [])
+    )
+    user_prompt = (
+        "以下為原始門診逐字稿，請嚴格對照逐字稿修正下方 SOAP 品質問題（嚴禁捏造逐字稿未提及之事實）：\n"
+        f"{fence(cleaned_tr[:18000], 'transcript')}\n\n"
+        f"需修正之品質問題：\n{issues_text}\n\n"
+        f"原 SOAP JSON：\n{fence(json.dumps(prev_soap, ensure_ascii=False), 'previous_soap')}"
+    )
+    try:
+        resp = chat_completion(
+            _CLINICAL_SOAP_RETRY_PROMPT,
+            user_prompt,
+            max_tokens=max_tokens,
+            temperature=0.0,
+        )
+        parsed = _parse_llm_json(resp)
+        if not parsed or not all(isinstance(parsed.get(k), str) for k in _SOAP_SECTIONS):
+            return None
+        new_soap = {k: parsed[k].strip() for k in _SOAP_SECTIONS}
+        new_quality = validate_soap_quality(new_soap, profile="clinical")
+        improved = (
+            (bool(new_quality.get("pass")) and not bool(prev_quality.get("pass")))
+            or (int(new_quality.get("quality_score", 0)) > int(prev_quality.get("quality_score", 0)))
+        )
+        if not improved:
+            return None
+        new_summary = str(parsed.get("conversation_summary") or "").strip()
+        return new_soap, new_summary, new_quality, resp
+    except Exception:
+        return None
+
+
+def _backfill_summary_once(cleaned_tr: str) -> str:
+    """當 SOAP 已合格但繁體中文摘要為空時，對照原始逐字稿進行最多 1 次輕量摘要補齊。"""
+    user_prompt = (
+        "請依據以下台灣門診醫病對話逐字稿，撰寫 60–120 字繁體中文摘要（嚴禁捏造未提及之事實）：\n"
+        f"{fence(cleaned_tr[:18000], 'transcript')}"
+    )
+    try:
+        resp = chat_completion(
+            _CLINICAL_SUMMARY_BACKFILL_PROMPT,
+            user_prompt,
+            max_tokens=200,
+            temperature=0.0,
+        )
+        text = (resp or "").strip().strip("`").strip()
+        return text[:200]
+    except Exception:
+        return ""
+
+
 def generate_clinical_soap_from_transcript(
     transcript: str,
     *,
     max_tokens: int = 1024,
+    allow_retry: bool = True,
 ) -> dict[str, Any]:
     """將本機 ASR 轉錄之門診逐字稿轉換為結構化臨床 SOAP（並以 clinical profile 檢核）。"""
     cleaned_tr = (transcript or "").strip()
@@ -357,6 +445,8 @@ def generate_clinical_soap_from_transcript(
             "conversation_summary": "",
             "quality": validate_soap_quality({}, profile="clinical"),
             "icd10_checks": [],
+            "retried": False,
+            "summary_backfilled": False,
         }
 
     user_prompt = (
@@ -379,17 +469,41 @@ def generate_clinical_soap_from_transcript(
                 "raw_response": resp,
                 "quality": validate_soap_quality({}, profile="clinical"),
                 "icd10_checks": [],
+                "retried": False,
+                "summary_backfilled": False,
             }
         soap = {k: parsed[k].strip() for k in _SOAP_SECTIONS}
+        summary = str(parsed.get("conversation_summary") or "").strip()
         quality = validate_soap_quality(soap, profile="clinical")
+        retried = False
+        summary_backfilled = False
+
+        # 1. 品質未過關時，對照原始逐字稿執行最多 1 次定向修正
+        if allow_retry and not bool(quality.get("pass")):
+            retry_out = _retry_clinical_soap_once(cleaned_tr, soap, quality, max_tokens=max_tokens)
+            if retry_out is not None:
+                soap, retry_summary, quality, resp = retry_out
+                if retry_summary:
+                    summary = retry_summary
+                retried = True
+
+        # 2. SOAP 已合格但繁中摘要為空時，對照原始逐字稿執行最多 1 次輕量摘要補齊
+        if allow_retry and bool(quality.get("pass")) and not summary:
+            backfilled = _backfill_summary_once(cleaned_tr)
+            if backfilled:
+                summary = backfilled
+                summary_backfilled = True
+
         icd_checks = [c.to_dict() for c in validate_icd10_in_assessment(soap["a"])]
         return {
             "status": "success",
             "soap": soap,
-            "conversation_summary": str(parsed.get("conversation_summary") or "").strip(),
+            "conversation_summary": summary,
             "quality": quality,
             "icd10_checks": icd_checks,
             "raw_response": resp,
+            "retried": retried,
+            "summary_backfilled": summary_backfilled,
         }
     except Exception as exc:
         return {
@@ -399,4 +513,6 @@ def generate_clinical_soap_from_transcript(
             "conversation_summary": "",
             "quality": validate_soap_quality({}, profile="clinical"),
             "icd10_checks": [],
+            "retried": False,
+            "summary_backfilled": False,
         }

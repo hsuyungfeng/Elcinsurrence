@@ -13,6 +13,7 @@ from elc_audit_engine.asr.transcriber import (
 from elc_audit_engine.cycles.chunks import finalize_cycle_audio, store_chunk
 from elc_audit_engine.cycles.drafts import cycle_draft_view, submit_cycle_draft
 from elc_audit_engine.cycles.pipeline import (
+    _transcript_repetition_ratio,
     is_auto_pipeline_enabled,
     run_cycle_auto_pipeline,
     schedule_cycle_auto_pipeline,
@@ -353,3 +354,106 @@ def test_api_finalize_triggers_auto_pipeline_and_respects_flags(phase31_client, 
     assert c3_after["upload_complete"] is False
     assert c3_after["draft_id"] is None
     assert not (cycle_dir(cid3) / "full.wav").exists()
+
+
+def test_transcript_repetition_ratio_exact_formula():
+    """驗證 _transcript_repetition_ratio(window=8) 確切滑動視窗公式。"""
+    assert _transcript_repetition_ratio("") == 0.0
+    assert _transcript_repetition_ratio("太短七個字") == 0.0
+    assert _transcript_repetition_ratio("甲乙丙丁戊己庚辛壬癸子丑寅卯") == 0.0
+    assert _transcript_repetition_ratio("a" * 20) == 0.9231
+
+
+def test_low_density_whisper_fallback_guards_and_adoption(phase31_app, monkeypatch, caplog):  # noqa: F811
+    """測試選配低密度 Whisper 備援：預設關閉、啟用後 ≥1.25× 且低重複率採用、高重複率拒收、缺套件優雅保底。"""
+    store = phase31_app.case_store
+
+    sparse_primary = TranscriptionResult(
+        transcript="醫師問診簡單幾句話而已。",
+        model="sherpa-onnx-sensevoice-int8",
+        duration_s=120.0,  # 2 分鐘僅 ~11 字 -> ~5.5 cpm < 60
+        elapsed_s=1.0,
+        segment_count=1,
+    )
+    rich_whisper = TranscriptionResult(
+        transcript="醫師：今天右膝疼痛多久了？病人：上下樓梯卡卡的已經三週，早上起來特別僵硬，之前貼藥布沒改善。",
+        model="faster-whisper-large-v3-turbo",
+        duration_s=120.0,
+        elapsed_s=8.0,
+        segment_count=4,
+    )
+    looping_whisper = TranscriptionResult(
+        transcript="這個藥要飯後吃這個藥要飯後吃這個藥要飯後吃這個藥要飯後吃這個藥要飯後吃這個藥要飯後吃",
+        model="faster-whisper-large-v3-turbo",
+        duration_s=120.0,
+        elapsed_s=8.0,
+        segment_count=6,
+    )
+
+    # 1. 預設關閉（ELC_ASR_LOW_DENSITY_WHISPER_FALLBACK=0）→ 不呼叫 fallback
+    monkeypatch.setenv("ELC_ASR_LOW_DENSITY_WHISPER_FALLBACK", "0")
+    fb_called = {"n": 0}
+
+    def _count_fb(p):
+        fb_called["n"] += 1
+        return rich_whisper
+
+    cid1 = _prepare_finalized_cycle(store, cmd_suffix="21", stop_before_finalize=True)
+    r1 = run_cycle_auto_pipeline(
+        store,
+        cid1,
+        transcriber=lambda p, *, diarize=False: sparse_primary,
+        fallback_transcriber=_count_fb,
+        soap_generator=_fake_soap_ok(),
+    )
+    assert r1["status"] == "completed"
+    assert r1["asr_model"] == "sherpa-onnx-sensevoice-int8"
+    assert fb_called["n"] == 0
+
+    # 2. 開啟後滿足 ≥1.25× 且重複率 < 0.15 → 採用 Whisper 備援
+    monkeypatch.setenv("ELC_ASR_LOW_DENSITY_WHISPER_FALLBACK", "1")
+    cid2 = _prepare_finalized_cycle(store, cmd_suffix="22", stop_before_finalize=True)
+    r2 = run_cycle_auto_pipeline(
+        store,
+        cid2,
+        transcriber=lambda p, *, diarize=False: sparse_primary,
+        fallback_transcriber=lambda p: rich_whisper,
+        soap_generator=_fake_soap_ok(),
+    )
+    assert r2["status"] == "completed"
+    assert r2["asr_model"] == "faster-whisper-large-v3-turbo"
+    assert "上下樓梯" in cycle_draft_view(store, cid2, include_transcript=True)["transcript"]
+
+    # 3. Whisper 結果高重複迴圈 → 護欄拒收、保留原 Sherpa 逐字稿
+    cid3 = _prepare_finalized_cycle(store, cmd_suffix="23", stop_before_finalize=True)
+    r3 = run_cycle_auto_pipeline(
+        store,
+        cid3,
+        transcriber=lambda p, *, diarize=False: sparse_primary,
+        fallback_transcriber=lambda p: looping_whisper,
+        soap_generator=_fake_soap_ok(),
+    )
+    assert r3["status"] == "completed"
+    assert r3["asr_model"] == "sherpa-onnx-sensevoice-int8"
+    assert cycle_draft_view(store, cid3, include_transcript=True)["transcript"] == sparse_primary.transcript
+
+    # 4. Whisper 缺套件（ASRUnavailableError）→ 優雅保底原 Sherpa 逐字稿，不中斷管線
+    cid4 = _prepare_finalized_cycle(store, cmd_suffix="24", stop_before_finalize=True)
+
+    def _no_whisper(p):
+        raise ASRUnavailableError("faster-whisper not installed")
+
+    r4 = run_cycle_auto_pipeline(
+        store,
+        cid4,
+        transcriber=lambda p, *, diarize=False: sparse_primary,
+        fallback_transcriber=_no_whisper,
+        soap_generator=_fake_soap_ok(),
+    )
+    assert r4["status"] == "completed"
+    assert r4["asr_model"] == "sherpa-onnx-sensevoice-int8"
+
+    # PHI-safe 確認：日誌絕不含逐字稿原文
+    for rec in caplog.records:
+        assert "上下樓梯" not in rec.getMessage()
+        assert "這個藥要飯後吃" not in rec.getMessage()

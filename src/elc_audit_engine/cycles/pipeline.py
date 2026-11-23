@@ -25,6 +25,7 @@ from __future__ import annotations
 import datetime
 import logging
 import os
+import re
 import threading
 import time
 import uuid
@@ -53,6 +54,96 @@ _DEFAULT_ACTOR = "system:auto-pipeline"
 _INFLIGHT_LOCK = threading.Lock()
 _INFLIGHT_CYCLES: set[str] = set()
 _ELIGIBLE_STATES = frozenset({STATE_RECORDING, STATE_AWAITING_DRAFT, STATE_DRAFT_UNUSABLE})
+_LOW_DENSITY_MIN_DURATION_S = 60.0
+_FALLBACK_GAIN_FACTOR = 1.25
+_FALLBACK_MAX_REPETITION_RATIO = 0.15
+
+
+def _transcript_repetition_ratio(text: str, *, window: int = 8) -> float:
+    """計算逐字稿重複視窗占比（去空白後步長 1 之連續 window 字元滑動視窗）。
+
+    公式：``round(1.0 - len(set(windows)) / len(windows), 4)``，範圍 ``[0.0, 1.0)``。
+    長度不足 ``window`` 時回傳 ``0.0``。用於防止 Whisper 重複迴圈灌水字數。
+    """
+    cleaned = re.sub(r"\s+", "", text or "")
+    if len(cleaned) < window or window <= 0:
+        return 0.0
+    windows = [cleaned[i : i + window] for i in range(len(cleaned) - window + 1)]
+    return round(1.0 - (len(set(windows)) / len(windows)), 4)
+
+
+def _maybe_whisper_low_density_fallback(
+    audio_path: Path,
+    asr_result: TranscriptionResult,
+    *,
+    cycle_id: str,
+    fallback_transcriber: Optional[Callable[[Path], TranscriptionResult]] = None,
+) -> TranscriptionResult:
+    """選配低字數密度 Whisper 備援（預設關閉；須 ≥1.25× 有效字數且重複率 <0.15 才採用）。"""
+    if not _parse_bool_env("ELC_ASR_LOW_DENSITY_WHISPER_FALLBACK", default=False):
+        return asr_result
+    if "sherpa" not in (asr_result.model or "").lower():
+        return asr_result
+    if asr_result.duration_s < _LOW_DENSITY_MIN_DURATION_S:
+        return asr_result
+
+    try:
+        min_cpm = float(os.environ.get("ELC_ASR_MIN_CHARS_PER_MIN", "60"))
+    except ValueError:
+        min_cpm = 60.0
+
+    base_no_tags = re.sub(r"\[Speaker\s+\d+\]", "", asr_result.transcript or "")
+    base_chars = len(re.sub(r"\s+", "", base_no_tags))
+    cpm = base_chars / (asr_result.duration_s / 60.0)
+    if cpm >= min_cpm:
+        return asr_result
+
+    logger.info(
+        "Auto pipeline low transcript density detected: cycle_id=%s duration_s=%.1f cpm=%.1f threshold=%.1f",
+        cycle_id,
+        asr_result.duration_s,
+        cpm,
+        min_cpm,
+    )
+    run_fb = fallback_transcriber or (lambda p: transcribe_audio(p, backend="whisper"))
+    try:
+        fb_result = run_fb(audio_path)
+    except (ASRUnavailableError, ASRTranscriptionError) as exc:
+        logger.warning(
+            "Auto pipeline Whisper fallback unavailable/failed (keeping primary): cycle_id=%s err=%s",
+            cycle_id,
+            type(exc).__name__,
+        )
+        return asr_result
+    except Exception as exc:
+        logger.warning(
+            "Auto pipeline Whisper fallback error (keeping primary): cycle_id=%s err=%s",
+            cycle_id,
+            type(exc).__name__,
+        )
+        return asr_result
+
+    fb_text = (fb_result.transcript or "").strip()
+    fb_chars = len(re.sub(r"\s+", "", fb_text))
+    rep_ratio = _transcript_repetition_ratio(fb_text)
+    if fb_chars > 0 and fb_chars >= base_chars * _FALLBACK_GAIN_FACTOR and rep_ratio < _FALLBACK_MAX_REPETITION_RATIO:
+        logger.info(
+            "Auto pipeline adopted Whisper fallback: cycle_id=%s primary_chars=%d fallback_chars=%d rep_ratio=%.4f",
+            cycle_id,
+            base_chars,
+            fb_chars,
+            rep_ratio,
+        )
+        return fb_result
+
+    logger.info(
+        "Auto pipeline rejected Whisper fallback (keeping primary): cycle_id=%s primary_chars=%d fallback_chars=%d rep_ratio=%.4f",
+        cycle_id,
+        base_chars,
+        fb_chars,
+        rep_ratio,
+    )
+    return asr_result
 
 
 def _now_iso() -> str:
@@ -152,6 +243,7 @@ def run_cycle_auto_pipeline(
     diarize: Optional[bool] = None,
     actor: str = _DEFAULT_ACTOR,
     transcriber: Optional[Callable[..., TranscriptionResult]] = None,
+    fallback_transcriber: Optional[Callable[[Path], TranscriptionResult]] = None,
     soap_generator: Optional[Callable[[str], Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """同步執行單一循環的 ASR → Gemma 4 E4B 臨床 SOAP → 草稿送出管線。
@@ -196,7 +288,7 @@ def run_cycle_auto_pipeline(
     run_asr = transcriber or transcribe_audio
     run_soap = soap_generator or generate_clinical_soap_from_transcript
 
-    # 1. 本機 ASR 轉錄
+    # 1. 本機 ASR 轉錄（含選配低密度 Whisper 備援與重複率護欄）
     try:
         asr_result = run_asr(audio_path, diarize=eff_diarize)
     except ASRUnavailableError as exc:
@@ -214,6 +306,13 @@ def run_cycle_auto_pipeline(
         _record_pipeline_failure(store, cycle_id, err)
         logger.warning("Auto pipeline failed: cycle_id=%s code=ASR_ERROR err=%s", cycle_id, type(exc).__name__)
         return {"status": "error", "cycle_id": cycle_id, "error_code": "ASR_ERROR"}
+
+    asr_result = _maybe_whisper_low_density_fallback(
+        audio_path,
+        asr_result,
+        cycle_id=cycle_id,
+        fallback_transcriber=fallback_transcriber,
+    )
 
     transcript = (asr_result.transcript or "").strip()
     if not transcript:

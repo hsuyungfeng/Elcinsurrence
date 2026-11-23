@@ -140,6 +140,9 @@ Full phase details, success criteria, and requirements: [`milestones/v1.1-ROADMA
 | 13. 核減明細原格式列印 | v1.1 | 3/3 | Complete | 2026-08-11 |
 | 14. 審核軌跡＋佐證包列印 | v1.1 | 3/3 | Complete | 2026-08-11 |
 | 28. 當月申報 TOTFA 與每日語音 SOAP 自動比對入庫暨 11 碼標準檔名 EMR 批次打包引擎 | v1.3 | 2/2 | Complete | 2026-11-05 |
+| 33. 本機 ASR、Gemma 4 E4B 128K、26MB/Opus 上傳與臨床 SOAP 分流 | v1.3 | 1/1 | Complete | 2026-11-23 |
+| 34. `sherpa-onnx` SenseVoice int8 預設 ASR、雙人說者分離與 `finalize` 自動背景管線 | v1.3 | 1/1 | Complete | 2026-11-23 |
+| 35. 規則庫只讀品質稽核與 NULL 契約統一、SOAP 定向強化、一鍵部署收尾與測試隔離修復 | v1.3 | 1/1 | Complete | 2026-11-23 |
 
 ## Out of Roadmap Scope
 

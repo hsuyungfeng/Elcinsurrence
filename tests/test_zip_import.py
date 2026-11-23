@@ -2,16 +2,22 @@ import io
 import zipfile
 import pytest
 from elc_audit_engine.api.app import create_app
+from elc_audit_engine.case_store import CaseStore
+
 
 @pytest.fixture
 def app_client(tmp_path):
-    app = create_app({
-        "TESTING": True,
-        "ELC_DB_PATH": str(tmp_path / "cases.sqlite3"),
-        "ELC_RAW_DIR": str(tmp_path / "raw"),
-        "ELC_UPLOAD_DIR": str(tmp_path / "uploads"),
-        "ELC_OUTPUT_DIR": str(tmp_path / "output"),
-    })
+    store = CaseStore(db_path=str(tmp_path / "cases.sqlite3"))
+    app = create_app(
+        {
+            "TESTING": True,
+            "ELC_RAW_DIR": str(tmp_path / "raw"),
+            "ELC_UPLOAD_DIR": str(tmp_path / "uploads"),
+            "ELC_OUTPUT_DIR": str(tmp_path / "output"),
+        },
+        case_store=store,
+        migrate_legacy=False,
+    )
     client = app.test_client()
     return client
 

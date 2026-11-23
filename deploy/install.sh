@@ -23,6 +23,7 @@ render_units_to() {
         "elc-audit-engine-healthcheck.timer"
         "elc-backup.service"
         "elc-backup.timer"
+        "elc-llama-server.service"
     )
     for u in "${units[@]}"; do
         local src="$SCRIPT_DIR/$u"
@@ -31,6 +32,52 @@ render_units_to() {
             sed "s#@ROOT@#${ROOT}#g" "$src" > "$dst"
         fi
     done
+}
+
+has_llama_q4_cache() {
+    local user_home="${HOME:-$(getent passwd "${USER:-$(id -un)}" | cut -d: -f6)}"
+    local hf_hub="${ELC_HF_HUB_DIR:-$user_home/.cache/huggingface/hub}"
+    local snap_dir="$hf_hub/models--unsloth--gemma-4-E4B-it-GGUF/snapshots"
+    if [ ! -d "$snap_dir" ]; then
+        return 1
+    fi
+    local found
+    found="$(find "$snap_dir" -name '*Q4_K_M*.gguf' -exec test -e {} \; -print -quit 2>/dev/null || true)"
+    [ -n "$found" ]
+}
+
+check_asr_models() {
+    local user_home="${HOME:-$(getent passwd "${USER:-$(id -un)}" | cut -d: -f6)}"
+    local cache_root="${ELC_SHERPA_CACHE_DIR:-$user_home/.cache/elc-sherpa}"
+    local sv_dir="${ELC_SHERPA_SENSEVOICE_DIR:-$cache_root/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09}"
+    local pyan_dir="${ELC_SHERPA_PYANNOTE_DIR:-$cache_root/sherpa-onnx-pyannote-segmentation-3-0}"
+    local emb_model="${ELC_SHERPA_EMBEDDING_MODEL:-$cache_root/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx}"
+
+    local missing=()
+    if [ ! -f "$sv_dir/model.int8.onnx" ] && [ ! -f "$sv_dir/model.onnx" ]; then
+        missing+=("$sv_dir/model.int8.onnx (或 model.onnx)")
+    fi
+    if [ ! -f "$sv_dir/tokens.txt" ]; then
+        missing+=("$sv_dir/tokens.txt")
+    fi
+    if [ ! -f "$pyan_dir/model.onnx" ] && [ ! -f "$pyan_dir/model.int8.onnx" ]; then
+        missing+=("$pyan_dir/model.onnx (或 model.int8.onnx)")
+    fi
+    if [ ! -f "$emb_model" ]; then
+        missing+=("$emb_model")
+    fi
+
+    echo "【ASR 模型檢查】SenseVoice=$sv_dir | Pyannote=$pyan_dir | Embedding=$emb_model"
+    if [ "${#missing[@]}" -eq 0 ]; then
+        echo "  [OK] sherpa-onnx 4 項必備模型檔皆已就緒。"
+        return 0
+    fi
+    echo "  [缺檔] 缺少以下 sherpa-onnx 模型檔：" >&2
+    for m in "${missing[@]}"; do
+        echo "    - $m" >&2
+    done
+    echo "  請至 https://github.com/k2-fsa/sherpa-onnx/releases 下載對應模型並解壓至 $cache_root" >&2
+    return 1
 }
 
 write_default_env() {
@@ -93,6 +140,19 @@ while [[ $# -gt 0 ]]; do
             write_default_env "$2"
             exit 0
             ;;
+        --check-asr-models)
+            check_asr_models
+            exit $?
+            ;;
+        --check-llama-cache)
+            if has_llama_q4_cache; then
+                echo "OK: Gemma 4 E4B Q4_K_M GGUF 快取已就緒"
+                exit 0
+            else
+                echo "MISSING: 找不到有效之 Gemma 4 E4B Q4_K_M GGUF 離線快取" >&2
+                exit 1
+            fi
+            ;;
         --dry-run)
             DRY_RUN=1
             shift
@@ -107,6 +167,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --yes, -y              非互動模式，一律採用偵測值或預設值"
             echo "  --render-units <DIR>   渲染 systemd 單元檔到指定目錄"
             echo "  --write-env <FILE>     建立或補齊環境檔預設變數"
+            echo "  --check-asr-models     檢查 sherpa-onnx 4 項必備本機模型檔是否齊全"
+            echo "  --check-llama-cache    檢查本機 Gemma 4 E4B Q4_K_M GGUF 離線快取"
             exit 0
             ;;
         *)
@@ -144,10 +206,15 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 mkdir -p "$ROOT/data" "$ROOT/logs"
 
 if [ "$DRY_RUN" -eq 0 ]; then
-    echo "正在同步 Python 虛擬環境與套件 (uv sync --no-config)..."
-    (cd "$ROOT" && uv sync --no-config)
+    echo "正在同步 Python 虛擬環境與套件 (uv sync --no-config --extra asr-sherpa)..."
+    if ! (cd "$ROOT" && uv sync --no-config --extra asr-sherpa); then
+        echo "【警告】安裝選配 asr-sherpa 套件失敗（可能為離線環境），降級為核心同步 (uv sync --no-config)..." >&2
+        (cd "$ROOT" && uv sync --no-config)
+        echo "【警告】本機 sherpa-onnx ASR 套件目前未安裝；恢復網路或備妥離線 wheel 後請執行：uv sync --no-config --extra asr-sherpa" >&2
+        check_asr_models || true
+    fi
 else
-    echo "[DRY-RUN] 跳過 uv sync"
+    echo "[DRY-RUN] 跳過 uv sync (--extra asr-sherpa)"
 fi
 
 # 3. 建立或補齊環境檔 (write_env)
@@ -245,9 +312,17 @@ if [ "$DRY_RUN" -eq 0 ]; then
         if [ -n "$BACKUP_ROOT_VAL" ]; then
             systemctl --user enable --now elc-backup.timer 2>/dev/null || true
         fi
+        if [ -x "$USER_HOME/.local/bin/llama" ] && has_llama_q4_cache; then
+            systemctl --user enable --now elc-llama-server.service 2>/dev/null || true
+            echo "已啟用本機 LLM 服務：elc-llama-server.service"
+        else
+            echo "【提醒】尚未偵測到 ~/.local/bin/llama 或 Gemma 4 E4B Q4_K_M 離線快取，已渲染 elc-llama-server.service 但暫不自動啟用。"
+            echo "  備妥後請執行：systemctl --user enable --now elc-llama-server.service"
+        fi
     fi
+    check_asr_models || true
 else
-    echo "[DRY-RUN] 渲染 systemd 單元檔至 $SYSTEMD_USER_DIR"
+    echo "[DRY-RUN] 渲染 systemd 單元檔至 $SYSTEMD_USER_DIR（含 elc-llama-server.service）"
 fi
 
 # 7. 啟用 Linger (enable_linger)

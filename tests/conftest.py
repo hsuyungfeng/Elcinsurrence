@@ -84,12 +84,36 @@ def sample_appeal_draft():
 # ── API（app factory）fixtures ───────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _isolate_prod_runtime_paths(tmp_path, monkeypatch):
+    """全套件防呆隔離（Phase 35）：所有測試預設將 CASES_DB_PATH 與 AUDIT_LOG_PATH 導向 tmp_path，
+    嚴禁任一測試寫入正式 data/db/cases.sqlite3 或 data/audit/access.log。
+    """
+    from config import settings
+    from elc_audit_engine import audit_log
+    from elc_audit_engine.case_store import store as case_store_mod
+
+    iso_db = str(tmp_path / "_isolated_cases.sqlite3")
+    iso_audit = str(tmp_path / "_isolated_audit" / "access.log")
+
+    monkeypatch.setenv("CASES_DB_PATH", iso_db)
+    monkeypatch.setenv("AUDIT_LOG_PATH", iso_audit)
+    monkeypatch.setattr(settings, "CASES_DB_PATH", iso_db)
+    monkeypatch.setattr(case_store_mod, "CASES_DB_PATH", iso_db)
+    monkeypatch.setattr(settings, "AUDIT_LOG_PATH", iso_audit)
+    monkeypatch.setattr(audit_log, "AUDIT_LOG_PATH", iso_audit)
+
+    prod_data = os.path.abspath(os.path.join(PROJECT_ROOT, "data"))
+    assert not os.path.abspath(audit_log.AUDIT_LOG_PATH).startswith(prod_data)
+    assert not os.path.abspath(case_store_mod.CASES_DB_PATH).startswith(prod_data)
+
+
 @pytest.fixture
-def make_api_app(tmp_path):
-    """以 create_app 建立隔離的 API app：暫存 CaseStore、暫存上傳目錄、固定測試 key。
+def make_api_app(tmp_path, monkeypatch):
+    """以 create_app 建立隔離的 API app：暫存 CaseStore、暫存上傳目錄、暫存審計日誌。
 
     取代舊寫法（monkeypatch server 模組全域 `_case_store`／`_UPLOAD_DIR`），
-    避免測試寫入專案 data/db/cases.sqlite3。
+    避免測試寫入專案 data/db/cases.sqlite3 或 data/audit/access.log。
     """
     def _make(api_keys: dict | None = None, *, case_store=None, **config):
         """建立測試 app。
@@ -99,8 +123,14 @@ def make_api_app(tmp_path):
         """
         import ipaddress
 
+        from config import settings
+        from elc_audit_engine import audit_log
         from elc_audit_engine.api import create_app
         from elc_audit_engine.case_store import CaseStore
+
+        iso_audit = str(tmp_path / "audit" / "access.log")
+        monkeypatch.setattr(settings, "AUDIT_LOG_PATH", iso_audit)
+        monkeypatch.setattr(audit_log, "AUDIT_LOG_PATH", iso_audit)
 
         cfg = {
             "TESTING": True,
@@ -108,6 +138,7 @@ def make_api_app(tmp_path):
             "ELC_TRUSTED_SUBNETS": [ipaddress.ip_network("192.168.0.0/24")],
             "ELC_UPLOAD_DIR": str(tmp_path / "uploads"),
             "ELC_RAW_DIR": str(tmp_path / "uploads" / "raw"),
+            "AUDIT_LOG_PATH": iso_audit,
         }
         cfg.update(config)
         return create_app(

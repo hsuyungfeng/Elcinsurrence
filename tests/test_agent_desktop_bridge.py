@@ -144,7 +144,7 @@ def test_process_his_push_job_cas(mock_elements, tmp_path, monkeypatch):
 
     monkeypatch.setattr(settings, "DATA_DIR", str(tmp_path))
 
-    store = CaseStore()
+    store = CaseStore(db_path=str(tmp_path / "cases.sqlite3"))
     runner = AgentDesktopRunner()
     written_data = {}
 

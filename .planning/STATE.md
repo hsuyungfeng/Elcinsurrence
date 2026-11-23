@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: milestone
-current_phase: 34
-status: Phase 33–34 已完成並合併至 main（Claude Tester 獨立驗收 PASS ＋ 實音冒煙通過）
+current_phase: 35
+status: Phase 33–35 已完成並通過獨立 Claude Plan Checker 與 Tester 驗收（1,748 passed, 0 failed）
 stopped_at: null
-last_updated: "2026-11-23T12:30:00.000Z"
-last_activity: 2026-11-23 — Phase 33（Gemma 4 E4B 128K、Whisper ASR、26MB/Opus、臨床 SOAP 分流、payment_text 精簡預覽）上線；Phase 34（sherpa-onnx SenseVoice int8 + OpenCC + num_clusters=2 可選說者分離）實作完成待驗收
+last_updated: "2026-11-23T14:07:00+08:00"
+last_activity: 2026-11-23 — Phase 35 完成規則庫只讀 CSV 稽核與 NULL 契約統一、SOAP 定向單次修正與空摘要補齊、選配低密度 Whisper 備援護欄、deploy/install.sh 整合 llama/sherpa 檢查、全套件測試隔離防呆修復（1,748 passed, 0 failed）
 progress:
-  total_phases: 32
-  completed_phases: 31
-  total_plans: 24
-  completed_plans: 24
+  total_phases: 35
+  completed_phases: 35
+  total_plans: 27
+  completed_plans: 27
   percent: 100
 ---
 
@@ -19,39 +19,23 @@ progress:
 
 ## 目前位置 (Current Position)
 
-- **Phase 32**：院內免驗證客戶端一體化與醫師上手（Fable 5.2 改進計畫落實）
-- **狀態**：24/24 Plans 的程式與文件已完成並合併至 `main`（最新提交 `86a605c`）。**外部實機驗收尚未進行**，Phase 32 不應視為完全驗收通過。
-- **最近裁示**：D-32-27 撤回管理設定僅限本機的限制（取代 D-32-19、D-32-25）。
-
-## 已完成成果 (Completed Work)
-
-- **第一期交付（提交 `01e1a13`，per D-32-15）**：
-  - A1–A8 院內信任模式：以來源 IP 網段判定存取（取代 API Key）、跨站寫入防護（Origin／Sec-Fetch-Site）、Host 標頭形式檢查防 DNS rebinding。
-  - B1 快捷列接進執行檔；B2 無主控台模式；C1 移除寫死診所 IP。
-- **Phase 32 程式與文件（提交 `a01a3be`、`607329b`、`86a605c` 等）**：
-  - 網段自動偵測（讀實際遮罩、排除 VPN／虛擬介面）、跨站 GET 拒絕（D-32-18）。
-  - 管理寫入限制已依 D-32-27 撤回（原 D-32-19 不再適用）。
-  - 容量預警 180／90 天、只增不刪的備份、SoapVoice 守護程序、首次啟動精靈、E8 前端拆檔、醫師模式導引、雙手冊。
-- **測試**：工作區全套件 `1649 passed、2 skipped、1 deselected`（2026-11-16 重跑，含 D-32-27 改動）。
+- **Phase 33（已完成）**：Gemma 4 E4B Q4_K_M + mmproj-BF16（128K context）systemd 常駐服務、本機 Whisper ASR + 熱詞、26 MB / `.opus` 上傳對齊、`clinical` SOAP 品質分流、月審 `payment_text` 精簡預覽。
+- **Phase 34（已完成）**：整合 `sherpa-onnx`（SenseVoice int8 + OpenCC `s2twp` + `num_clusters=2` 可選說者分離）為預設 ASR 後端、`finalize` 自動背景 ASR → Gemma 4 E4B SOAP 管線、`ElcAgent.spec` 排除 ASR 套件、`cycle_chunks.py` 審計參數修復。
+- **Phase 35（已完成，Claude Plan Checker & Tester 雙重 PASS）**：
+  - Wave 1：規則庫只讀 CSV 稽核工具（`audit_csv.py`）、`_csv_table.py` 純占位字串統一存 SQLite `NULL`（對齊 `drug_loader.py` 與 `RuleResult`）、安全備份驗證後重建本機 `rules.sqlite3`。
+  - Wave 2：`generate_clinical_soap_from_transcript()` 定向單次品質修正與空摘要補齊（皆傳入原始逐字稿防捏造）、`pipeline.py` 選配低字數密度 Whisper 備援（≥1.25× 且重複率 `<0.15` 護欄）。
+  - Wave 3：`deploy/install.sh` 整合 `elc-llama-server.service` 渲染與 HF `snapshots/` 快取檢查、`--check-asr-models` 4 檔檢核與離線降級提示；修復 `tests/conftest.py`、`test_zip_import.py`、`test_agent_desktop_bridge.py` 測試隔離漏洞（全套件 `1,748 passed, 3 skipped, 1 deselected, 0 failed`）。
 
 ## 未結與承接項目 (Pending & Deferred Items)
 
-- **Windows 實機人工驗收**：依 `31-WINDOWS-MANUAL-VERIFY.md` 的 12 項逐一測試（Phase 31 與 32 共同承接）。**尚未執行。**
-- **Phase 30 的 30-09 探針重跑**：已於 2026-11-17 在 Windows 11 測試機（`C:\probe_new`）完成，寫入／讀回 SHA-256 一致，**PASS**。探針標題匹配曾因資源管理器視窗含 `MockHIS` 而誤判，已以改名遠端資料夾繞過，匹配規則尚未收緊（待辦）。
-- **Ubuntu 一鍵安裝驗證**：`deploy/install.sh` 需在乾淨 Ubuntu Server VM 上實測。
-- **Windows 打包驗證**：ElcAgent 與 `soapvoice_client.spec`（D-32-26）需在 Windows 環境建置。
-- **CSP `style-src` 嚴格化（Phase 32.1 完成）**：原 292 處估計更正為實測 17 處（靜態 4 處全轉 class 獨立成檔，Python 產出 13 處為自包含離線檔不受 app CSP 約束），HTTP CSP `style-src` 已收緊為 `'self'`。
-- **Phase 33（醫師工作台 E1–E7／E9）**：目錄 `.planning/phases/33*` 尚未建立。開始前需先對照 Phase 32 已完成的 E1、E2、E5、E6、E7，避免重複。
-- **已確認裁示**：D-32-28（2GB 容量上限僅作警示，只刪已上傳資料）已於 2026-11-16 由使用者確認。D-32-24 的剩餘風險說明已寫入 `docs/CLINIC_DEPLOYMENT_GUIDE.md` 第一節。
+- **Windows 實機人工驗收**：依 `deploy/release-20261116/31-WINDOWS-MANUAL-VERIFY.md` 的 12 項逐一實測（Phase 31–34 共同承接）。**尚未執行。**
+- **Windows 打包驗證**：以最新 `deploy/windows_agent/ElcAgent.spec` 與 `soapvoice_client.spec`（D-32-26）於 Windows 環境建置。
+- **Ubuntu 乾淨 VM 一鍵安裝驗證**：`deploy/install.sh` 需於獨立乾淨 Ubuntu Server VM 實測。
+- **規則庫人工覆核**：依 `python -m elc_audit_engine.rule_repository.audit_csv` 產出的異常清單（含非標準尾碼如 `92043D`、`51002D`、AI 預填條文），由專人對照健保署官方原檔逐項更新。
+- **Phase 10（健保 VPN／`NHI_EIIAPI` 實機串接）**：阻塞於外部院所 VPN 與 SAM 卡環境。
 
-## 外部阻塞 (External Blockers)
+## 已知風險與維護註記
 
-- 無 Windows 原生 PE 建置環境（本機為 Linux，PyInstaller 建置依賴 Windows 實機或 CI）。
-- 無乾淨 Ubuntu Server VM（install.sh 實機驗證依賴獨立主機）。
-
-## 已知風險 (Known Risks)
-
-- CI 的 ruff 檢查放寬已於 Phase 32.1 回復（移除 F841、B007 與 tests/** F811 豁免，修復 22 處未用變數與迴圈變數，以行級 noqa 標註 fixture shadowing，全專案 `ruff check .` 通過）。
-- `config/facility.json` 含現場執行期變更，依交接規定不納入 git 提交，目前以未追蹤／未提交狀態保留。
-- 同網段任何裝置皆可修改管理設定（D-32-27 已接受之取捨，僅限院內網路）。
-- `Wavesample/`（約 227MB 訓練資料）位於專案目錄內，已被 `.gitignore` 排除，但建議移出。
+- `config/facility.json`、`E4Btest.md`、`data/`（SQLite、音檔、審計日誌）皆由 `.gitignore` 排除，絕不納入 git 提交。
+- 本機依賴釘選 `pydantic == 2.13.4`，更新依賴務必使用 `uv lock --no-config` 並確認不降版。
+- `Wavesample/` 訓練資料位於工作區內（已 gitignore），日後建議移出。
