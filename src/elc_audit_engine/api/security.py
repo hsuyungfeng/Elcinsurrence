@@ -123,6 +123,11 @@ def register_security(app: Flask) -> None:
             )
             return jsonify({"status": "error", "message": CROSS_SITE_MESSAGE}), 403
 
+        # 規則 CSV 上傳單路由放寬至 65 MB（對齊 rules.py MAX_RULE_CSV_BYTES=64MB + 1MB 表單餘裕；
+        # 全域 MAX_CONTENT_LENGTH 維持 26 MB，不影響其他路由安全邊界）。
+        if request.method == "POST" and request.path == "/api/rules/upload":
+            request.max_content_length = 65 * 1024 * 1024
+
         return None
 
     @app.after_request

@@ -140,6 +140,7 @@ def compare_case(
             continue
 
         check_item = _to_check_item(rule)
+        invoked_llm = False
         if visit_date is not None and is_effective_on(rule, visit_date) is False:
             # 規則在就醫日不在生效期間（B-WR-07）：不得拿失效／未生效規則判定。
             judgment = Judgment(
@@ -151,13 +152,15 @@ def compare_case(
                 ),
             )
         elif not check_item.rule_text.strip():
-            # 規則全文缺漏時不送 LLM（B-WR-06）：沒有要求可比對，任何判定都無意義。
+            # 規則全文缺漏時不送 LLM（B-WR-06）：沒有要求可比對，屬資料前提而非系統故障。
             judgment = Judgment(
                 verdict=VERDICT_MANUAL, quote="", reason="規則全文缺漏，無法判定，改待人工"
             )
         else:
+            invoked_llm = True
             judgment = judge(check_item, evidence)
         support_level, manual = classify_support([judgment])
+        llm_failed = invoked_llm and support_level is None
 
         narratives: list[CandidateNarrative] = []
         narrative_error = False
@@ -181,6 +184,7 @@ def compare_case(
                 judgment=judgment,
                 support_level=support_level,
                 manual_review=manual,
+                llm_failed=llm_failed,
                 narratives=tuple(narratives),
                 narrative_error=narrative_error,
             )

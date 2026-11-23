@@ -58,6 +58,7 @@
       const isOpen = rulesPanel && rulesPanel.classList.contains('open');
       if (rulesPanel) rulesPanel.classList.toggle('open', !isOpen);
       if (btnRules) btnRules.classList.toggle('active', !isOpen);
+      if (!isOpen) loadRulesStatus();
     }
 
     /* ==================================================================== */
@@ -376,7 +377,29 @@
 
     // 規則庫管理：狀態文字一律以 textContent 寫入（不使用 innerHTML，避免注入）
     function setRulesStatus(text) {
-      document.getElementById('rulesStatus').textContent = text;
+      const el = document.getElementById('rulesStatus');
+      if (el) el.textContent = text;
+    }
+
+    async function loadRulesStatus() {
+      const infoEl = document.getElementById('rulesCurrentInfo');
+      if (!infoEl) return;
+      infoEl.textContent = '載入規則庫狀態中 …';
+      try {
+        const resp = await authFetch('/api/rules/status');
+        const body = await resp.json();
+        if (!resp.ok) {
+          infoEl.textContent = `無法取得狀態：${body.message || resp.status}`;
+          return;
+        }
+        const db = body.db || {};
+        const src = body.sources || {};
+        infoEl.textContent =
+          `目前規則庫：給付 ${db.payment_rows ?? 0} 筆、藥品 ${db.drug_rows ?? 0} 筆｜` +
+          `最新來源：${src.payment_file || '（缺給付檔）'} ／ ${src.drug_file || '（缺藥品檔）'}`;
+      } catch (err) {
+        infoEl.textContent = '無法連線至規則庫狀態服務';
+      }
     }
 
     async function uploadRuleCsv(file) {
@@ -388,30 +411,51 @@
         const resp = await authFetch('/api/rules/upload', { method: 'POST', body: form });
         const body = await resp.json();
         setRulesStatus(resp.ok
-          ? `已儲存：${body.saved_as}（${body.replaced ? '覆寫舊檔' : '新檔'}）。請按「同步規則庫」套用。`
+          ? `已儲存：${body.saved_as}（${body.replaced ? '覆寫舊檔' : '新檔'}）。請按下方同步按鈕套用。`
           : `上傳失敗：${body.message}`);
+        if (resp.ok) await loadRulesStatus();
       } catch (err) {
         setRulesStatus('上傳失敗：無法連線至服務');
       }
     }
 
-    async function syncRules() {
-      setRulesStatus('同步中 …');
+    async function syncRules(replace = false) {
+      setRulesStatus(replace ? '整表更新中 …' : '增量同步中 …');
       try {
-        const resp = await authFetch('/api/rules/sync', { method: 'POST' });
+        const resp = await authFetch('/api/rules/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ replace: Boolean(replace) }),
+        });
         const body = await resp.json();
         if (!resp.ok) {
           setRulesStatus(`同步失敗：${body.message}`);
           return;
         }
+        const modeLabel = body.mode === 'replace' ? '整表更新' : '增量同步（舊碼保留）';
+        const bakInfo = body.backup_file ? `｜備份：${body.backup_file}` : '';
+        const payAudit = body.audit && body.audit.payment ? body.audit.payment : null;
+        const auditInfo = payAudit
+          ? `｜給付稽核：異常尾碼 ${payAudit.non_standard_suffix_ref}、缺碼引用 ${payAudit.missing_code_ref}`
+          : '';
         setRulesStatus(
-          `藥品 ${body.drug_rows} 筆（${body.drug_file}）；` +
+          `[${modeLabel}] 藥品 ${body.drug_rows} 筆（${body.drug_file}）；` +
           `給付項目 ${body.payment_rows} 筆（${body.payment_file}）。` +
-          `DB 中不在來源檔的代碼：藥品 ${body.drug_stale_not_in_source}、給付 ${body.payment_stale_not_in_source}（已保留，未刪除）。`
+          `DB 中不在來源檔的代碼：藥品 ${body.drug_stale_not_in_source}、給付 ${body.payment_stale_not_in_source}` +
+          `${bakInfo}${auditInfo}`
         );
+        await loadRulesStatus();
       } catch (err) {
         setRulesStatus('同步失敗：無法連線至服務');
       }
+    }
+
+    function syncRulesReplace() {
+      const ok = confirm(
+        '確定要執行「整表更新」嗎？\n' +
+        '系統會先自動備份舊規則庫，再以最新來源檔整表取代（來源檔中不存在的舊代碼將被移除）。'
+      );
+      if (ok) syncRules(true);
     }
 
     function escapeHtml(str) {
@@ -2829,7 +2873,8 @@
       clearCacheAndReload: function () { clearCacheAndReload(); },
       toggleFacilityModal: function (e, el, arg) { toggleFacilityModal(arg === "true" || arg === true); },
       toggleQuickPanel: function (e, el, arg) { toggleQuickPanel(arg); },
-      syncRules: function () { syncRules(); },
+      syncRules: function () { syncRules(false); },
+      syncRulesReplace: function () { syncRulesReplace(); },
       saveFacilityFromWeb: function () { saveFacilityFromWeb(); },
       submitPatientEntry: function () { submitPatientEntry(); },
       // Sampling (Stage 2)

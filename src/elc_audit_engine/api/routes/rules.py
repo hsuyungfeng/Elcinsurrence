@@ -14,8 +14,10 @@ from flask import Blueprint, current_app, jsonify, request
 
 from elc_audit_engine.rule_repository.loaders._csv_table import RuleCsvFormatError
 from elc_audit_engine.rule_repository.scripts.sync_latest_rules import (
+    RulesSyncConflictError,
     default_rules_dir,
     rule_csv_kind,
+    rules_status,
     sync_latest_rules,
     validate_rule_csv_header,
 )
@@ -82,16 +84,42 @@ def upload_rule_csv():
     return jsonify({"status": "success", "saved_as": filename, "kind": kind, "replaced": replaced})
 
 
+@bp.route("/api/rules/status", methods=["GET"])
+def get_rules_status():
+    """唯讀查詢目前規則庫筆數與規則目錄中偵測到的最新來源檔名（無伺服器絕對路徑）。"""
+    status = rules_status(
+        db_path=current_app.config.get("ELC_RULES_DB_PATH"),
+        rules_dir=_rules_dir(),
+    )
+    return jsonify({"status": "success", **status})
+
+
 @bp.route("/api/rules/sync", methods=["POST"])
 def sync_rules():
-    """執行每月規則同步：自規則目錄取最新藥品與給付項目 CSV，更新 rules.sqlite3。"""
+    """執行每月規則同步：自規則目錄取最新藥品與給付項目 CSV，原子更新 rules.sqlite3。
+
+    可選 JSON body：`{"replace": true|false}`（未傳預設 false = upsert）。
+    """
+    replace = False
+    if request.is_json:
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            raise ApiError("請求內文必須為 JSON 物件", status=400)
+        if "replace" in body:
+            if not isinstance(body["replace"], bool):
+                raise ApiError("replace 欄位必須為布林值", status=422)
+            replace = body["replace"]
+
     try:
         result = sync_latest_rules(
             db_path=current_app.config.get("ELC_RULES_DB_PATH"),
             rules_dir=_rules_dir(),
+            replace=replace,
         )
     except FileNotFoundError:
         raise ApiError("找不到規則來源檔（請先上傳藥品與給付項目 CSV）")
     except RuleCsvFormatError as exc:
         raise ApiError(f"規則來源格式不符：{exc}")
+    except RulesSyncConflictError as exc:
+        raise ApiError(str(exc), status=409)
     return jsonify({"status": "success", **result.to_dict()})

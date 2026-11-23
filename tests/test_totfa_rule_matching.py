@@ -493,26 +493,38 @@ def test_batch_audit_empty_batch_is_empty_not_error(batch_store, rules_db):
     assert result.report["totals"]["findings"] == 0
 
 
-# ── 真實規則庫冒煙（唯讀；檔案不存在則跳過） ─────────────────────────
+# ── 規則庫查詢與逐字證據驗證（使用隔離 tmp SQLite，不依賴正式 data/db/rules.sqlite3） ──
 
 
-@pytest.mark.skipif(not os.path.exists(REAL_RULES), reason="data/db/rules.sqlite3 不存在")
-def test_real_rule_48003c_restriction_and_icd_match_read_only():
+def test_real_rule_48003c_restriction_and_icd_match_read_only(tmp_path):
+    """以隔離暫存 rules.sqlite3 驗證 48003C 給付限制與 ICD 比對及原文逐字取證。"""
+    db_path = str(tmp_path / "rules_48003c.sqlite3")
+    pay_csv = tmp_path / "pay.csv"
+    pay_csv.write_text(
+        "\ufeff診療項目代碼,中文項目名稱,支付規定,生效起日,生效迄日\n"
+        "48003C,淺部創傷處理 － 傷口長大於十公分者,"
+        "1.申報條件：限ICD-10 S00.1 淺部創傷長度大於十公分者。2.限制條件：切傷複診不得重複申報本項目。,"
+        "20200101,29101231\n",
+        encoding="utf-8",
+    )
+    from elc_audit_engine.rule_repository.loaders.payment_loader import load_payment_csv
+
+    load_payment_csv(db_path, str(pay_csv))
+
     payload = _payload(
         [_po("48003C", points="400", seq="1")],
         primary="S00123A",
         visit="1120703",
     )
-    audit = audit_case("MON-real", payload, lookup=lambda c: get_rule(c, db_path=REAL_RULES))
+    audit = audit_case("MON-real", payload, lookup=lambda c: get_rule(c, db_path=db_path))
     finding = audit.findings[0]
     assert finding.rule_status == STATUS_RESTRICTION
     assert "S00.1" in finding.icd_in_rule
     assert finding.evidence
-    # 證據可能來自 payment_text 或 article_full_text（兩來源可能不一致），逐一核對原文
-    real_rule = get_rule("48003C", db_path=REAL_RULES)
+    real_rule = get_rule("48003C", db_path=db_path)
     sources = {"payment_text": real_rule.payment_text or "", "article_full_text": real_rule.article_full_text or ""}
     for ev in finding.evidence:
-        assert ev.sentence in sources[ev.source]  # 逐字取自真實規則原文
+        assert ev.sentence in sources[ev.source]  # 逐字取自規則原文
 
 
 def test_frequency_limit_without_restriction_marker_is_still_evidence():

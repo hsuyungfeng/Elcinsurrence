@@ -145,6 +145,47 @@ def test_audit_sampling_case_with_optional_case_id(client, setup_tmp_casestore):
     assert rec.state == "reviewed"
 
 
+def test_audit_sampling_null_rule_text_is_reviewed_not_llm_failed(client, setup_tmp_casestore, tmp_path, monkeypatch):
+    """Phase 36：規則存在但官方 payment_text 為 NULL 屬業務待人工，狀態須為 reviewed（絕不誤標 LLM failed）。"""
+    from config import settings
+    from elc_audit_engine.rule_repository.loaders.payment_loader import load_payment_csv
+
+    db_dir = tmp_path / "rule_db"
+    db_dir.mkdir()
+    db_path = str(db_dir / "rules.sqlite3")
+    pay_csv = tmp_path / "pay.csv"
+    pay_csv.write_text(
+        "\ufeff診療項目代碼,中文項目名稱,支付規定,生效起日,生效迄日\n"
+        "TNULL1,無規定項目,null,20200101,29101231\n"
+        "TTEXT1,有規定項目,限特定適應症使用,20200101,29101231\n",
+        encoding="utf-8",
+    )
+    load_payment_csv(db_path, str(pay_csv))
+    monkeypatch.setattr(settings, "DB_DIR", str(db_dir))
+
+    # 1. NULL 條文 → 業務待人工（reviewed，非 failed）
+    setup_tmp_casestore.create(
+        case_id="SAMP-NULL-1", kind="sampling", case_seq="1", order_code="TNULL1", payload={"id": "SAMP-NULL-1"}
+    )
+    r_null = client.post(
+        "/api/sampling/audit",
+        json={"case_id": "SAMP-NULL-1", "order_code": "TNULL1", "soap_text": "S: DM O: BP A: DM P: lab"},
+    )
+    assert r_null.status_code == 200
+    assert setup_tmp_casestore.get("SAMP-NULL-1").state == "reviewed"
+
+    # 2. 有實際條文但 LLM 離線（conftest 自動隔離 LLM）→ 系統故障（failed）
+    setup_tmp_casestore.create(
+        case_id="SAMP-LLM-FAIL", kind="sampling", case_seq="2", order_code="TTEXT1", payload={"id": "SAMP-LLM-FAIL"}
+    )
+    r_fail = client.post(
+        "/api/sampling/audit",
+        json={"case_id": "SAMP-LLM-FAIL", "order_code": "TTEXT1", "soap_text": "S: DM O: BP A: DM P: lab"},
+    )
+    assert r_fail.status_code == 200
+    assert setup_tmp_casestore.get("SAMP-LLM-FAIL").state == "failed"
+
+
 def test_audit_sampling_case_nonexistent_case_id_warning_logged(client, setup_tmp_casestore, caplog):
     headers = {"X-API-Key": "valid-key-123"}
     body = {

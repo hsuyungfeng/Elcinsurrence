@@ -45,6 +45,31 @@ _PLACEHOLDER_RE = re.compile(
     r"to be determined|\btbd\b|\bn/a\b|lorem|xxx+|\[[^\]]*\]|待補|待填|未記載|未提供|尚未",
     re.IGNORECASE,
 )
+# Phase 36：clinical profile 兩步防繞過檢核：
+# 第一步硬攔截「診斷／代碼／計畫／處置待定」等未完成語意（即使後面接檢驗詞如 "diagnosis pending ultrasound" 亦絕不豁免）
+_BARE_DIAG_PENDING_RE = re.compile(
+    r"\b(?:diagnosis|diagnoses|diagnostic|differential|ddx|dx|icd(?:\s*-?\s*10)?|"
+    r"code|codes|assessment|impression|plan|treatment|problem)\s+pending\b",
+    re.IGNORECASE,
+)
+# 第二步僅於第一步未命中時，剝離明確臨床檢驗／影像／病理／會診追蹤語境之 pending 片語
+_CLINICAL_PENDING_ALLOWED_RE = re.compile(
+    r"\bpending\s+(?:urinalysis|ua|lab(?:s|oratory)?|imaging|x-?ray|ultrasound|sonography|"
+    r"ct|mri|ekg|ecg|culture|biopsy|pathology|results?|workup|evaluation|follow-?up|consult(?:ation)?|review)\b|"
+    r"\b(?:urinalysis|ua|lab(?:s|oratory)?|imaging|x-?ray|ultrasound|sonography|"
+    r"ct|mri|ekg|ecg|culture|biopsy|pathology|results?|workup)\s+pending\b",
+    re.IGNORECASE,
+)
+
+
+def _has_placeholder(text: str, *, profile: str) -> bool:
+    """依 profile 判定是否含佔位或未完成用語（template 嚴格禁止 pending；clinical 採兩步防繞過檢核）。"""
+    if profile == "clinical":
+        if _BARE_DIAG_PENDING_RE.search(text):
+            return True
+        scrubbed = _CLINICAL_PENDING_ALLOWED_RE.sub("", text)
+        return bool(_PLACEHOLDER_RE.search(scrubbed))
+    return bool(_PLACEHOLDER_RE.search(text))
 _CJK_RE = re.compile(r"[一-鿿㐀-䶿]")
 _ICD10_RE = re.compile(r"\b[A-TV-Z][0-9]{2}(?:\.[0-9A-Z]{1,4})?\b")
 
@@ -93,7 +118,7 @@ def validate_soap_quality(soap_dict: Any, *, profile: str = "template") -> dict[
         if len(text) > limits["max_section"]:
             issues.append({"section": key, "code": "too_long", "detail": f"{key.upper()} 欄過長（>{limits['max_section']} 字元）"})
             score -= 10
-        if _PLACEHOLDER_RE.search(text):
+        if _has_placeholder(text, profile=profile):
             issues.append({"section": key, "code": "placeholder", "detail": f"{key.upper()} 欄含佔位或未完成用語"})
             score -= 20
             blocking = True

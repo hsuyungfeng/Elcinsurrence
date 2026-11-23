@@ -112,3 +112,23 @@ def test_runtime_paths_are_isolated_from_production_data():
     prod_data = Path(settings.PROJECT_ROOT).resolve() / "data"
     for p in (settings.CASES_DB_PATH, case_store_mod.CASES_DB_PATH, settings.AUDIT_LOG_PATH, audit_log.AUDIT_LOG_PATH):
         assert not Path(p).resolve().is_relative_to(prod_data)
+
+
+def test_audit_csv_cjk_adjacent_code_ref_and_official_prefix_not_flagged(tmp_path):
+    """Phase 36：中文緊鄰異常尾碼（如51002D／（92043D））須檢出，正常「審查原則：」開頭不誤判 AI 預填。"""
+    csv_file = tmp_path / "pay_261119_like.csv"
+    csv_file.write_text(
+        "\ufeff診療項目代碼,健保支付點數,生效起日,生效迄日,英文項目名稱,中文項目名稱,支付規定\n"
+        '51002C,500,20230101,29101231,Suture,縫合,"審查原則：\n1.申報條件：逾三根須報如51002D。"\n'
+        '92043C,600,20230101,29101231,TMJ,脫臼,"審查原則：\n1.不得同時申報固定項目（92043D）。"\n'
+        '62010C,1623,20230101,29101231,Tumor,腫瘤,"審查原則：\n1.一般正常官方給付條文無異常碼。"\n',
+        encoding="utf-8",
+    )
+    rep = audit_rule_csv(csv_file)
+    c = rep["counts"]
+    assert c["ai_prefill_marker"] == 0
+    assert c["non_standard_suffix_ref"] == 2
+    assert c["missing_code_ref"] == 2
+    found_refs = [item["non_standard_refs"] for item in rep["anomalies"]["non_standard_suffix_ref"]]
+    assert ["51002D"] in found_refs
+    assert ["92043D"] in found_refs

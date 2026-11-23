@@ -353,13 +353,12 @@ def run_presubmission_audit(
         raise SamplingServiceError("無有效醫令可預審", status=400)
     oj = judgments[0]
 
-    # A-CR-09：狀態轉換放在判定完成之後（P1-1）；多步轉換單一交易。
+    # A-CR-09 / Phase 36：只有真正呼叫 LLM 且系統故障（oj.llm_failed=True）才轉入 failed；
+    # 官方規則存在但 payment_text 為 NULL 或不在生效期屬於業務待人工，不得冒充系統故障。
     state_transition = advance_sampling_case(
         store,
         case_id,
-        failed_reason=(
-            "LLM 判定服務異常，未完成預審" if oj.support_level is None and oj.rule_found else None
-        ),
+        failed_reason=("LLM 判定服務異常，未完成預審" if oj.llm_failed else None),
         actor=actor,
     )
 

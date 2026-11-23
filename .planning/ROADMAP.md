@@ -143,6 +143,7 @@ Full phase details, success criteria, and requirements: [`milestones/v1.1-ROADMA
 | 33. 本機 ASR、Gemma 4 E4B 128K、26MB/Opus 上傳與臨床 SOAP 分流 | v1.3 | 1/1 | Complete | 2026-11-23 |
 | 34. `sherpa-onnx` SenseVoice int8 預設 ASR、雙人說者分離與 `finalize` 自動背景管線 | v1.3 | 1/1 | Complete | 2026-11-23 |
 | 35. 規則庫只讀品質稽核與 NULL 契約統一、SOAP 定向強化、一鍵部署收尾與測試隔離修復 | v1.3 | 1/1 | Complete | 2026-11-23 |
+| 36. 工作台移除步驟列釋放空間、規則更新機能升級（套用 261119/261028）、NULL 條文語意修正與臨床 `pending` 精準化 | v1.3 | 1/1 | Complete | 2026-11-23 |
 
 ## Out of Roadmap Scope
 

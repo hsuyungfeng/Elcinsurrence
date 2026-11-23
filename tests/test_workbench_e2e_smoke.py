@@ -36,8 +36,8 @@ def test_workbench_page_renders_without_csp_violations(test_client):
     assert 'id="workflow3View"' in html  # 當月申報檔預審
     assert 'id="workflow4View"' in html  # 診間即時 SOAP
 
-    # 驗證核心互動組件容器
-    assert 'id="workflow-stepper"' in html
+    # 驗證核心互動組件容器（Phase 36：移除 workflow-stepper 釋放版面空間）
+    assert 'id="workflow-stepper"' not in html
     assert 'id="empty-state-guide"' in html
     assert 'id="confirm-destructive-modal"' in html
     assert 'id="structured-error-modal"' in html

@@ -79,6 +79,7 @@ class OrderJudgment:
     judgment: Judgment | None = None
     support_level: str | None = None
     manual_review: bool = False
+    llm_failed: bool = False
     note: str = ""
     narratives: tuple["CandidateNarrative", ...] = ()
     narrative_error: bool = False

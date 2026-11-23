@@ -140,3 +140,41 @@ def test_allow_retry_false_disables_retry_and_backfill(monkeypatch):
     assert res["retried"] is False
     assert res["summary_backfilled"] is False
     assert calls == 1
+
+
+def test_clinical_pending_whitelist_and_bypass_matrix():
+    """Phase 36：clinical 放行明確臨床檢驗追蹤語境 pending，但嚴格攔截全部 10 組診斷／計畫待定繞過與 template。"""
+    base = {k: _SOAP_CLEAN[k] for k in ("s", "o", "a", "p")}
+
+    # 1. clinical 放行合法臨床檢驗追蹤語境
+    for allowed_a in (
+        "Constipation (K59.0); dysuria (R30.0), urinalysis pending.",
+        "Constipation (K59.0); dysuria (R30.0), pending urinalysis and lab review.",
+    ):
+        cand = dict(base, a=allowed_a)
+        q_clin = soap_advice.validate_soap_quality(cand, profile="clinical")
+        assert q_clin["pass"] is True, f"clinical 應放行合法檢驗語境：{allowed_a!r} -> {q_clin}"
+        # template profile 維持嚴格阻斷 pending
+        q_tmpl = soap_advice.validate_soap_quality(cand, profile="template")
+        assert q_tmpl["pass"] is False
+
+    # 2. clinical 嚴格攔截 10 組診斷／代碼／計畫／處置待定繞過與裸佔位
+    blocked_cases = (
+        "Constipation (K59.0); diagnosis pending ultrasound.",
+        "Constipation (K59.0); differential pending ultrasound.",
+        "Constipation (K59.0); ddx pending urinalysis.",
+        "Constipation (K59.0); dx pending ultrasound.",
+        "Constipation (K59.0); ICD 10 pending ultrasound.",
+        "Constipation (K59.0); ICD pending urinalysis.",
+        "Constipation (K59.0); plan pending ultrasound.",
+        "Constipation (K59.0); treatment pending urinalysis.",
+        "Constipation (K59.0); impression pending lab.",
+        "Constipation (K59.0); problem pending ultrasound.",
+        "Constipation (K59.0); [pending] further info.",
+        "Constipation (K59.0); pending.",
+    )
+    for bad_a in blocked_cases:
+        cand = dict(base, a=bad_a)
+        q = soap_advice.validate_soap_quality(cand, profile="clinical")
+        assert q["pass"] is False, f"clinical 必須攔截繞過／裸佔位：{bad_a!r}"
+        assert any(it["code"] == "placeholder" for it in q["issues"])

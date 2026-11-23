@@ -25,9 +25,9 @@ from typing import Any
 from elc_audit_engine.rule_repository.loaders._csv_table import PLACEHOLDER_TEXTS
 from elc_audit_engine.rule_repository.loaders.dates import parse_flexible_date
 
-_CODE_REF_RE = re.compile(r"\b(\d{5}[A-Za-z])\b")
+_CODE_REF_RE = re.compile(r"(?<![A-Za-z0-9])(\d{5}[A-Za-z])(?![A-Za-z0-9])")
 _STANDARD_NHI_SUFFIXES = frozenset({"A", "B", "C", "E", "G", "H"})
-_AI_PREFILL_MARKERS = ("審查原則：", "Version 1.0", "版 1.0", "```", "**")
+_AI_PREFILL_MARKERS = ("審查原則：(202", "Version 1.0", "版 1.0", "```", "**")
 
 
 def _detect_columns(fieldnames: list[str]) -> tuple[str, str, str, str, str, str]:

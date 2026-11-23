@@ -108,16 +108,14 @@ def test_doctor_mode_elements():
     assert ".doctor-mode .advanced-only" in css
 
 
-def test_stepper_and_empty_state():
-    """工作台包含步驟化導引列與空白狀態引導 (E2, E6)。"""
+def test_stepper_removed_and_empty_state_preserved():
+    """Phase 36：已移除頂部 3 步驟導引列釋放空間，並保留空白狀態引導與規則管理面板。"""
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    assert 'id="workflow-stepper"' in html
-    assert "上傳申報檔" in html
-    assert "智慧檢查" in html
-    assert "下載送審檔" in html
-
+    assert 'id="workflow-stepper"' not in html
     assert 'id="empty-state-guide"' in html
     assert "目前尚無申報資料，請先上傳本月申報檔" in html
+    assert 'id="rulesCurrentInfo"' in html
+    assert 'data-action="syncRulesReplace"' in html
 
 
 def test_doctor_mode_js_logic():

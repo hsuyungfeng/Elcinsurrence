@@ -57,21 +57,6 @@
     </div>
   </header>
 
-  <!-- Phase 32-20: 步驟導引列 (E2) -->
-  <div id="workflow-stepper" class="step-indicator">
-    <div class="step-item step-active" data-step="1">
-      <span class="step-num">①</span> 上傳申報檔
-    </div>
-    <div class="step-arrow">→</div>
-    <div class="step-item" data-step="2">
-      <span class="step-num">②</span> 智慧檢查
-    </div>
-    <div class="step-arrow">→</div>
-    <div class="step-item" data-step="3">
-      <span class="step-num">③</span> 下載送審檔
-    </div>
-  </div>
-
   <!-- Main Grid -->
   <main>
     <!-- Sidebar Case List -->
@@ -101,12 +86,14 @@
       <!-- 迷你收納工具列：規則庫管理（點擊展開浮動面板）。
            Phase 32-A：金鑰面板已移除——院內網路使用不需驗證。 -->
       <div class="sidebar-quick-bar">
-        <button class="quick-btn advanced-only" id="btnQuickRules" data-action="toggleQuickPanel" data-arg="rules" title="規則庫管理與每月更新">📚 規則</button>
+        <button class="quick-btn" id="btnQuickRules" data-action="toggleQuickPanel" data-arg="rules" title="規則庫管理與每月更新">📚 規則</button>
       </div>
       <div id="quickRulesPanel" class="quick-dropdown-panel">
         <div class="u-s-153">📚 規則庫管理</div>
+        <div class="u-s-60" id="rulesCurrentInfo"></div>
         <input class="u-s-159" type="file" id="rulesFile" accept=".csv" data-change-action="uploadRuleCsvChange">
-        <button class="u-s-36" data-action="syncRules">🔄 同步規則庫</button>
+        <button class="u-s-36" data-action="syncRules">🔄 增量同步（保留舊碼）</button>
+        <button class="u-s-36" data-action="syncRulesReplace">♻️ 整表更新（套用最新版）</button>
         <div class="u-s-60" id="rulesStatus"></div>
       </div>
       <!-- 院所檔案設定彈窗 -->
