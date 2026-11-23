@@ -1,11 +1,11 @@
 {
   "model": {
-    "path": "/home/hsu/models/Qwen3.8-27B-FP8",
-    "name": "Qwen3.8-27B-FP8",
-    "quantization": "FP8"
+    "path": "unsloth/gemma-4-E4B-it-GGUF:Q4_K_M",
+    "name": "gemma-4-E4B-it-Q4_K_M",
+    "quantization": "Q4_K_M"
   },
   "inference": {
-    "n_ctx": 32768,
+    "n_ctx": 131072,
     "max_tokens": 1024,
     "temperature": 0.7
   },

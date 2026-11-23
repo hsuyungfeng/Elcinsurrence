@@ -1,7 +1,7 @@
 """LLM SOAP 智慧補強與比對建議模組。
 
 比對原始門診 SOAP 與雲端病歷/病史時間軸，產出具體的 SOAP 改進建議與醫師審批重點。
-支援 Qwen3.8-27B-FP8 / Qwen3.8-27B-UD-Q4_K_XL（禁用 thinking token，保證低延遲快速回應）。
+支援 Gemma 4 E4B（Q4_K_M / Q8_0）與 Qwen3.8-27B（禁用 thinking token，保證低延遲快速回應）。
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ import json
 import re
 from typing import Any
 
+from elc_audit_engine.comparator.icd10_validator import validate_icd10_in_assessment
 from elc_audit_engine.prompt_safety import DATA_ISOLATION_NOTICE, fence
 from elc_audit_engine.rule_repository.mapping.llm_client import chat_completion
 
@@ -22,31 +23,55 @@ _MAX_SECTION_CHARS = 500
 # 範例病歷總長：目標 200–400 字元，硬上限 500（超過即不通過）。
 _MIN_TOTAL_CHARS = 200
 _MAX_TOTAL_CHARS = 500
+# 品質檢核設定檔（Phase 33）：區分「短版預生成範例」與「真實長門診錄音 SOAP」。
+_QUALITY_PROFILES: dict[str, dict[str, int]] = {
+    "template": {
+        "min_section": _MIN_SECTION_CHARS,
+        "max_section": _MAX_SECTION_CHARS,
+        "min_total": _MIN_TOTAL_CHARS,
+        "max_total": _MAX_TOTAL_CHARS,
+    },
+    "clinical": {
+        "min_section": _MIN_SECTION_CHARS,
+        "max_section": 800,
+        "min_total": _MIN_TOTAL_CHARS,
+        "max_total": 2000,
+    },
+}
 _PASS_SCORE = 70
 # 佔位符／未完成用語（大小寫不敏感）：代表模型未實際寫出內容。
 _PLACEHOLDER_RE = re.compile(
-    r"not documented|not recorded|pending|missing|placeholder|to be determined|\btbd\b|\bn/a\b|lorem|"
-    r"xxx+|\[[^\]]*\]|待補|待填|未記載|未提供|尚未",
+    r"not\s+(?:explicitly\s+|consistently\s+)?documented|not\s+recorded|pending|missing|placeholder|"
+    r"to be determined|\btbd\b|\bn/a\b|lorem|xxx+|\[[^\]]*\]|待補|待填|未記載|未提供|尚未",
     re.IGNORECASE,
 )
 _CJK_RE = re.compile(r"[一-鿿㐀-䶿]")
 _ICD10_RE = re.compile(r"\b[A-TV-Z][0-9]{2}(?:\.[0-9A-Z]{1,4})?\b")
 
 
-def validate_soap_quality(soap_dict: Any) -> dict[str, Any]:
-    """檢核 LLM 產生的 recommended_soap 品質（確定性規則，不呼叫 LLM）。
+def validate_soap_quality(soap_dict: Any, *, profile: str = "template") -> dict[str, Any]:
+    """檢核 LLM 產生的 recommended_soap 或門診草稿品質（確定性規則，不呼叫 LLM）。
+
+    Args:
+        soap_dict: 含 s/o/a/p 鍵的 dict。
+        profile: ``"template"``（預設，短版預生成範例 200–500 字元）或
+            ``"clinical"``（真實門診錄音／醫師審核草稿 200–2000 字元）。
 
     檢核項目：
     - 結構：S/O/A/P 四欄皆存在且為非空字串（缺漏即不通過）。
     - 佔位符：出現 pending／missing／not documented／[...] 等未完成用語（不通過）。
-    - 長度：每欄至少 20 字元、至多 1500 字元（不通過）。
+    - 長度：依 profile 驗證單欄與總字元上限（不通過）。
     - 語言：醫學英文主體，CJK 字元佔比須 ≤ 10%（不通過；中文應只出現在審批欄）。
-    - 診斷碼：A 欄應含 ICD-10 形式代碼（缺漏僅扣分）。
+    - 診斷碼：A 欄應含 ICD-10 形式代碼（缺漏僅扣分），並核對高風險語意誤碼（非阻斷警告）。
 
     Returns:
         {"pass": bool, "quality_score": 0..100, "issues": [{"section", "code", "detail"}]}
         `pass` 為 True 須同時滿足無結構／佔位符／語言問題且分數 ≥ 70。
     """
+    if profile not in _QUALITY_PROFILES:
+        raise ValueError(f"不支援的品質檢核 profile：{profile!r}（僅支援 {tuple(_QUALITY_PROFILES)}）")
+    limits = _QUALITY_PROFILES[profile]
+
     issues: list[dict[str, str]] = []
     score = 100
     if not isinstance(soap_dict, dict):
@@ -61,12 +86,12 @@ def validate_soap_quality(soap_dict: Any) -> dict[str, Any]:
             score -= 25
             blocking = True
             continue
-        if len(text) < _MIN_SECTION_CHARS:
-            issues.append({"section": key, "code": "too_short", "detail": f"{key.upper()} 欄過短（<{_MIN_SECTION_CHARS} 字元）"})
+        if len(text) < limits["min_section"]:
+            issues.append({"section": key, "code": "too_short", "detail": f"{key.upper()} 欄過短（<{limits['min_section']} 字元）"})
             score -= 15
             blocking = True
-        if len(text) > _MAX_SECTION_CHARS:
-            issues.append({"section": key, "code": "too_long", "detail": f"{key.upper()} 欄過長（>{_MAX_SECTION_CHARS} 字元）"})
+        if len(text) > limits["max_section"]:
+            issues.append({"section": key, "code": "too_long", "detail": f"{key.upper()} 欄過長（>{limits['max_section']} 字元）"})
             score -= 10
         if _PLACEHOLDER_RE.search(text):
             issues.append({"section": key, "code": "placeholder", "detail": f"{key.upper()} 欄含佔位或未完成用語"})
@@ -77,17 +102,23 @@ def validate_soap_quality(soap_dict: Any) -> dict[str, Any]:
             issues.append({"section": key, "code": "not_english", "detail": f"{key.upper()} 欄應為醫學英文，卻含大量中文"})
             score -= 15
             blocking = True
-        if key == "a" and not _ICD10_RE.search(text):
-            issues.append({"section": "a", "code": "no_icd10", "detail": "A 欄未見 ICD-10 代碼"})
-            score -= 5
+        if key == "a":
+            if not _ICD10_RE.search(text):
+                issues.append({"section": "a", "code": "no_icd10", "detail": "A 欄未見 ICD-10 代碼"})
+                score -= 5
+            else:
+                for chk in validate_icd10_in_assessment(text):
+                    if chk.warning:
+                        issues.append({"section": "a", "code": "icd10_warning", "detail": f"{chk.code}: {chk.warning}"})
+                        score -= 5
 
     total_chars = sum(len((soap_dict.get(k) or "").strip()) for k in _SOAP_SECTIONS)
-    if total_chars < _MIN_TOTAL_CHARS:
-        issues.append({"section": "*", "code": "total_too_short", "detail": f"SOAP 總字元數過短（{total_chars} < {_MIN_TOTAL_CHARS}）"})
+    if total_chars < limits["min_total"]:
+        issues.append({"section": "*", "code": "total_too_short", "detail": f"SOAP 總字元數過短（{total_chars} < {limits['min_total']}）"})
         score -= 20
         blocking = True
-    elif total_chars > _MAX_TOTAL_CHARS:
-        issues.append({"section": "*", "code": "total_too_long", "detail": f"SOAP 總字元數過長（{total_chars} > {_MAX_TOTAL_CHARS}）"})
+    elif total_chars > limits["max_total"]:
+        issues.append({"section": "*", "code": "total_too_long", "detail": f"SOAP 總字元數過長（{total_chars} > {limits['max_total']}）"})
         score -= 20
         blocking = True
 
@@ -284,3 +315,88 @@ def generate_template_soap_condensed(**kwargs: Any) -> dict[str, Any]:
     except Exception:
         pass
     return result
+
+
+# ── 真實門診逐字稿轉 SOAP（Phase 33：clinical profile、嚴禁佔位句）──────────
+_CLINICAL_TRANSCRIPT_SOAP_PROMPT = (
+    "You are an expert clinical documentation specialist and Taiwan outpatient physician.\n"
+    "Convert the provided outpatient doctor-patient consultation transcript into a structured outpatient SOAP note.\n\n"
+    "HARD CONSTRAINTS:\n"
+    "1. NEVER fabricate symptoms, exam findings, lab values, imaging results, diagnoses, or procedures not mentioned in the transcript.\n"
+    "2. NEVER write placeholder or meta-commentary phrases such as 'not documented', 'not explicitly documented', "
+    "'not recorded', 'pending', 'missing', 'N/A', 'TBD', or '[...]'. If vital signs or a specific exam were not mentioned, "
+    "simply OMIT that sentence and state ONLY the physical maneuvers, visual/ultrasound observations, or prior reports actually discussed.\n"
+    "3. `s`, `o`, `a`, `p` MUST be written entirely in professional Medical English (no Chinese characters). "
+    "Keep each section concise and clinical (total across s+o+a+p between 300 and 1500 characters; each section 40 to 600 characters).\n"
+    "4. `a` (Assessment) MUST include the exact ICD-10 code(s) justified by the consultation.\n"
+    "5. `conversation_summary` MUST be written in Traditional Chinese (繁體中文，約 60–120 字).\n\n"
+    "Output ONLY one valid JSON object (no markdown wrappers, no extra text):\n"
+    "{\n"
+    '  "s": "Medical English Subjective",\n'
+    '  "o": "Medical English Objective (only actual observed/discussed findings, zero placeholder statements)",\n'
+    '  "a": "Medical English Assessment with ICD-10 code(s)",\n'
+    '  "p": "Medical English Plan",\n'
+    '  "conversation_summary": "繁體中文對話摘要"\n'
+    "}\n"
+    + DATA_ISOLATION_NOTICE
+)
+
+
+def generate_clinical_soap_from_transcript(
+    transcript: str,
+    *,
+    max_tokens: int = 1024,
+) -> dict[str, Any]:
+    """將本機 Whisper 轉錄之門診逐字稿轉換為結構化臨床 SOAP（並以 clinical profile 檢核）。"""
+    cleaned_tr = (transcript or "").strip()
+    if not cleaned_tr:
+        return {
+            "status": "error",
+            "error": "逐字稿內容為空",
+            "soap": {},
+            "conversation_summary": "",
+            "quality": validate_soap_quality({}, profile="clinical"),
+            "icd10_checks": [],
+        }
+
+    user_prompt = (
+        "以下為台灣門診醫病對話逐字稿，請依規定產出結構化臨床 SOAP JSON：\n"
+        f"{fence(cleaned_tr[:18000], 'transcript')}"
+    )
+    try:
+        resp = chat_completion(
+            _CLINICAL_TRANSCRIPT_SOAP_PROMPT,
+            user_prompt,
+            max_tokens=max_tokens,
+            temperature=0.0,
+        )
+        parsed = _parse_llm_json(resp)
+        if not parsed or not all(isinstance(parsed.get(k), str) for k in _SOAP_SECTIONS):
+            return {
+                "status": "fallback",
+                "soap": {},
+                "conversation_summary": "",
+                "raw_response": resp,
+                "quality": validate_soap_quality({}, profile="clinical"),
+                "icd10_checks": [],
+            }
+        soap = {k: parsed[k].strip() for k in _SOAP_SECTIONS}
+        quality = validate_soap_quality(soap, profile="clinical")
+        icd_checks = [c.to_dict() for c in validate_icd10_in_assessment(soap["a"])]
+        return {
+            "status": "success",
+            "soap": soap,
+            "conversation_summary": str(parsed.get("conversation_summary") or "").strip(),
+            "quality": quality,
+            "icd10_checks": icd_checks,
+            "raw_response": resp,
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "error": f"LLM 服務無法連線或判定逾時：{type(exc).__name__}",
+            "soap": {},
+            "conversation_summary": "",
+            "quality": validate_soap_quality({}, profile="clinical"),
+            "icd10_checks": [],
+        }

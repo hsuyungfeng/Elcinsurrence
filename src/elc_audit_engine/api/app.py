@@ -22,8 +22,9 @@ from .errors import register_error_handlers
 from .routes import ALL_BLUEPRINTS
 from .security import register_security
 
-# 請求大小上限（A-WR-04）：單檔上限 10MB，另留 1MB 給 multipart 欄位與 JSON。
-MAX_CONTENT_LENGTH = 11 * 1024 * 1024
+# 請求大小上限（A-WR-04 / Phase 33）：對齊 /api/soap/recordings 25MB 音檔契約＋1MB 表單餘裕。
+# 非錄音路由（monthly.py、uploads.py、attachment_store.py）各自強制 10MB 串流上限，不受放寬影響。
+MAX_CONTENT_LENGTH = 26 * 1024 * 1024
 
 
 def create_app(

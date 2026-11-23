@@ -76,5 +76,7 @@ deploy/release-*/archive/
 # 本機 Claude 工具設定
 .claude/
 
-# 訓練／原始資料壓縮檔：不進版本控制（公開倉庫，且體積超過 GitHub 單檔上限）
+# 訓練／原始資料壓縮檔與解壓目錄：不進版本控制（公開倉庫，且含門診錄音與逐字稿）
 data/**/*.zip
+data/DoctorToolbox_SOAP_training_*/
+data/**/*.wav

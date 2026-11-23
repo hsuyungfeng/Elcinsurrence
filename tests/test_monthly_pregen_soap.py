@@ -116,6 +116,34 @@ def test_non_dict_input_fails_safely():
                       "issues": [{"section": "*", "code": "not_a_dict", "detail": "SOAP 非物件"}]}
 
 
+def test_clinical_profile_allows_longer_real_visit_soap_while_template_stays_strict():
+    long_clinical_soap = {
+        "s": "Patient reports chronic right knee pain and soreness for 3 months, exacerbated by braking while driving and descending stairs, with intermittent clicking during flexion.",
+        "o": "Physical examination shows mild patellar crepitus on active knee flexion and extension. Ultrasound demonstrates intact patellar tendon, mild joint effusion, and thickened medial synovial plica with focal hyperemia.",
+        "a": "Right patellar subluxation (M22.1) with medial synovial plica syndrome (M22.8X1) and mild knee joint effusion (M25.461).",
+        "p": "Performed ultrasound-guided intra-articular hyaluronic acid injection and perilesional anti-inflammatory therapy. Instructed vastus medialis obliquus strengthening exercises and follow-up in 4 weeks.",
+    }
+    tmpl_res = validate_soap_quality(long_clinical_soap, profile="template")
+    assert tmpl_res["pass"] is False
+    assert any(i["code"] == "total_too_long" for i in tmpl_res["issues"])
+
+    clin_res = validate_soap_quality(long_clinical_soap, profile="clinical")
+    assert clin_res["pass"] is True
+    assert clin_res["quality_score"] == 100
+
+
+def test_validate_soap_quality_flags_icd10_semantic_mismatch_warning():
+    soap = dict(GOOD_SOAP, a="Chronic myofascial pain (M79.1) and Hyperuricemia (E76.0).")
+    result = validate_soap_quality(soap, profile="clinical")
+    assert result["pass"] is True  # 非阻斷警告，留待醫師核對
+    assert any(i["code"] == "icd10_warning" for i in result["issues"])
+
+
+def test_validate_soap_quality_rejects_unknown_profile():
+    with pytest.raises(ValueError, match="不支援的品質檢核 profile"):
+        validate_soap_quality(GOOD_SOAP, profile="unknown")
+
+
 # ── 2. DB 快取（soap_templates） ──────────────────────────────────
 
 

@@ -70,8 +70,8 @@ def _create_draft_record(
     primary_diagnosis: str | None = None,
 ) -> SoapDraftRecord:
     """共用的建立 SOAP 草稿並執行品質檢核與標準範本比對之核心邏輯。"""
-    # 品質檢核
-    q_res = validate_soap_quality(soap)
+    # 品質檢核（真實門診草稿採用 clinical profile，允許 200-2000 字元）
+    q_res = validate_soap_quality(soap, profile="clinical")
     initial_state = STATE_VALIDATED if q_res.get("pass") else STATE_QUALITY_FAILED
 
     # 標準範本比對（advisory，來源為現有 soap_templates，見 29-DESIGN.md §5, §11）
@@ -526,8 +526,8 @@ def edit_draft(draft_id: str):
     eff_reviewer = str(data.get("reviewer_id") or caller_id() or "unknown_reviewer")
     store = case_store()
 
-    # 重新檢核品質
-    q_res = validate_soap_quality(new_soap)
+    # 重新檢核品質（真實門診草稿採用 clinical profile）
+    q_res = validate_soap_quality(new_soap, profile="clinical")
     is_pass = bool(q_res.get("pass"))
 
     # 重新比對標準範本（現有 soap_templates）

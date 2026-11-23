@@ -46,7 +46,7 @@ EOF
 curl -sS http://localhost:8080/v1/models
 ```
 
-> **注意**：`config/llama_config.json` 的 `model.name` 寫的是 `Ornith-1.0-9B`，但目前 8080 上實際服務的是 `Qwen3.8-27B-FP8`。設定檔與實際模型不一致時，以服務端回報為準；若要統一，請修改設定檔的 `model` 區塊。
+> **模型建議（Phase 33 實測更新）**：`config/llama_config.json` 預設為 **`gemma-4-E4B-it-Q4_K_M`**（`n_ctx=32768`，30 組金標準 100%、Radeon 780M / 8–12 GB GPU 約 25 tok/s）；顯存充裕機房可改用 `config/llama_config.q8.example.json`（`gemma-4-E4B-it-Q8_0`，`n_ctx=16384`）。啟動 `llama serve` 請加 `--jinja --port 8080 -ngl 99`。設定檔與實際模型不一致時，以服務端回報為準。
 
 ## 四、如何產生其他的預生成病例
 

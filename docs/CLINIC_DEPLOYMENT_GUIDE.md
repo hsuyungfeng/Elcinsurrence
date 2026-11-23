@@ -69,6 +69,15 @@ bash deploy/healthcheck.sh
 # 輸出應顯示：HTTP/1.1 200 OK，包含院所代碼與健康狀態
 ```
 
+### 步驟 5：本機 LLM 與離線語音辨識（Phase 33）
+* **本機 LLM（`llama serve`，預設 `Gemma 4 E4B Q4_K_M`，對接 `8080` 埠）**：
+  ```bash
+  llama serve -hf unsloth/gemma-4-E4B-it-GGUF:Q4_K_M --port 8080 --ctx-size 32768 -ngl 99
+  ```
+  顯存充裕（≥12 GB VRAM）機房可改用 `Q8_0`（搭配 `config/llama_config.q8.example.json`、`--ctx-size 16384`）。
+* **本機語音辨識（ASR）**：一律採用 `faster-whisper large-v3-turbo`（`uv sync --extra asr`，搭配 `config/asr_hotwords.json` 專科熱詞表與 Silero VAD），**勿以 Gemma 4 E4B 原生音訊直接進行門診長錄音轉錄**。
+* **診間錄音上傳上限**：`POST /api/soap/recordings` 支援 `.wav` 與 `.opus`（上限 25 MB，建議診間優先傳送 Opus 壓縮音檔）。
+
 ---
 
 ## 三、診間端安裝流程（Windows 10 / 11 64-bit）

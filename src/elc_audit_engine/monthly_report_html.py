@@ -26,6 +26,7 @@ from elc_audit_engine.rule_repository.icd_titles import get_icd_chinese_title
 from elc_audit_engine.monthly_pregen import is_procedure_finding
 from elc_audit_engine import evidence_vault
 from elc_audit_engine.services.report_assets import SHARED_CSS, SHARED_SCRIPT, soap_modal_button
+from elc_audit_engine.services.rule_summary import summarize_payment_text
 
 _SOAP_CSS = """
 details.tier-group { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); overflow: hidden; }
@@ -159,9 +160,9 @@ def _amount_text(finding: OrderFinding) -> str:
 
 
 def _rule_fulltext_html(finding: OrderFinding) -> str:
-    """📜 規則全文展開區：
-    - 給付規定（payment_text）：有內容時以 .rule-payment 直接展開顯示。
-    - 條文全文（article_full_text）或完整給付條文總覽：以 <details class="rule-fulltext"> 折疊，按壓 summary 展開全文。
+    """📜 規則重點與全文展開區：
+    - 給付規定（payment_text）：以 .rule-payment 顯示精簡重點摘要（嚴格不與完整條文重複）。
+    - 完整給付規定條文：以 <details class="rule-fulltext"> 折疊，按壓 summary 展開 100% 原文全文。
     """
     if not finding.source_texts:
         return ""
@@ -171,12 +172,14 @@ def _rule_fulltext_html(finding: OrderFinding) -> str:
     for name, text in finding.source_texts:
         label = _SOURCE_LABELS.get(name, name)
         if name == "payment_text":
-            payment_boxes.append(
-                f'<div class="rule-payment">'
-                f'<div class="rule-payment-title">📜 給付規定（payment_text）</div>'
-                f'<div class="rule-payment-text">{_e(text)}</div>'
-                f'</div>'
-            )
+            summary = summarize_payment_text(text)
+            if summary:
+                payment_boxes.append(
+                    f'<div class="rule-payment">'
+                    f'<div class="rule-payment-title">📜 給付規定（payment_text）</div>'
+                    f'<div class="rule-payment-text">{_e(summary)}</div>'
+                    f'</div>'
+                )
         blocks.append(
             f'<div class="rule-src"><div class="src">{_e(label)}</div>'
             f'<pre class="rule-text">{_e(text)}</pre></div>'

@@ -114,8 +114,8 @@ def confirm_cycle(
     effective_hash = draft.content_hash
 
     if soap is not None:
-        # 重新檢核品質 (Test 5)
-        q_res = validate_soap_quality(soap)
+        # 重新檢核品質 (Test 5；真實門診錄音草稿採用 clinical profile)
+        q_res = validate_soap_quality(soap, profile="clinical")
         is_pass = bool(q_res.get("pass"))
 
         if not is_pass:
