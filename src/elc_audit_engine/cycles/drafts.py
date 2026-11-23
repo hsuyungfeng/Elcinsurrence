@@ -220,6 +220,7 @@ def submit_cycle_draft(
             "draft_id": draft_record.draft_id,
             "transcript_path": str(target_transcript),
             "extras_json": extras_payload,
+            "last_error": None,
         },
     )
 

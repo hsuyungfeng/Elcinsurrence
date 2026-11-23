@@ -347,7 +347,7 @@ def generate_clinical_soap_from_transcript(
     *,
     max_tokens: int = 1024,
 ) -> dict[str, Any]:
-    """將本機 Whisper 轉錄之門診逐字稿轉換為結構化臨床 SOAP（並以 clinical profile 檢核）。"""
+    """將本機 ASR 轉錄之門診逐字稿轉換為結構化臨床 SOAP（並以 clinical profile 檢核）。"""
     cleaned_tr = (transcript or "").strip()
     if not cleaned_tr:
         return {

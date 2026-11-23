@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import re
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from elc_audit_engine import audit_log
 from elc_audit_engine.api.context import caller_id, case_store
@@ -30,6 +30,10 @@ from elc_audit_engine.cycles.chunks import (
     MissingChunksError,
     finalize_cycle_audio,
     store_chunk,
+)
+from elc_audit_engine.cycles.pipeline import (
+    is_auto_pipeline_enabled,
+    schedule_cycle_auto_pipeline,
 )
 
 logger = logging.getLogger(__name__)
@@ -141,6 +145,10 @@ def finalize_audio(cycle_id: str):
     if not audio_sha256 or not isinstance(audio_sha256, str) or not _SHA256_RE.match(audio_sha256):
         raise ApiError(f"缺少或不合法的 audio_sha256 格式：{audio_sha256!r}", status=422)
 
+    auto_generate = data.get("auto_generate")
+    if auto_generate is not None and not isinstance(auto_generate, bool):
+        raise ApiError("auto_generate 必須為布林值", status=422)
+
     store = case_store()
     try:
         res = finalize_cycle_audio(
@@ -163,6 +171,23 @@ def finalize_audio(cycle_id: str):
     except ChunkStateError as exc:
         return jsonify({"error": "invalid_cycle_state", "message": str(exc)}), 409
 
+    should_schedule = (
+        auto_generate
+        if auto_generate is not None
+        else is_auto_pipeline_enabled(app_config=current_app.config)
+    )
+    pipeline_scheduled = False
+    if should_schedule:
+        custom_runner = current_app.config.get("ELC_CYCLE_PIPELINE_RUNNER")
+        pipeline_scheduled = schedule_cycle_auto_pipeline(
+            store,
+            cycle_id,
+            actor=f"system:auto-pipeline({caller_id()})",
+            runner=custom_runner,
+        )
+
+    res["pipeline_scheduled"] = pipeline_scheduled
+
     try:
         audit_log.record_access(
             caller_id=caller_id(),
@@ -173,6 +198,7 @@ def finalize_audio(cycle_id: str):
                 "action": "finalize_cycle_audio",
                 "cycle_id": cycle_id,
                 "total_chunks": total_chunks,
+                "pipeline_scheduled": pipeline_scheduled,
             },
         )
     except Exception:
