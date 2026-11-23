@@ -106,8 +106,8 @@ def upload_chunk(cycle_id: str):
         audit_log.record_access(
             caller_id=caller_id(),
             method="POST",
-            endpoint=request.path,
-            status_code=status_code,
+            path=request.path,
+            status=status_code,
             detail={
                 "action": "store_chunk",
                 "cycle_id": cycle_id,
@@ -192,8 +192,8 @@ def finalize_audio(cycle_id: str):
         audit_log.record_access(
             caller_id=caller_id(),
             method="POST",
-            endpoint=request.path,
-            status_code=200,
+            path=request.path,
+            status=200,
             detail={
                 "action": "finalize_cycle_audio",
                 "cycle_id": cycle_id,

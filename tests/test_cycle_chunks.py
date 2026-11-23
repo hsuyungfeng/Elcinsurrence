@@ -416,3 +416,49 @@ def test_api_caplog_no_audio_or_phi(phase31_client, phase31_app, caplog):  # noq
         msg = record.getMessage()
         assert "RIFF" not in msg
         assert "WAVE" not in msg
+
+
+def test_api_chunks_and_finalize_write_audit_log(phase31_client, phase31_app, caplog):  # noqa: F811
+    """Test api_6: 上傳分段與 finalize 皆須正確寫入審計日誌（無 Audit log failure 例外）。"""
+    from elc_audit_engine import audit_log
+
+    store = phase31_app.case_store
+    cid = _create_test_cycle(store)
+    headers = {"X-API-Key": "valid-key-123"}
+
+    data = make_wav_chunk(seconds=0.2, seed=71)
+    sha = wav_sha256(data)
+
+    r_chunk = phase31_client.post(
+        f"/api/cycles/{cid}/chunks",
+        headers=headers,
+        data={"seq": "0", "sha256": sha, "audio": (io.BytesIO(data), "chunk_000000.wav")},
+        content_type="multipart/form-data",
+    )
+    assert r_chunk.status_code == 201
+
+    r_fin = phase31_client.post(
+        f"/api/cycles/{cid}/finalize",
+        headers=headers,
+        json={"total_chunks": 1, "audio_sha256": pcm_sha256([data])},
+    )
+    assert r_fin.status_code == 200
+
+    for record in caplog.records:
+        assert "Audit log failure" not in record.getMessage()
+
+    entries = audit_log.read_entries(audit_log.AUDIT_LOG_PATH)
+    chunk_entries = [e for e in entries if e.get("detail", {}).get("action") == "store_chunk"]
+    fin_entries = [e for e in entries if e.get("detail", {}).get("action") == "finalize_cycle_audio"]
+
+    assert len(chunk_entries) == 1
+    assert chunk_entries[0]["path"] == f"/api/cycles/{cid}/chunks"
+    assert chunk_entries[0]["status"] == 201
+    assert chunk_entries[0]["detail"]["cycle_id"] == cid
+    assert chunk_entries[0]["detail"]["seq"] == 0
+
+    assert len(fin_entries) == 1
+    assert fin_entries[0]["path"] == f"/api/cycles/{cid}/finalize"
+    assert fin_entries[0]["status"] == 200
+    assert fin_entries[0]["detail"]["cycle_id"] == cid
+    assert fin_entries[0]["detail"]["total_chunks"] == 1
