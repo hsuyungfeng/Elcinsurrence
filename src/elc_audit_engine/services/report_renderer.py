@@ -23,6 +23,7 @@ from elc_audit_engine import evidence_vault
 from elc_audit_engine.rule_repository.icd_titles import get_icd_chinese_title
 from elc_audit_engine.sampling_preview import split_soap
 from elc_audit_engine.services.report_assets import SHARED_CSS, SHARED_SCRIPT, soap_modal_button
+from elc_audit_engine.services.rule_summary import summarize_payment_text
 
 Stage = Literal[2, 3]
 
@@ -668,17 +669,19 @@ def _case_body_html(view: ReviewCaseView) -> str:
         else ""
     )
 
-    # 5. 給付規定 payment_text 與條文全文
+    # 5. 給付規定 payment_text（精簡重點）與完整條文全文（折疊）
     payment_boxes = []
     fulltext_blocks = []
     for r in view.rules:
         if r.is_payment_text or r.label in ("給付規定（payment_text）", "payment_text"):
-            payment_boxes.append(
-                f'<div class="rule-payment">'
-                f'<div class="rule-payment-title">📜 給付規定（payment_text）</div>'
-                f'<div class="rule-payment-text">{escape(r.text)}</div>'
-                f'</div>'
-            )
+            summary = summarize_payment_text(r.text)
+            if summary:
+                payment_boxes.append(
+                    f'<div class="rule-payment">'
+                    f'<div class="rule-payment-title">📜 給付規定（payment_text）</div>'
+                    f'<div class="rule-payment-text">{escape(summary)}</div>'
+                    f'</div>'
+                )
         fulltext_blocks.append(
             f'<div class="rule-src"><div class="src">{escape(r.label)}</div>'
             f'<pre class="rule-text">{escape(r.text)}</pre></div>'

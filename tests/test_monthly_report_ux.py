@@ -95,3 +95,73 @@ def test_index_html_tab_order_and_sidebar_width():
     assert pos_m < pos_s < pos_a, "按鈕順序應為 tabMode3 (當月申報) -> tabMode1 (抽樣事前) -> tabMode2 (核減事後)"
     # 初始化預設進入 soap (Phase 31+) 或 monthly
     assert "switchWorkflowMode('soap')" in html or "switchWorkflowMode('monthly')" in html
+
+
+def test_payment_text_summary_is_concise_and_distinct_from_fulltext():
+    """給付規定（payment_text）預覽區必須簡潔，不可與下方完整給付規定條文相同。"""
+    import re
+    from elc_audit_engine.services.rule_summary import summarize_payment_text
+
+    full_62010c = (
+        "(手術)62010C - 臉部以外皮膚及皮下腫瘤摘除術－小於二公分 審查原則：(2025-01-01) 版 1.0\n\n"
+        "1. **申報條件**\n"
+        "   - 病患於面部以外部位，經臨床檢查、影像或病理確診為皮膚或皮下腫瘤，腫瘤直徑＜2 cm。\n"
+        "   - 必須為惡性腫瘤（或高度懷疑惡性）或因病理風險需完全切除。\n\n"
+        "2. **應檢附文件**\n"
+        "   - 病患手術同意書（含麻醉同意）。\n"
+        "   - 具體手術紀錄表（含腫瘤大小、部位、切除方式、邊緣深度）。\n"
+        "   - 病理報告（含腫瘤類型、大小、邊緣狀態、分級）。\n\n"
+        "3. **重複申報限制**\n"
+        "   - 同一病患於同一腫瘤部位，若已於 30 天內完成本項目，不能再次申報。\n\n"
+        "> **備註**：以上審查原則依據官方公告。"
+    )
+    summary = summarize_payment_text(full_62010c)
+    assert summary is not None
+    assert summary != full_62010c
+    assert len(summary) < 200
+    assert "**" not in summary
+    assert "申報條件" in summary and "應檢附文件" in summary
+
+    case = CaseAudit(
+        case_id="MON-62010c",
+        batch="MONTHLY-202307",
+        case_seq="27",
+        department="03",
+        doctor_code="D1",
+        visit_date="1120708",
+        primary_diagnosis="D234",
+        secondary_diagnoses=(),
+        total_points="17533",
+        findings=(
+            OrderFinding(
+                order_seq="1",
+                code="62010C",
+                category="2",
+                unit_price="1623",
+                points="4966",
+                flags=("points_over_350",),
+                rule_status=STATUS_RESTRICTION,
+                rule_name="臉部以外皮膚及皮下腫瘤摘除術",
+                source_texts=(("payment_text", full_62010c),),
+            ),
+        ),
+    )
+    batch = BatchAudit(
+        batch="MONTHLY-202307",
+        cases_total=1,
+        cases=(case,),
+        report={
+            "totals": {"cases_flagged": 1, "findings": 1, "rule_status": {STATUS_RESTRICTION: 1}},
+            "by_department": {"03": {"cases_flagged": 1, "findings": 1, "rule_status": {STATUS_RESTRICTION: 1}}},
+            "by_doctor": {"D1": {"cases_flagged": 1, "findings": 1, "rule_status": {STATUS_RESTRICTION: 1}}},
+        },
+    )
+    html = render_batch_report_html(batch)
+    m_pay = re.search(r'<div class="rule-payment-text">(.*?)</div>', html, re.S)
+    m_full = re.search(r'<pre class="rule-text">(.*?)</pre>', html, re.S)
+    assert m_pay and m_full
+    assert m_pay.group(1) != m_full.group(1)
+    assert len(m_pay.group(1)) < len(m_full.group(1)) // 2
+
+    # 單句極短文字不可在兩處重複顯示
+    assert summarize_payment_text("一般說明文字。") is None
