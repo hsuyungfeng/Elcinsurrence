@@ -254,8 +254,36 @@ def test_e2e_preroll_prefix_concatenation(phase31_app, phase31_client):
 # ======================================================================
 
 
-def test_e2e_boundary_seq_out_of_range(phase31_app, phase31_client):
-    """T2.4: 上傳超出 MAX_CHUNKS_PER_CYCLE 的 seq 遭拒絕 (413)。"""
+def test_e2e_boundary_seq_out_of_range_on_upload(phase31_app, phase31_client):
+    """T2.4a: finalize 宣告 total_chunks=2 後，上傳 seq=2（>= total_chunks）應回 422 sequence_out_of_range。"""
+    cid = _create_cycle_via_api(phase31_client)
+    chunks = [make_wav_chunk(seconds=0.5, seed=50 + i) for i in range(2)]
+    for seq, data in enumerate(chunks):
+        assert _upload_chunk_api(phase31_client, cid, seq, data).status_code == 201
+
+    fin = _finalize_api(phase31_client, cid, total_chunks=2, audio_sha256=pcm_sha256(chunks))
+    assert fin.status_code == 200, fin.get_json()
+
+    resp = _upload_chunk_api(phase31_client, cid, 2, make_wav_chunk(seconds=0.5, seed=52))
+    assert resp.status_code == 422
+    assert resp.get_json()["error"] == "sequence_out_of_range"
+
+
+def test_e2e_boundary_seq_out_of_range_on_finalize(phase31_app, phase31_client):
+    """T2.4b: 已上傳 seq 0..2，但 finalize 宣告 total_chunks=2，應回 422 且不產生 full.wav（不靜默丟棄 seq=2）。"""
+    cid = _create_cycle_via_api(phase31_client)
+    chunks = [make_wav_chunk(seconds=0.5, seed=60 + i) for i in range(3)]
+    for seq, data in enumerate(chunks):
+        assert _upload_chunk_api(phase31_client, cid, seq, data).status_code == 201
+
+    fin = _finalize_api(phase31_client, cid, total_chunks=2, audio_sha256=pcm_sha256(chunks[:2]))
+    assert fin.status_code == 422
+    assert fin.get_json()["error"] == "sequence_out_of_range"
+    assert not (cycle_dir(cid) / "full.wav").exists()
+
+
+def test_e2e_boundary_seq_over_cycle_limit(phase31_app, phase31_client):
+    """T2.4c（與 T2.4a/b 分開）: seq 超過系統上限 MAX_CHUNKS_PER_CYCLE 應回 413 cycle_limit_exceeded。"""
     cid = _create_cycle_via_api(phase31_client)
     chunk_data = make_wav_chunk(seconds=0.5, seed=40)
 
