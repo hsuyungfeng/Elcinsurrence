@@ -91,9 +91,9 @@ Whenever modifying or analyzing this codebase, you MUST adhere to the following 
   - **`reconciliation/`**: Automatic month-start `TOTFA.zip` reconciliation against daily clinic outpatient voice SOAP records (`soap_reconciler.py`), populating SOAP into `CaseStore` for Stages 2 & 3.
   - **`packagers/`**: NHI EMR batch packaging engine (`emr_batch_packager.py`) generating 11-code filenames, A/B/C/D 4-tier classification, A-tier HTML SOAP document (`StructuredSoapHtmlBuilder`: anchored sections; the former PDF builder produced blank pages and is no longer used, 2026-11-17), and 500MB ZIP chunking at 450MB threshold.
   - **`pipeline.py`**: Pipeline coordinators (`run_presubmission_check` and `run_case_pipeline`).
-  - **`asr/`**: Local offline dual-backend speech recognition (`sherpa_backend.py` as **default** `sherpa-onnx` SenseVoice int8 + OpenCC `s2twp` + optional `num_clusters=2` speaker diarization; `transcriber.py` unified dispatcher with `ELC_ASR_BACKEND=sherpa|whisper` and `faster-whisper` + PyAV 19 compatible decoder as fallback; shared `config/asr_hotwords.json` specialty hotwords; lazy-loaded optional extras `asr-sherpa` / `asr`; strict fail-closed `ASRUnavailableError` & PHI-safe logging).
+  - **`asr/`**: Local offline dual-backend speech recognition (`sherpa_backend.py` as **default** `sherpa-onnx` SenseVoice int8 + OpenCC `s2twp` + optional `num_clusters=2` speaker diarization, 66.2× realtime & 0% repetition on 8-WAV benchmark; `transcriber.py` unified dispatcher with `ELC_ASR_BACKEND=sherpa|whisper`, optional low-density auto-fallback `ELC_ASR_WHISPER_FALLBACK=1` with 8-gram repetition `<0.15` guard, and `faster-whisper` + PyAV 19 compatible decoder for heavy-noise/Taiwanese dialect recall; shared `config/asr_hotwords.json` specialty hotwords; lazy-loaded optional extras `asr-sherpa` / `asr`; strict fail-closed `ASRUnavailableError` & PHI-safe logging; full 8-WAV head-to-head metrics in `compare.md` §5).
   - **`comparator/`**: Three-way evidence judger (`judger.py`), reinforcement narratives (`narratives.py`), bilingual & clinical SOAP generation (`soap_advice.py` with `validate_soap_quality(..., profile="template"|"clinical")`, single targeted placeholder retry, empty `summary_zh` backfill, and two-step clinical `pending` bypass guard), and local ICD-10 semantic mismatch validator (`icd10_validator.py` — advisory warnings only, never silently rewrites codes).
-  - **`services/rule_summary.py`**: Deterministic verbatim summary extractor for `payment_text` previews so report cards stay concise and never duplicate `<details class="rule-fulltext">`.
+  - **`services/rule_summary.py` & Report Rule Display (Phase 38 user-confirmed UX)**: Stage 1 (`monthly_report_html.py`) and Stage 2/3 (`services/report_renderer.py`) directly expand full verbatim `payment_text` (no summary truncation), while collapsible `<details class="rule-fulltext">` (`📜 檢視完整給付規定條文`) is collapsed by default, displays ONLY official `article_full_text` with `article_location` provenance (never repeating `payment_text`), and is omitted when a code has no individual official article (e.g. `64140C`). `rule_summary.py` remains available as a standalone deterministic utility.
   - **`rule_repository/`**: SQLite rule store (`data/db/rules.sqlite3`, zero PHI, tracked in git: 5,752 payment / 11,472 drug / 8,302 official full-text `rule_mapping`), unified placeholder-to-SQL-`NULL` CSV loaders (`loaders/_csv_table.py`), deterministic zero-LLM official full-text builder (`mapping/build_fulltext_mapping.py` parsing `完整給付規定1140221.odt`, 21 official `.docx` files, and CSV `備註`), readonly quality & 8-category stale-code analyzer (`audit_csv.py`, CLI `--stale-vs-db`), atomic locked sync pipeline (`scripts/sync_latest_rules.py` auto-rebuilding `rule_mapping` with missing-dir preservation, `O_EXCL` `.lock`, sidecar `409` check, filename-timestamp backup rotation max 5, `REPLACE_CONFIRM_TOKEN`), docx tree indices, and legacy LLM mapping scripts.
   - **`docs/CLINIC_SERVER_OPS_QUICKCARD.md`**: One-page non-engineer clinic server operations quickcard (verified by `tests/test_ops_quickcard_doc.py`).
   - **`parsers/`**: Parsers for XML declarations (TOTFA), deduction notifications, and outpatient SOAP text.
@@ -183,3 +183,33 @@ The production server is a **systemd user service** (not a manual terminal proce
 - `deploy/install.sh` includes `elc-llama-server.service` plus `--check-asr-models` / `--check-llama-cache` health checks; clean Ubuntu Server VM end-to-end verification and Windows 12-item manual verification remain pending.
 - `logs/healthcheck.log` may show one `failed (1/3)` line at service start (startup race); harmless below the threshold.
 - Deployment files and public NHI rules DB (`data/db/rules.sqlite3`, zero PHI) are committed; `config/facility.json`, `data/db/cases.sqlite3` (PHI), `E4Btest.md`, and `Wavesample/` stay local-only (gitignored).
+
+---
+
+## 7. Next To Do & Prioritized Backlog (Post-Phase 38, 2026-11-24)
+
+Read `.planning/.continue-here.md` and `.planning/STATE.md` before starting any new phase. Current open work, ordered by clinic rollout priority:
+
+### P0 — On-Site / Real-Environment Rollout Verification (Highest Value)
+1. **Windows Workstation 12-Item Manual Verification (Phase 31–38 carryover)**:
+   - Execute `deploy/release-20261116/31-WINDOWS-MANUAL-VERIFY.md` item-by-item on a real Windows clinic PC against HIS (Vision / Yaosheng / Minger / Chihshi).
+2. **Windows Client Packaging Build**:
+   - Build `deploy/windows_agent/ElcAgent.spec` (with ASR excludes from Phase 34) and `soapvoice_client.spec` (D-32-26) on Windows, verify SHA-256 and zero-PHI handoff checklist (§5b).
+3. **Clean Ubuntu Server VM One-Click Install Verification**:
+   - Run `deploy/install.sh` end-to-end on a fresh Ubuntu Server VM, verify `elc-audit-engine.service`, `elc-llama-server.service`, `--check-asr-models`, `--check-llama-cache`, and enable `ufw` LAN-only firewall rules before clinic LAN exposure.
+
+### P1 — Local Engineering Hardening (Can Be Done Anytime on Dev Host)
+4. **Rules Backup Pinning & Sync Throttling (`sync_latest_rules.py`)**:
+   - Flagged during Phase 37 Tester audit: rapid repeated `POST /api/rules/sync` calls can rotate out an important baseline under `max_backups=5`. Add a protected pinned-backup directory (exempt from rotation) and/or short cooldown throttling, plus record sync `mode` (`upsert`/`replace`) in PHI-free `access.log` `detail`.
+5. **Unify Stage 1 & Stage 2/3 Rule-Block HTML Renderer Helper**:
+   - Flagged during Phase 38 Checker audit: `monthly_report_html.py` and `services/report_renderer.py` currently duplicate identical `_rule_fulltext_html` logic; extract a single shared helper in `services/report_assets.py` (or `services/rule_html.py`) to prevent future drift.
+6. **Clinic HIS Shared-Folder / Read-Only DB Connector (Non-Docker)**:
+   - Host has 20 GiB RAM (~4.9 GiB free with Gemma 4 E4B 128K loaded) and no Docker (do NOT deploy Appwrite). When clinic HIS DB schema/share details are confirmed, implement a lightweight read-only Linux `cifs ro` mount or direct Python read-only DB connector (`pyodbc`/`pymssql`/`psycopg`/`mdbtools`).
+7. **Legacy Binary `.doc` Official Rules Extraction (Optional)**:
+   - Phase 38 covers `完整給付規定1140221.odt` + all 21 `.docx` + `261119` `備註` (8,302 mapped codes). If deeper coverage of the 11 legacy Word 97 `.doc` files under `officialdocument/審查注意事項/` (e.g., `2-2-1檢查`, `2-2-3注射`, `3第三部牙醫`, `5居家照護`) is needed, convert once via LibreOffice `soffice --headless --convert-to docx` and feed into `build_fulltext_mapping.py`.
+8. **Rules DB Git Size Hygiene (Optional)**:
+   - `data/db/rules.sqlite3` is currently ~54.5 MB (GitHub recommends ≤50 MB; hard limit 100 MB). Consider Git LFS or generating it on fresh hosts via `sync_latest_rules` (1.27 s cold build from tracked CSVs + `officialdocument/`).
+
+### P2 — Externally Blocked
+9. **Phase 10 — NHI VPN / `NHI_EIIAPI` Real Machine Integration**:
+   - Blocked on external clinic NHI VPN access, SAM card reader, and `doctor-toolbox` integration permissions.
