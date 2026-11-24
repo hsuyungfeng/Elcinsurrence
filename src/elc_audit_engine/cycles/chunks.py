@@ -25,6 +25,8 @@ from elc_audit_engine.cycles.store import cycle_dir
 logger = logging.getLogger(__name__)
 
 MAX_CHUNK_SIZE_BYTES = 4 * 1024 * 1024  # 4 MiB
+MAX_CHUNKS_PER_CYCLE = int(os.environ.get("ELC_MAX_CHUNKS_PER_CYCLE", "120"))  # 預設 120 段 (約 2 小時)
+MAX_CYCLE_PCM_BYTES = int(os.environ.get("ELC_MAX_CYCLE_PCM_BYTES", str(250 * 1024 * 1024)))  # 預設 250 MiB
 
 
 class ChunkConflictError(Exception):
@@ -41,6 +43,14 @@ class ChunkFormatError(Exception):
 
 class ChunkStateError(Exception):
     """循環狀態不允許上傳分段或 finalize。"""
+
+
+class ChunkSequenceOutOfRangeError(Exception):
+    """分段序號超出宣告之 total_chunks 範圍。"""
+
+
+class CycleLimitExceededError(Exception):
+    """循環分段數或總音訊大小超過上限。"""
 
 
 class MissingChunksError(Exception):
@@ -69,14 +79,24 @@ def validate_wav_chunk(data: bytes) -> None:
         raise ChunkSizeExceededError(f"分段大小 {len(data)} 超過上限 4 MiB")
 
     try:
-        with wave.open(io.BytesIO(data), "rb") as wf:
+        bio = io.BytesIO(data)
+        with wave.open(bio, "rb") as wf:
             nchannels = wf.getnchannels()
             sampwidth = wf.getsampwidth()
             framerate = wf.getframerate()
             comptype = wf.getcomptype()
+            nframes = wf.getnframes()
             if nchannels != 1 or sampwidth != 2 or framerate != 16000 or comptype != "NONE":
                 raise ChunkFormatError(
                     f"不支援的 WAV 格式 (channels={nchannels}, width={sampwidth}, rate={framerate}, comp={comptype})"
+                )
+
+            # 檢查宣告之 data 大小與實際讀取到的位元組數一致 (避免截斷損壞分段)
+            declared_pcm_len = nframes * sampwidth * nchannels
+            actual_pcm_len = len(wf.readframes(nframes))
+            if declared_pcm_len != actual_pcm_len or (actual_pcm_len % 2 != 0):
+                raise ChunkFormatError(
+                    f"WAV 訊框資料截斷或不完整：宣告={declared_pcm_len}, 實際讀取={actual_pcm_len}"
                 )
     except wave.Error as exc:
         raise ChunkFormatError(f"無效的 WAV 檔案：{exc}") from exc
@@ -126,7 +146,7 @@ def store_chunk(
                 cur = conn.cursor()
 
                 # 4. 驗證循環存在與狀態
-                cur.execute("SELECT state FROM recording_cycles WHERE cycle_id = ?", (cycle_id,))
+                cur.execute("SELECT state, total_chunks FROM recording_cycles WHERE cycle_id = ?", (cycle_id,))
                 c_row = cur.fetchone()
                 if not c_row:
                     raise LookupError(f"Cycle not found: {cycle_id}")
@@ -135,6 +155,16 @@ def store_chunk(
                 if cycle_state not in ("RECORDING", "AWAITING_DRAFT"):
                     raise ChunkStateError(
                         f"循環狀態為 {cycle_state}，無法接收分段上傳"
+                    )
+
+                if c_row["total_chunks"] is not None and seq >= c_row["total_chunks"]:
+                    raise ChunkSequenceOutOfRangeError(
+                        f"分段序號 {seq} 超出循環宣告之 total_chunks={c_row['total_chunks']}"
+                    )
+
+                if seq >= MAX_CHUNKS_PER_CYCLE:
+                    raise CycleLimitExceededError(
+                        f"分段序號 {seq} 超過系統上限 {MAX_CHUNKS_PER_CYCLE}"
                     )
 
                 # 5. 去重檢查
@@ -205,6 +235,8 @@ def finalize_cycle_audio(
     """
     if total_chunks <= 0:
         raise ValueError("total_chunks 必須大於 0")
+    if total_chunks > MAX_CHUNKS_PER_CYCLE:
+        raise CycleLimitExceededError(f"total_chunks {total_chunks} 超過系統上限 {MAX_CHUNKS_PER_CYCLE}")
 
     conn = store._connect()
     try:
@@ -248,13 +280,26 @@ def finalize_cycle_audio(
             if missing:
                 raise MissingChunksError(missing=missing)
 
+            out_of_range = sorted(list(received_seqs - expected_seqs))
+            if out_of_range:
+                raise ChunkSequenceOutOfRangeError(
+                    f"存在超出宣告 total_chunks={total_chunks} 範圍之分段 seq: {out_of_range}"
+                )
+
             # 讀取每段 PCM frames 串接
             seq_to_row = {r["seq"]: r for r in rows}
             raw_pcm = bytearray()
             for s in range(total_chunks):
                 chunk_file = Path(seq_to_row[s]["path"])
                 with wave.open(str(chunk_file), "rb") as wf:
-                    raw_pcm.extend(wf.readframes(wf.getnframes()))
+                    pcm_part = wf.readframes(wf.getnframes())
+                    if len(pcm_part) % 2 != 0:
+                        raise ChunkFormatError(f"分段 seq={s} PCM 位元組數為奇數 ({len(pcm_part)})")
+                    raw_pcm.extend(pcm_part)
+                if len(raw_pcm) > MAX_CYCLE_PCM_BYTES:
+                    raise CycleLimitExceededError(
+                        f"串接 PCM 大小超過上限 {MAX_CYCLE_PCM_BYTES} 位元組"
+                    )
 
             computed_sha = hashlib.sha256(raw_pcm).hexdigest()
             if computed_sha.lower() != audio_sha256.lower():

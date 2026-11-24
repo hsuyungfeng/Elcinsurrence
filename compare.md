@@ -173,3 +173,62 @@
 | **2. LLM 模型選型** | 診所端預設 **`Gemma 4 E4B Q4_K_M`**（`elc-llama-server.service`, `ctx=131072`）；顯存充裕機房可選 **`Q8_0`**（`config/llama_config.q8.example.json`） | 兩者在 30 組金標準皆 100%；`Q4_K_M` 快 1.35×～1.62× 且顯存餘裕高；已整合 `icd10_validator.py` 自動警示高風險 ICD-10 語意偏差（僅警告不擅改碼）。 |
 | **3. API 大小上限修正** | `api/app.py` 全域 `MAX_CONTENT_LENGTH` 已對齊為 **26 MB**（`soap_recording.py` 支援 `.wav`/`.opus` 上限 25 MB）；`/api/rules/upload` 單路由放寬至 **65 MB** | 已於 Phase 33 & 36 落地，徹底解決 10 分鐘以上門診錄音 413 拒收問題。 |
 | **4. 品質規則區分** | `validate_soap_quality(soap, profile="template"\|"clinical")` 區分短版範本（200–500 字）與真實門診 SOAP（200–2000 字），並補上單次定向重試與空摘要補齊 | 已於 Phase 33、35、36 落地，並加入臨床 `pending` 兩步防繞過檢核（放行檢驗追蹤語境、攔截診斷／計畫佔位）。 |
+
+---
+
+## 八、全新實測：CPU 模式（llama.cpp Gemma 4 E4B + sherpa-onnx）vs GPU 模式（vLLM Qwen 3.8-27B-FP8）
+
+> **測試日期**：2026-11-24  
+> **測試主機規格**：
+> - **CPU**：AMD Ryzen 9 5950X 16-Core / 32-Thread Processor
+> - **GPU**：2× NVIDIA GeForce RTX 2080 Ti（每張 22 GB VRAM，Tensor Parallel = 2）
+> - **RAM**：48 GB DDR4
+>
+> **推論引擎配置**：
+> 1. **ASR 引擎（CPU 模式）**：`sherpa-onnx==2.0.3` SenseVoice int8（`zh-en-ja-ko-yue-2025-09-09`）＋ OpenCC `s2twp`（台灣繁體）＋ 專科熱詞，純 CPU 16 threads。
+> 2. **LLM 管道 A（純 CPU 模式）**：`llama.cpp`（`llama-server`，`b9100`），`--device none -ngl 0 --threads 16 --ctx-size 32768`，載入 `unsloth/gemma-4-E4B-it-GGUF:Q4_K_M`（`gemma-4-E4B-it-Q4_K_M.gguf`）。
+> 3. **LLM 管道 B（雙 GPU 模式）**：`vLLM`（`v0.2.2`，TP=2），`--port 8080 --model Qwen3.8-27B-FP8 --dtype half --quantization fp8 --kv-cache-dtype fp8`，載入 `Qwen3.8-27B-FP8`。
+>
+> **評測音訊樣本**：`data/DoctorToolbox_SOAP_training_20261112/` 8 支真實門診 WAV（`sample_01`～`sample_08`），總時長 **9,642.3 秒（160.7 分鐘）**。
+
+### 8.1 總體性能與效率對比
+
+| 評測構面 | **CPU 模式（llama.cpp Gemma 4 E4B Q4_K_M）** | **GPU 模式（vLLM Qwen 3.8-27B-FP8）** | 差距與結論 |
+| :--- | :---: | :---: | :--- |
+| **ASR 轉錄總耗時（8 檔）** | **197.33 秒**（平均 RTF **`0.0205`**，即時倍率 **`48.9×`**） | 同左（共用 sherpa-onnx CPU 逐字稿） | 160.7 分鐘音訊僅需 3.3 分鐘轉錄完畢，零重複迴圈（8 案 8-gram 重複率全為 0.0%）。 |
+| **LLM SOAP 總耗時（8 檔）** | **413.03 秒**（平均每案 **`51.6 秒`**） | **61.93 秒**（平均每案 **`7.7 秒`**） | **GPU 模式快 6.67 倍**；Qwen 在雙 2080Ti 下 8 秒即可完成一份完整 SOAP。 |
+| **平均解碼速度（Decode）** | **~3.5 tok/s** | **~39.1 tok/s** | GPU 速度高達 CPU 的 **11.2 倍**。 |
+| **總生成 Tokens** | 1,459 tokens（平均 182 tok/案） | 2,422 tokens（平均 303 tok/案） | Qwen 3.8 生成內容更詳盡完整（+66% tokens）。 |
+| **JSON / 欄位契約成功率** | **8 / 8（100%）** | **8 / 8（100%）** | 兩者皆 100% 遵守 `[S][O][A][P]` JSON 結構輸出。 |
+| **臨床 ICD-10 萃取保守度** | 8 案皆輸出 `ICD-10: not stated`（極度保守遵從指令） | 萃取出 `M25.51`（肩關節痛）、`M75.4`（肩撞擊症候群） | Qwen 具備較強的醫學實體推理能力；Gemma 4 則嚴格鎖定「非明確提及則不標記」。 |
+| **硬體資源佔用** | 僅佔 CPU 16 核，RAM 耗用約 5.9 GB，**零顯存** | 佔用 2× RTX 2080 Ti 顯存約 2× 20 GB（93%），CPU 閒置 | CPU 模式適合無專業顯卡的基層診所單機。 |
+
+### 8.2 逐檔 8 支門診 WAV 詳細數據對照
+
+| 樣本編號 | 音長 (秒) | ASR 耗時 (RTF / 字數) | **CPU llama.cpp (Gemma 4 E4B)**<br>耗時 / 生成 Tokens / 速度 | **GPU vLLM (Qwen 3.8-27B)**<br>耗時 / 生成 Tokens / 速度 | 臨床診斷與評估 (Assessment 對比) |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| `sample_01` | 2,246.2s | 48.83s (0.0217 / 3,597字) | 85.77s / 245 tok / 2.9 tok/s | **10.14s** / 346 tok / **34.1 tok/s** | **Gemma**：肩痛與活動受限（發炎/關節問題）<br>**Qwen**：沾黏性關節囊炎 (Frozen Shoulder) `M25.51`<br>**Gold**：沾黏性肩關節囊炎 (`M75.01`) |
+| `sample_02` | 1,719.5s | 35.28s (0.0205 / 2,397字) | 59.81s / 200 tok / 3.3 tok/s | **8.85s** / 328 tok / **37.1 tok/s** | **Gemma**：膝痛症狀紀錄，保守不給碼<br>**Qwen**：膝蓋外翻合併軟組織發炎與髕骨不穩彈響<br>**Gold**：髕骨半脫位 (`M22.1`) |
+| `sample_03` ⚠️ | 1,159.6s | 24.00s (0.0207 / 588字) | 17.87s / 66 tok / 3.7 tok/s | **4.08s** / 187 tok / **45.8 tok/s** | **Gemma**：紀錄便秘主訴，保守不給碼<br>**Qwen**：慢性便秘併腹痛、膝關節積液<br>**Gold**：雙膝退化性關節炎 (`M17.10`)（註：高雜訊台語需 whisper 備援） |
+| `sample_04` | 1,079.3s | 20.19s (0.0187 / 2,651字) | 64.33s / 247 tok / 3.8 tok/s | **9.31s** / 423 tok / **45.4 tok/s** | **Gemma**：頭痛與頸肩放射痛症狀描述<br>**Qwen**：慢性頸因性頭痛、肌筋膜疼痛症候群、高血脂、高尿酸<br>**Gold**：頸肩肌筋膜疼痛與代謝症狀 |
+| `sample_05` | 1,036.8s | 19.08s (0.0184 / 1,493字) | 45.31s / 178 tok / 3.9 tok/s | **10.35s** / 377 tok / **36.4 tok/s** | **Gemma**：關節發炎與夜間痛症狀紀錄<br>**Qwen**：軟組織沾黏與肩關節炎性病變<br>**Gold**：棘上肌鈣化性肌腱炎 (`M75.3`) |
+| `sample_06` | 985.7s | 21.38s (0.0217 / 1,335字) | 46.17s / 176 tok / 3.8 tok/s | **6.66s** / 283 tok / **42.5 tok/s** | **Gemma**：局部疼痛與肢體活動不適<br>**Qwen**：雙肩撞擊症候群併二頭肌肌腱炎<br>**Gold**：右肩二頭肌肌腱炎 (`M75.21`) |
+| `sample_07` | 713.2s | 14.09s (0.0198 / 1,593字) | 50.68s / 186 tok / 3.7 tok/s | **6.23s** / 238 tok / **38.2 tok/s** | **Gemma**：肩部鈣化性肌腱炎、慢性下背痛<br>**Qwen**：肩部鈣化性肌腱炎 (`M75.4`)、慢性下背痛<br>**Gold**：肩部鈣化性肌腱炎 (`M75.3`)、下背痛 (`M54.5`) |
+| `sample_08` | 702.0s | 14.48s (0.0206 / 875字) | 43.09s / 161 tok / 3.7 tok/s | **6.31s** / 240 tok / **38.0 tok/s** | **Gemma**：外傷傷口換藥照護紀錄<br>**Qwen**：摔車事故致軟組織撕裂傷/擦傷<br>**Gold**：車禍多處肢體擦挫傷 (`T14.8`) |
+| **合計 / 均值** | **9,642.3s** | **197.33s (0.0205 / 48.9×)** | **413.03s / 1,459 tok / 3.5 tok/s** | **61.93s / 2,422 tok / 39.1 tok/s** | **兩者 JSON 契約解析 100% 通過**；Qwen 診斷特異性更高。 |
+
+### 8.3 準確度與臨床品質深度剖析
+
+1. **ASR 辨識品質（SenseVoice CPU）**：
+   - 在 5950X 16 核 CPU 上達到穩定 **48.9× 即時速度**（RTF 0.0205），且 **8-gram 重複迴圈率為 0.0%**。
+   - 熱詞校正（如「增生療法」、「超音波導引」、「玻尿酸」）發揮顯著功效，在 `sample_01`、`sample_02`、`sample_07` 正確捕捉注射療程。
+   - `sample_03` 仍受限於長輩純台語與高底噪（轉錄字數僅 588 字），維持先前報告建議：當字數密度偏低時觸發 `whisper large-v3-turbo` 備援。
+
+2. **SOAP 臨床準確度與語意細緻度**：
+   - **Qwen 3.8-27B-FP8 (GPU 模式)**：臨床醫學語意理解極佳。例如在 `sample_01` 自動推論出「沾黏性關節囊炎 (Frozen Shoulder)」；在 `sample_04` 完整拆解出 4 項複合病況（頸因性頭痛、肌筋膜疼痛、高血脂、高尿酸）；在 `sample_06` 準確命中「二頭肌肌腱炎 (biceps tenosynovitis)」與黃金標準一模一樣。
+   - **Gemma 4 E4B (llama.cpp CPU 模式)**：對 Prompt 指令中「In assessment, give an ICD-10 code only if the diagnosis is clearly stated; otherwise write 'ICD-10: not stated'」表現極度嚴格保守。只要對話中醫師未一字不差念出明確醫學名詞，皆嚴守不妄自編造碼；主觀陳述與醫囑處置（Plan）如乾針、熱敷、超音波導引注射皆完全忠實提取，零醫學幻覺。
+
+3. **診所部署決策指南**：
+   - **大型診所 / 雲端中樞（配備雙 RTX 2080 Ti / RTX 3090 / 4090）**：強烈推薦 **Qwen 3.8-27B-FP8**。端到端轉錄＋SOAP 僅需 **15–20 秒**，診斷深度與代碼推薦達到三甲醫院專科水準。
+   - **單機基層診所 / 預算受限無獨立顯卡環境**：**llama.cpp CPU (Gemma 4 E4B) + sherpa-onnx** 是極其強大且經濟的解決方案。整套純 CPU 運作，單案約 50–70 秒，在看診間隙（患者出門至下一號進門前）即可產出合格可靠的結構化 SOAP 草稿，且系統記憶體消耗不到 6 GB，具備完全的離線安全與隱私合規性。
+

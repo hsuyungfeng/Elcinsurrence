@@ -214,7 +214,9 @@ SCHEMA_RECORDING_CYCLES = (
     "created_by TEXT, "
     "created_at TEXT NOT NULL, "
     "updated_at TEXT NOT NULL, "
-    "archived_at TEXT"
+    "archived_at TEXT, "
+    "trigger_mode TEXT NOT NULL DEFAULT 'manual', "
+    "preroll_sec REAL NOT NULL DEFAULT 0.0"
     ")"
 )
 
@@ -272,7 +274,8 @@ SCHEMA_CLIENT_PRESENCE = (
     "app_version TEXT, "
     "client_subnet TEXT, "
     "caller_id TEXT, "
-    "last_seen_at TEXT NOT NULL"
+    "last_seen_at TEXT NOT NULL, "
+    "vad_listening INTEGER NOT NULL DEFAULT 0"
     ")"
 )
 
@@ -331,6 +334,19 @@ def init_schema(db_path: str) -> None:
             conn.execute("ALTER TABLE soap_drafts ADD COLUMN his_job_id TEXT")
         if "his_machine_id" not in existing_cols:
             conn.execute("ALTER TABLE soap_drafts ADD COLUMN his_machine_id TEXT")
+
+        # 冪等加欄：Phase 39 trigger_mode, preroll_sec, vad_listening
+        cursor.execute("PRAGMA table_info(recording_cycles)")
+        cycle_cols = {row[1] for row in cursor.fetchall()}
+        if "trigger_mode" not in cycle_cols:
+            conn.execute("ALTER TABLE recording_cycles ADD COLUMN trigger_mode TEXT NOT NULL DEFAULT 'manual'")
+        if "preroll_sec" not in cycle_cols:
+            conn.execute("ALTER TABLE recording_cycles ADD COLUMN preroll_sec REAL NOT NULL DEFAULT 0.0")
+
+        cursor.execute("PRAGMA table_info(client_presence)")
+        presence_cols = {row[1] for row in cursor.fetchall()}
+        if "vad_listening" not in presence_cols:
+            conn.execute("ALTER TABLE client_presence ADD COLUMN vad_listening INTEGER NOT NULL DEFAULT 0")
 
         conn.commit()
     finally:

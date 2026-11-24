@@ -57,6 +57,17 @@ def create_new_cycle():
     command_id = str(data.get("command_id") or "")
     machine_id = str(data.get("machine_id") or "")
     room_id = data.get("room_id")
+    trigger_mode = data.get("trigger_mode", "manual")
+    preroll_sec = data.get("preroll_sec", 0.0)
+
+    if trigger_mode not in ("manual", "vad_auto"):
+        raise ApiError(f"不合法的 trigger_mode：{trigger_mode!r}", status=422)
+    try:
+        preroll_sec = float(preroll_sec)
+        if preroll_sec < 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        raise ApiError(f"preroll_sec 必須為非負數：{preroll_sec!r}", status=422)
 
     if not _COMMAND_ID_RE.match(command_id):
         raise ApiError(f"不合法的 command_id 格式：{command_id!r}", status=422)
@@ -75,6 +86,8 @@ def create_new_cycle():
             machine_id=machine_id,
             room_id=room_id,
             actor=caller_id(),
+            trigger_mode=trigger_mode,
+            preroll_sec=preroll_sec,
         )
     except ActiveCycleExistsError as exc:
         return jsonify({
@@ -96,6 +109,8 @@ def create_new_cycle():
                 "machine_id": machine_id,
                 "command_id": command_id,
                 "created": created,
+                "trigger_mode": trigger_mode,
+                "preroll_sec": preroll_sec,
             },
         )
     except Exception as exc:

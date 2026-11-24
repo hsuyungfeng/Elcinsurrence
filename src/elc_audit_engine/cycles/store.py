@@ -95,6 +95,8 @@ def cycle_view(store, row: sqlite3.Row) -> Dict[str, Any]:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "archived_at": row["archived_at"],
+        "trigger_mode": row["trigger_mode"] if "trigger_mode" in row.keys() else "manual",
+        "preroll_sec": float(row["preroll_sec"]) if "preroll_sec" in row.keys() and row["preroll_sec"] is not None else 0.0,
     }
 
 
@@ -105,12 +107,19 @@ def create_cycle(
     machine_id: str,
     room_id: Optional[str] = None,
     actor: Optional[str] = None,
+    trigger_mode: str = "manual",
+    preroll_sec: float = 0.0,
 ) -> Tuple[Dict[str, Any], bool]:
     """建立新循環（以 command_id 冪等）。
 
     回傳：(cycle_dict, created_bool)。
     若同一 machine_id 已有未終結循環且 command_id 不同，拋 ActiveCycleExistsError。
     """
+    if trigger_mode not in ("manual", "vad_auto"):
+        raise ValueError(f"不合法的 trigger_mode: {trigger_mode!r}")
+    if preroll_sec < 0:
+        raise ValueError(f"preroll_sec 必須為非負數: {preroll_sec}")
+
     now = _now_iso()
     conn = store._connect()
     try:
@@ -140,8 +149,8 @@ def create_cycle(
                 """
                 INSERT INTO recording_cycles (
                     cycle_id, machine_id, room_id, state, command_id,
-                    created_by, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    created_by, created_at, updated_at, trigger_mode, preroll_sec
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     cycle_id,
@@ -152,6 +161,8 @@ def create_cycle(
                     actor,
                     now,
                     now,
+                    trigger_mode,
+                    preroll_sec,
                 ),
             )
             cur.execute(

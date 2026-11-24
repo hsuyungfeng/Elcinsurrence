@@ -123,6 +123,7 @@ def upsert_presence(
     app_version: Optional[str] = None,
     client_ip: Optional[str] = None,
     caller_id: Optional[str] = None,
+    vad_listening: bool = False,
 ) -> bool:
     """寫入或更新工作站 presence 紀錄。
 
@@ -143,8 +144,9 @@ def upsert_presence(
                 """
                 INSERT INTO client_presence (
                     machine_id, machine_name, room_id, bar_state, soapvoice_state,
-                    chunks_pending, app_version, client_subnet, caller_id, last_seen_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    chunks_pending, app_version, client_subnet, caller_id, last_seen_at,
+                    vad_listening
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(machine_id) DO UPDATE SET
                     machine_name = excluded.machine_name,
                     room_id = excluded.room_id,
@@ -154,7 +156,8 @@ def upsert_presence(
                     app_version = excluded.app_version,
                     client_subnet = excluded.client_subnet,
                     caller_id = excluded.caller_id,
-                    last_seen_at = excluded.last_seen_at
+                    last_seen_at = excluded.last_seen_at,
+                    vad_listening = excluded.vad_listening
                 """,
                 (
                     machine_id,
@@ -167,6 +170,7 @@ def upsert_presence(
                     client_subnet,
                     caller_id,
                     now_iso,
+                    1 if vad_listening else 0,
                 ),
             )
             return first_seen

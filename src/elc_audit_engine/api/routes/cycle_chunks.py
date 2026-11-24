@@ -25,8 +25,10 @@ from elc_audit_engine.cycles.chunks import (
     ChunkConflictError,
     ChunkFormatError,
     ChunkHashMismatchError,
+    ChunkSequenceOutOfRangeError,
     ChunkSizeExceededError,
     ChunkStateError,
+    CycleLimitExceededError,
     MissingChunksError,
     finalize_cycle_audio,
     store_chunk,
@@ -93,6 +95,10 @@ def upload_chunk(cycle_id: str):
         return jsonify({"error": "chunk_conflict", "message": str(exc)}), 409
     except ChunkStateError as exc:
         return jsonify({"error": "invalid_cycle_state", "message": str(exc)}), 409
+    except ChunkSequenceOutOfRangeError as exc:
+        return jsonify({"error": "sequence_out_of_range", "message": str(exc)}), 422
+    except CycleLimitExceededError as exc:
+        return jsonify({"error": "cycle_limit_exceeded", "message": str(exc)}), 413
     except ChunkHashMismatchError as exc:
         return jsonify({"error": "hash_mismatch", "message": str(exc)}), 422
     except ChunkFormatError as exc:
@@ -166,6 +172,12 @@ def finalize_audio(cycle_id: str):
             "missing": exc.missing,
             "message": str(exc),
         }), 409
+    except ChunkSequenceOutOfRangeError as exc:
+        return jsonify({"error": "sequence_out_of_range", "message": str(exc)}), 422
+    except CycleLimitExceededError as exc:
+        return jsonify({"error": "cycle_limit_exceeded", "message": str(exc)}), 413
+    except ChunkFormatError as exc:
+        return jsonify({"error": "invalid_wav_format", "message": str(exc)}), 422
     except AudioHashMismatchError as exc:
         return jsonify({"error": "audio_hash_mismatch", "message": str(exc)}), 422
     except ChunkStateError as exc:

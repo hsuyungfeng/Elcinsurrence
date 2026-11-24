@@ -63,8 +63,16 @@ def client_heartbeat():
 
     chunks_pending = body.get("chunks_pending")
     if chunks_pending is not None:
-        if not isinstance(chunks_pending, int) or chunks_pending < 0:
+        if not isinstance(chunks_pending, int) or isinstance(chunks_pending, bool) or chunks_pending < 0:
             return jsonify({"status": "error", "message": "chunks_pending 需為非負整數"}), 422
+
+    raw_vad = body.get("vad_listening")
+    if raw_vad is not None:
+        if not isinstance(raw_vad, bool):
+            return jsonify({"status": "error", "message": "vad_listening 需為布林值"}), 422
+        vad_listening = raw_vad
+    else:
+        vad_listening = False
 
     store = case_store()
     caller_id = getattr(g, "caller_id", None)
@@ -81,6 +89,7 @@ def client_heartbeat():
         app_version=app_version,
         client_ip=client_ip,
         caller_id=caller_id,
+        vad_listening=vad_listening,
     )
 
     if first_seen:
