@@ -538,18 +538,39 @@ def _section_lab(view: ReviewCaseView) -> str:
 
 
 def _section_rule(view: ReviewCaseView) -> str:
-    """給付規定條文：預設收合，按下才展開。"""
+    """給付規定：payment_text 完整原文自動展開（不收合）；其餘官方條文才放入預設收合的折疊區。
+
+    與 `_case_body_html` 採相同規則，確保折疊區不重複 payment_text（Phase 38 需求）。
+    """
     if not view.rules:
         return ""
-    blocks = "".join(
-        f'<div class="rule-block"><div class="label">{escape(block.label)}</div>'
-        f"<pre>{escape(block.text)}</pre></div>"
-        for block in view.rules
-    )
-    return (
+    payment_boxes = []
+    other_blocks = []
+    for block in view.rules:
+        clean = (block.text or "").strip()
+        if not clean:
+            continue
+        if block.is_payment_text or block.label in ("給付規定（payment_text）", "payment_text"):
+            payment_boxes.append(
+                f'<div class="rule-payment">'
+                f'<div class="rule-payment-title">📜 給付規定（payment_text）</div>'
+                f'<div class="rule-payment-text">{escape(clean)}</div>'
+                f'</div>'
+            )
+            continue
+        other_blocks.append(
+            f'<div class="rule-block"><div class="label">{escape(block.label)}</div>'
+            f"<pre>{escape(block.text)}</pre></div>"
+        )
+    fold = (
         '<details class="fold"><summary>📜 給付規定條文（點擊展開）</summary>'
-        f'<div class="fold-body">{blocks}</div></details>'
+        f'<div class="fold-body">{"".join(other_blocks)}</div></details>'
+        if other_blocks
+        else ""
     )
+    if not payment_boxes and not fold:
+        return ""
+    return f'<div class="rule-blocks">{"".join(payment_boxes)}{fold}</div>'
 
 
 def _section_cloud(view: ReviewCaseView) -> str:

@@ -1,5 +1,5 @@
 """Phase 38：零 LLM 確定性官方完整給付規定條文建置（build_fulltext_mapping）、
-sync_latest_rules 自動連動、防洗空策略與全文展開區（不經 summarize_payment_text 截斷）測試。
+sync_latest_rules 自動連動、防洗空策略與全文展開區（payment_text 完整展開、不截斷）測試。
 
 所有測試均於 tmp_path 合成 ODT/DOCX/CSV/SQLite 執行，絕不讀寫正式 data/db/rules.sqlite3。
 """
@@ -35,7 +35,6 @@ from elc_audit_engine.services.report_renderer import (
     RuleBlock,
     render_aggregated_review_html,
 )
-from elc_audit_engine.services.rule_summary import summarize_payment_text
 
 
 def _make_synthetic_odt(path: Path) -> Path:
@@ -252,9 +251,6 @@ def test_fulltext_rendering_expands_full_payment_text_and_excludes_it_from_colla
         "痣切除於病歷中未見惡性症候記載者，不予支付62010C及相關病理費用（但先天性黑色素細胞痣不在此限），"
         "但申報如不符合臨床常態分佈者應加強審查。"
     )
-    # 確認即使 summarize_payment_text 會截斷，報表仍須完整直接展開原文
-    assert summarize_payment_text(long_62010c_payment) is not None
-
     long_official_3000 = "【官方原文】" + ("第一條完整健保給付規定條文內容不可截斷。" * 160)
     assert len(long_official_3000) > 3000
 

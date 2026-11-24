@@ -97,10 +97,9 @@ def test_index_html_tab_order_and_sidebar_width():
     assert "switchWorkflowMode('soap')" in html or "switchWorkflowMode('monthly')" in html
 
 
-def test_payment_text_summary_is_concise_and_distinct_from_fulltext():
-    """驗證 summarize_payment_text 工具行為，以及報表直接展開完整 payment_text、折疊區僅含官方條文全文（不含 payment_text）。"""
+def test_payment_text_renders_fully_and_fulltext_excludes_it():
+    """驗證報表直接完整展開 payment_text（不截斷），折疊區僅含官方條文全文（不含 payment_text）。"""
     import re
-    from elc_audit_engine.services.rule_summary import summarize_payment_text
 
     full_62010c = (
         "(手術)62010C - 臉部以外皮膚及皮下腫瘤摘除術－小於二公分 審查原則：(2025-01-01) 版 1.0\n\n"
@@ -115,13 +114,6 @@ def test_payment_text_summary_is_concise_and_distinct_from_fulltext():
         "   - 同一病患於同一腫瘤部位，若已於 30 天內完成本項目，不能再次申報。\n\n"
         "> **備註**：以上審查原則依據官方公告。"
     )
-    summary = summarize_payment_text(full_62010c)
-    assert summary is not None
-    assert summary != full_62010c
-    assert len(summary) < 200
-    assert "**" not in summary
-    assert "申報條件" in summary and "應檢附文件" in summary
-
     official_article = "【西醫基層醫療費用審查注意事項-外科.docx > (十三)】\n脂肪瘤如在皮下以62010C申報。"
     case = CaseAudit(
         case_id="MON-62010c",
@@ -169,6 +161,3 @@ def test_payment_text_summary_is_concise_and_distinct_from_fulltext():
     assert "同一病患於同一腫瘤部位" in m_pay.group(1)
     assert "西醫基層醫療費用審查注意事項-外科.docx" in m_full[0]
     assert "同一病患於同一腫瘤部位" not in m_full[0]
-
-    # 單句極短文字 summarize_payment_text 回 None
-    assert summarize_payment_text("一般說明文字。") is None

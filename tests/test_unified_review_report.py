@@ -185,7 +185,9 @@ def test_rules_and_cloud_are_collapsed_by_default():
         cloud_text="外院紀錄",
     )
     html = report.render_unified_review_html(view)
-    assert '<details class="fold"><summary>📜 給付規定條文' in html
+    # payment_text 不收合（自動展開），只有雲端病歷維持折疊
+    assert '<div class="rule-payment-text">原文</div>' in html
+    assert '<details class="fold"><summary>📜 給付規定條文' not in html
     assert '<details class="fold"><summary>☁️ 健保跨院雲端病歷' in html
     assert "<details open" not in html
     assert "<details class=\"fold\" open" not in html
@@ -262,3 +264,64 @@ def test_exported_review_report_stays_self_contained():
     html = report.render_unified_review_html(view)  # 預設＝匯出檔，內嵌資源
     assert "<style>" in html
     assert "/static/" not in html
+
+
+# ── payment_text 不得重複進入折疊區（Phase 38 需求）─────────────────
+
+_PAY_TEXT = "脂肪瘤如在皮下，以本項目申報。\n\n痣切除於病歷未見惡性症候者，不予支付。"
+_ART_TEXT = "【官方條文】脂肪瘤如在皮下以62010C申報。"
+
+
+def _fold_block(html: str) -> str:
+    """取出第一個折疊區（legacy `fold` 或月審 `rule-fulltext`）的完整 HTML。"""
+    import re
+
+    m = re.search(r'<details class="(?:fold|rule-fulltext)".*?</details>', html, re.S)
+    return m.group(0) if m else ""
+
+
+def test_payment_text_excluded_from_fold_legacy_path():
+    """無 order_code/診斷的案件走 legacy `_section_rule`：payment_text 展開、折疊區只含官方條文。"""
+    view = report.ReviewCaseView(
+        case_id="C-20",
+        stage=2,
+        rules=(
+            report.RuleBlock(label="給付規定（payment_text）", text=_PAY_TEXT, is_payment_text=True),
+            report.RuleBlock(label="條文全文", text=_ART_TEXT, location="外科 > (十三)"),
+        ),
+    )
+    html = report.render_unified_review_html(view)
+    assert '<div class="rule-payment-text">' in html
+    assert "痣切除於病歷未見惡性症候者" in html
+    assert "痣切除於病歷未見惡性症候者" not in _fold_block(html)
+    assert "官方條文" in _fold_block(html)
+
+
+def test_payment_text_excluded_from_fold_monthly_path():
+    """有 order_code 的案件走 `_case_body_html`：payment_text 展開，`rule-fulltext` 不含 payment_text。"""
+    view = report.ReviewCaseView(
+        case_id="C-21",
+        stage=2,
+        order_code="62010C",
+        rules=(
+            report.RuleBlock(label="給付規定（payment_text）", text=_PAY_TEXT, is_payment_text=True),
+            report.RuleBlock(label="條文全文", text=_ART_TEXT, location="外科 > (十三)"),
+        ),
+    )
+    html = report.render_unified_review_html(view)
+    assert "痣切除於病歷未見惡性症候者" in html
+    assert "痣切除於病歷未見惡性症候者" not in _fold_block(html)
+    assert "官方條文" in _fold_block(html)
+
+
+def test_payment_text_label_fallback_still_expands():
+    """label 為 payment_text 但 is_payment_text=False 時，仍視為 payment_text 展開、不進折疊區。"""
+    view = report.ReviewCaseView(
+        case_id="C-22",
+        stage=2,
+        rules=(report.RuleBlock(label="payment_text", text=_PAY_TEXT, is_payment_text=False),),
+    )
+    html = report.render_unified_review_html(view)
+    assert "rule-payment-text" in html
+    assert "痣切除於病歷未見惡性症候者" in html
+    assert _fold_block(html) == ""

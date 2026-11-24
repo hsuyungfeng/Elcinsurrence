@@ -91,8 +91,9 @@
 - **錄音 API 上限與品質分流**：
   - `POST /api/soap/recordings` 支援 `.wav` 與 `.opus`（上限 25 MB，Flask `MAX_CONTENT_LENGTH` 已對齊為 **26 MB**；非錄音端點維持各自 10 MB 防線）。
   - `validate_soap_quality(soap, profile="template"|"clinical")` 區分短版預生成範例（200–500 字）與真實門診錄音 SOAP（200–2000 字），並整合 [`icd10_validator.py`](src/elc_audit_engine/comparator/icd10_validator.py) 偵測高風險 ICD-10 語意誤碼（僅出警告，絕不擅自改碼）。
-- **給付規定精簡預覽（[`rule_summary.py`](src/elc_audit_engine/services/rule_summary.py)）**：
-  - 當月預審與二／三階報告的 `📜 給付規定（payment_text）` 改為確定性原文重點摘要（~160–180 字），與下方折疊的 `📜 檢視完整給付規定條文` 明確區隔且絕不捏造。
+- **給付規定完整展開（Phase 38 使用者確認版）**：
+  - 當月預審與二／三階報告的 `📜 給付規定（payment_text）` 直接完整展開原文，不做摘要截斷；已移除先前的精簡摘要模組（`rule_summary.py`）。
+  - 下方折疊的 `📜 檢視完整給付規定條文` 僅含官方條文全文（`article_full_text`，附 `article_location` 出處），不重複 `payment_text`。
 
 ### 7. 規則庫安全更新、唯讀品質稽核、零 LLM 官方條文全文建置與維運速查卡 (Phase 35–38)
 - **規則庫安全原子同步與四重防誤觸（[`sync_latest_rules.py`](src/elc_audit_engine/rule_repository/scripts/sync_latest_rules.py)、[`rules.py`](src/elc_audit_engine/api/routes/rules.py)）**：

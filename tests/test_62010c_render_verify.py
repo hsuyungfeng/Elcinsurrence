@@ -36,7 +36,6 @@ from elc_audit_engine.services.report_renderer import (
     RuleBlock,
     render_aggregated_review_html,
 )
-from elc_audit_engine.services.rule_summary import summarize_payment_text
 
 DB = _PROJECT_ROOT / "data" / "db" / "rules.sqlite3"
 
@@ -185,9 +184,6 @@ def _report() -> None:
     print(f"payment_text  length: {len(pay)} 字")
     print(f"article_full_text   : {len(art)} 字")
     print(f"payment 含 脂肪瘤/痣切除: {'脂肪瘤' in pay} / {'痣切除' in pay}")
-    summ = summarize_payment_text(pay)
-    if summ is not None:
-        print(f"summarize_payment_text: len={len(summ)}（僅供參考；報表不使用此截斷版）")
     print("-" * 70)
 
     for label, html_doc in (
