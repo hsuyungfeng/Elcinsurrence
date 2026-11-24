@@ -23,6 +23,7 @@ from elc_audit_engine import evidence_vault
 from elc_audit_engine.rule_repository.icd_titles import get_icd_chinese_title
 from elc_audit_engine.sampling_preview import split_soap
 from elc_audit_engine.services.report_assets import SHARED_CSS, SHARED_SCRIPT, soap_modal_button
+from elc_audit_engine.services.rule_blocks import is_payment_text, payment_box_html
 
 Stage = Literal[2, 3]
 
@@ -550,13 +551,8 @@ def _section_rule(view: ReviewCaseView) -> str:
         clean = (block.text or "").strip()
         if not clean:
             continue
-        if block.is_payment_text or block.label in ("給付規定（payment_text）", "payment_text"):
-            payment_boxes.append(
-                f'<div class="rule-payment">'
-                f'<div class="rule-payment-title">📜 給付規定（payment_text）</div>'
-                f'<div class="rule-payment-text">{escape(clean)}</div>'
-                f'</div>'
-            )
+        if is_payment_text(block.label, block.is_payment_text):
+            payment_boxes.append(payment_box_html(clean))
             continue
         other_blocks.append(
             f'<div class="rule-block"><div class="label">{escape(block.label)}</div>'
@@ -698,14 +694,8 @@ def _case_body_html(view: ReviewCaseView) -> str:
         clean = (r.text or "").strip()
         if not clean:
             continue
-        is_pay = r.is_payment_text or r.label in ("給付規定（payment_text）", "payment_text")
-        if is_pay:
-            payment_boxes.append(
-                f'<div class="rule-payment">'
-                f'<div class="rule-payment-title">📜 給付規定（payment_text）</div>'
-                f'<div class="rule-payment-text">{escape(clean)}</div>'
-                f'</div>'
-            )
+        if is_payment_text(r.label, r.is_payment_text):
+            payment_boxes.append(payment_box_html(clean))
             continue
         hdr = f"官方條文全文（{r.location}）" if r.location else r.label
         fulltext_blocks.append(

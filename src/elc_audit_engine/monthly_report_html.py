@@ -26,6 +26,7 @@ from elc_audit_engine.rule_repository.icd_titles import get_icd_chinese_title
 from elc_audit_engine.monthly_pregen import is_procedure_finding
 from elc_audit_engine import evidence_vault
 from elc_audit_engine.services.report_assets import SHARED_CSS, SHARED_SCRIPT, soap_modal_button
+from elc_audit_engine.services.rule_blocks import is_payment_text, payment_box_html
 
 _SOAP_CSS = """
 details.tier-group { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); overflow: hidden; }
@@ -175,13 +176,8 @@ def _rule_fulltext_html(finding: OrderFinding) -> str:
         clean = (text or "").strip()
         if not clean:
             continue
-        if name == "payment_text":
-            payment_boxes.append(
-                f'<div class="rule-payment">'
-                f'<div class="rule-payment-title">📜 給付規定（payment_text）</div>'
-                f'<div class="rule-payment-text">{_e(clean)}</div>'
-                f'</div>'
-            )
+        if is_payment_text(name):
+            payment_boxes.append(payment_box_html(clean))
             continue
         if name == "article_full_text":
             label = (
