@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: milestone
-current_phase: 38
-status: Phase 33–38 已完成並通過獨立 Claude Plan Checker 與 Tester 雙重 PASS（1,766 passed, 0 failed）
+current_phase: 39
+status: Phase 39 已完成並通過獨立 Claude Plan Checker 與 Tester 雙重 PASS
 stopped_at: null
-last_updated: "2026-11-23T17:14:00+08:00"
-last_activity: 2026-11-23 — Phase 38 完成零 LLM 確定性官方完整給付規定條文建置器（build_fulltext_mapping.py，冷啟動 1.27s 建置 8,302 筆 rule_mapping：藥品 5,453 筆＋診療項目 2,849 筆）、一二三階全文展開區出處與不重複優化，以及 sync_latest_rules 自動連動與防洗空保護
+last_updated: "2026-11-24T18:25:00+08:00"
+last_activity: 2026-11-24 — Phase 39 完成 Windows Client 分段錄音與 VAD 自動錄音後端串接（Pre-roll 3 秒環形緩衝區、30 秒靜音自動完結、等冪性重傳與循環容量防護、tests/test_windows_client_chunk_e2e.py 8 通過 1 離線保護跳過、docs/plans/windows_client_vad_test_plan.md 交付，Tester hermes 簽核 PASS）
 progress:
-  total_phases: 38
-  completed_phases: 38
-  total_plans: 30
-  completed_plans: 30
+  total_phases: 39
+  completed_phases: 39
+  total_plans: 31
+  completed_plans: 31
   percent: 100
 ---
 
@@ -19,6 +19,11 @@ progress:
 
 ## 目前位置 (Current Position)
 
+- **Phase 39（已完成，Claude Plan Checker & Tester 雙重 PASS）**：
+  - **資料庫遷移與結構擴充**（`case_store/db.py`）：`recording_cycles` 資料表新增 `trigger_mode` 與 `preroll_sec`；`client_presence` 資料表新增 `vad_listening`；`init_schema()` 具備等冪性 `ALTER TABLE` 遷移。
+  - **分段上傳與安全性邊界**（`cycles/chunks.py`、`cycles/store.py`）：單段上限 4 MiB、`MAX_CHUNKS_PER_CYCLE = 120`、`MAX_CYCLE_PCM_BYTES = 250 MiB`；以 `(cycle_id, seq)` 為鍵實作 SHA-256 去重等冪（`duplicate=true`）；強制 RIFF 標頭宣告長度與實際位元組一致及 16-bit 偶數對齊，防範截斷或損毀檔案（`422 invalid_wav_format`）；`finalize` 依序提取純 PCM frames 串接乾淨 `full.wav`。
+  - **API 路由與嚴格型別**（`api/routes/cycle_chunks.py`、`cycles.py`、`clients.py`、`presence.py`）：`POST /api/cycles` 支援 `trigger_mode` 與 `preroll_sec`；`POST /api/clients/heartbeat` 嚴格限制 `vad_listening: bool` 與 `chunks_pending: int`。
+  - **整合測試與驗測手冊**：新增 `tests/test_windows_client_chunk_e2e.py`（8 passed, 1 skipped 離線保護，0 failed）；交付 `docs/plans/windows_client_vad_test_plan.md`（Silero VAD + 3s pre-roll 環形緩衝區範式、指數退避重試與 V-01~V-09 實體驗證檢核表）；Herdr 獨立 Tester（`hermes` in `w7:pE`）簽核 PASS，零 PHI 洩漏。
 - **Phase 33（已完成）**：Gemma 4 E4B Q4_K_M + mmproj-BF16（128K context）systemd 常駐服務、本機 Whisper ASR + 熱詞、26 MB / `.opus` 上傳對齊、`clinical` SOAP 品質分流、月審 `payment_text` 精簡預覽。
 - **Phase 34（已完成）**：整合 `sherpa-onnx`（SenseVoice int8 + OpenCC `s2twp` + `num_clusters=2` 可選說者分離）為預設 ASR 後端、`finalize` 自動背景 ASR → Gemma 4 E4B SOAP 管線、`ElcAgent.spec` 排除 ASR 套件、`cycle_chunks.py` 審計參數修復。
 - **Phase 35（已完成）**：規則庫只讀 CSV 稽核工具（`audit_csv.py`）、`_csv_table.py` 純占位字串統一存 SQLite `NULL`、SOAP 定向單次修正與空摘要補齊、選配低密度 Whisper 備援護欄、`deploy/install.sh` 整合 llama/sherpa 檢查、全套件測試隔離防呆修復（`1,748 passed, 0 failed`）。

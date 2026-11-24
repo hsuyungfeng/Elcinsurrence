@@ -109,6 +109,24 @@
   - `soap_advice.py` 支援單次定向重試去除佔位詞、空繁中摘要自動補齊，以及臨床 `pending` 兩步防繞過檢核（放行明確檢驗追蹤語境，攔截診斷／計畫待定佔位）；`deploy/install.sh` 整合 `elc-llama-server.service` 與 `--check-asr-models`／`--check-llama-cache` 檢查。
   - 新增一頁式非工程師《診所主機維運速查卡》：[`docs/CLINIC_SERVER_OPS_QUICKCARD.md`](docs/CLINIC_SERVER_OPS_QUICKCARD.md)。
 
+### 8. Windows Client 分段錄音、VAD 自動錄音與即時管線串接 (Phase 39)
+- **診間語音活動自動觸發（Voice Activity Detection, VAD）**：
+  - 為解決醫師繁忙忘記按下錄音鍵的痛點，Windows Client（SoapVoice）透過輕量神經網路 Silero VAD 常駐監聽診間對話。
+  - **3.0 秒環形記憶體緩衝區（Pre-roll Ring Buffer）**：偵測到語音起點時，將前綴 3 秒音訊作為 `seq: 0` 分段送出，確保問診第一句「陳先生你好」完整無吃字。
+  - **30 秒靜音自動完結（Auto-finalize）**：看診結束後若連續 30 秒無人聲對話，自動呼叫 `POST /api/cycles/<cycle_id>/finalize` 完結並觸發後端 pipeline。
+- **音訊分段上傳、去重與安全性邊界**（[`src/elc_audit_engine/cycles/chunks.py`](src/elc_audit_engine/cycles/chunks.py)）：
+  - 格式限定：16 kHz, 16-bit mono PCM WAV，單段上限 4 MiB（約 2 分鐘音訊）。
+  - **等冪性重送**：以 `(cycle_id, seq)` 為鍵，弱網重送相同 SHA-256 視為成功回傳 `{"duplicate": true}`；雜湊不符拋 `ChunkConflictError (409)`。
+  - **嚴格 WAV 標頭與格式檢驗**：校驗 RIFF 宣告長度與實際傳入位元組完全一致，並強制 16-bit 偶數位元組對齊，拒絕截斷或損毀檔案（`422 invalid_wav_format`）。
+  - **循環容量上限保護**：單一循環最多 `MAX_CHUNKS_PER_CYCLE = 120` 段（約 2 小時）且總 PCM 限制 `MAX_CYCLE_PCM_BYTES = 250 MiB`，防範儲存空間耗盡攻擊（`413 cycle_limit_exceeded`）。
+  - **無損 PCM 串接**：`finalize` 到齊後依序提取純 PCM frames 組裝乾淨單一 `full.wav`，絕無各段 RIFF 標頭串接導致的交界破音。
+- **循環與心跳 API 擴充**：
+  - `POST /api/cycles`：支援 `trigger_mode`（`manual` | `vad_auto`）與 `preroll_sec`，並由 `recording_cycles` 持久化儲存。
+  - `POST /api/clients/heartbeat`：支援 `vad_listening: bool` 狀態回報，且執行嚴格型別校驗（非 bool 輸入拋 `422`）。
+- **文件與測試交付**：
+  - Windows 端落地與實體驗測指引：[`docs/plans/windows_client_vad_test_plan.md`](docs/plans/windows_client_vad_test_plan.md)（含 V-01~V-09 實體檢核表）。
+  - 完整端到端整合測試套件：[`tests/test_windows_client_chunk_e2e.py`](tests/test_windows_client_chunk_e2e.py)（8 項測試通過，1 項 ASR 離線模型保護跳過，經 Herdr 獨立 Tester 簽核）。
+
 ---
 
 ## 👥 Herdr 多 Agent 協同分工體系 (Herdr Agent Team)
@@ -119,9 +137,9 @@
 
 | 終端窗格 (Pane) | 角色指派 | 執行模型 / 核心職責 |
 | :--- | :--- | :--- |
-| **`w7:p6`** | **Antigravity (agy)** | **Executor：依計畫檔實作程式與文件**<br>• 只按計畫檔修改，不自行擴大範圍<br>• 不得自行提交；完成後回報改動清單與待決疑問 |
-| **`w7:p3`** | **Hermes** | **Tester：測試與驗收，不修改程式**<br>• 全套件測試、`ruff check .`、瀏覽器 console 檢查<br>• 回報原始輸出與數字，不以「應該通過」代替實測 |
-| **`w7:p1`** | **Claude Code** | **Coordinator／Final check：規劃、派工、最終核對**<br>• 撰寫計畫檔、派工、收取測試結果、獨立重跑測試與 ruff<br>• 提交與推送須經使用者確認 |
+| **`w7:pC`** (原 `w7:p6`) | **Antigravity (agy)** | **Executor：依計畫檔實作程式與文件**<br>• 只按計畫檔修改，不自行擴大範圍<br>• 不得自行提交；完成後回報改動清單與待決疑問 |
+| **`w7:pE`** (原 `w7:p3`) | **Hermes** | **Tester：測試與驗收，不修改程式**<br>• 全套件測試、`ruff check .`、瀏覽器 console 檢查<br>• 回報原始輸出與數字，不以「應該通過」代替實測 |
+| **`w7:pD`** (原 `w7:p1`) | **Claude Code** | **Coordinator／Final check：規劃、派工、最終核對**<br>• 撰寫計畫檔、派工、收取測試結果、獨立重跑測試與 ruff<br>• 提交與推送須經使用者確認 |
 
 > 兩條路徑共用 Phase 5 `compare_case`，故判定語意一致；分開的原因是**產出與副作用不同**（預審誤用整案管線會意外寫出申復草稿），對應目標架構圖 Cloud HIS 的 Review Service ／ Appeal Service 分離。
 
