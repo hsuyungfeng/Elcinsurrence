@@ -1,6 +1,7 @@
 # Phase 39 計畫：Windows Client 分段音訊與語音偵測自動錄音（VAD Auto-Record）之 Server 端實作與 Windows 整合測試計畫
 
-**狀態**：APPROVED（已獲 Planchecker 審查通過）  
+**狀態**：CONDITIONAL PASS（有條件通過，待補項目見下方「待補項目」）  
+**審查紀錄**：agy 複審（plan 模式）判定不符 APPROVED，建議 CONDITIONAL PASS；已確認 T2.4 M6 測試缺口（已修正為 422）。  
 **建立日期**：2026-11-24  
 **修正日期**：2026-11-24  
 **負責角色**：
@@ -125,3 +126,14 @@
 8. 由 Herdr `claude`（Planchecker）複審本計畫，確認第一輪 HIGH 項目已解決。
 9. 由 Herdr `hermes`（Tester）獨立執行整合測試並回報結果。
 10. Windows 端實體驗測表格全數完成，並由人工簽核（VAD 判斷、ring buffer、快捷列連動皆屬此項）。
+
+---
+
+## 待補項目（CONDITIONAL PASS 的條件）
+
+- [x] T2.4 M6 測試補強：已拆為 T2.4a（上傳 422）、T2.4b（finalize 422 且無 full.wav）、T2.4c（413 上限）。
+- [ ] `docs/plans/windows_client_vad_test_plan.md` 心跳範例欄位 `client_version` 改為 `app_version`（與 `api/routes/clients.py` 一致）。
+- [ ] 無關內容還原：`compare.md` 的 LLM 評測段落已由獨立 commit 還原，內容保留於 commit `76134b6`，如需另行保存請另開文件。
+- [ ] 建立循環的端點 migration 路徑補列於 Task 1 檔案清單（目前已由 `cycles.py` 與 `case_store/db.py` 實作，計畫清單需同步）。
+- [ ] Planchecker（Herdr `claude`）複審通過後，才可升級為 APPROVED。
+- [ ] 第 3 節第 8–10 項人工簽核（Herdr 複審、Tester 獨立測試、Windows 實體驗測）。
